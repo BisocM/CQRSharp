@@ -1,10 +1,8 @@
 ﻿using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Dispatch;
 using CQRSharpSample.Commands;
-using CQRSharpSample.Attributes;
 
 namespace CQRSharpSample
 {
@@ -12,11 +10,11 @@ namespace CQRSharpSample
     {
         public static async Task Main(string[] args)
         {
-            // Set up the DI container
+            //Set up the DI container
             var services = new ServiceCollection();
             services.AddDispatcher(Assembly.GetExecutingAssembly());
 
-            // Build service provider
+            //Build service provider
             var serviceProvider = services.BuildServiceProvider();
 
             await ExampleCommandCall(serviceProvider);
@@ -41,15 +39,13 @@ namespace CQRSharpSample
             await dispatcher.Send(createUserCommand, cancellationToken);
 
             //Send CalculateSumCommand
-            var calculateSumCommand = new CalculateSumCommand
+            var calculateSumCommand = new CalculateSumQuery
             {
                 Value1 = 10,
                 Value2 = 20
             };
 
-            Console.WriteLine("Sending the sum command...");
-
-            int sumResult = await dispatcher.Send(calculateSumCommand, cancellationToken);
+            int sumResult = await dispatcher.Query(calculateSumCommand, cancellationToken);
 
             Console.WriteLine($"The sum is: {sumResult}");
         }

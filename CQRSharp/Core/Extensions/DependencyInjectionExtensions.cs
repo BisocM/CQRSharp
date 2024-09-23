@@ -22,16 +22,14 @@ namespace CQRSharp.Core.Extensions
             //Register the dispatcher as a singleton service.
             services.AddSingleton<IDispatcher, Dispatcher>();
 
-            //Define the handler interfaces to search for.
+            //Define the handler and pipeline behavior interfaces to search for.
             var handlerInterfaces = new[]
             {
                 typeof(ICommandHandler<>),
-                typeof(ICommandHandler<,>)
+                typeof(IQueryHandler<,>)
             };
 
-            //Define the attribute interfaces.
-            var preAttributeInterfaceType = typeof(IPreCommandAttribute);
-            var postAttributeInterfaceType = typeof(IPostCommandAttribute);
+            var pipelineBehaviorInterfaceType = typeof(IPipelineBehavior<,>);
 
             //Retrieve all relevant types from the specified assemblies.
             var types = assemblies.SelectMany(a =>
@@ -63,10 +61,10 @@ namespace CQRSharp.Core.Extensions
                         //Register command handler interfaces.
                         services.AddTransient(@interface, type);
                     }
-                    else if (genericTypeDefinition == preAttributeInterfaceType || genericTypeDefinition == postAttributeInterfaceType)
+                    else if (genericTypeDefinition == pipelineBehaviorInterfaceType)
                     {
-                        //NOTICE: Register attribute interfaces if needed.
-                        //This pretty much should never be needed, since attributes are not instantiated by the DI container.
+                        //Register pipeline behaviors as open generic types.
+                        services.AddTransient(typeof(IPipelineBehavior<,>), type.GetGenericTypeDefinition());
                     }
                 }
             }

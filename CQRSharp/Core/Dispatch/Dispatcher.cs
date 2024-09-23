@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Pipeline;
+using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,38 +35,86 @@ namespace CQRSharp.Core.Dispatch
             await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
 
             //Invoke the command handler.
-            await HandleCommand(command, handler, cancellationToken);
+            var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
+            await pipeline(command, cancellationToken);
 
             //Invoke post-handle attributes.
             await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
         }
 
         /// <inheritdoc/>
-        public async Task<TResult> Send<TResult>(ICommand<TResult> command, CancellationToken cancellationToken = default)
+        public async Task<TResult> Query<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
         {
-            //Ensure the command is not null.
-            ArgumentNullException.ThrowIfNull(command);
+            //Ensure the query is not null.
+            ArgumentNullException.ThrowIfNull(query);
 
-            //Get the type of the command.
-            var requestType = command.GetType();
+            var requestType = query.GetType();
             var resultType = typeof(TResult);
-            //Retrieve the appropriate handler for the command.
-            var handler = GetHandler(requestType, resultType, typeof(ICommandHandler<,>));
+            var handler = GetHandler(requestType, resultType, typeof(IQueryHandler<,>));
 
-            //Create a new scope for handling the command.
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
 
             //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+            await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
 
-            //Invoke the command handler and get the result.
-            var result = await HandleCommand<TResult>(command, handler, cancellationToken);
+            //Build and execute the pipeline.
+            var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
+            var result = await pipeline(query, cancellationToken);
 
             //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+            await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
 
             return result;
+        }
+
+        /// <summary>
+        /// Builds the middleware pipeline for the command.
+        /// </summary>
+        /// <typeparam name="TResult">The type of the result expected.</typeparam>
+        /// <param name="command">The command being handled.</param>
+        /// <param name="handler">The handler instance.</param>
+        /// <param name="serviceProvider">The scoped service provider.</param>
+        /// <returns>A delegate representing the pipeline.</returns>
+        private Func<object, CancellationToken, Task<TResult>> BuildPipeline<TResult>(
+            object request,
+            object handler,
+            IServiceProvider serviceProvider)
+        {
+            var requestType = request.GetType();
+            var resultType = typeof(TResult);
+
+            //Retrieve all pipeline behaviors registered in the container.
+            var behaviors = serviceProvider
+                .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))
+                .Cast<dynamic>()
+                .Reverse() //Reverse to maintain the correct order of execution.
+                .ToList();
+
+            //The final handler delegate.
+            Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
+            {
+                if (typeof(TResult) == typeof(Unit))
+                {
+                    await HandleCommand(req, handler, ct);
+                    return (TResult)(object)Unit.Value;
+                }
+                else
+                    return await HandleQuery<TResult>(req, handler, ct);
+            };
+
+            //Wrap the handler with the pipeline behaviors.
+            foreach (var behavior in behaviors)
+            {
+                var next = handlerDelegate;
+                handlerDelegate = (req, ct) =>
+                {
+                    //Invoke the behavior's Handle method.
+                    return behavior.Handle((dynamic)req, ct, (Func<Task<TResult>>)(() => next(req, ct)));
+                };
+            }
+
+            return handlerDelegate;
         }
 
         /// <summary>
@@ -135,7 +184,7 @@ namespace CQRSharp.Core.Dispatch
                 ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
 
             //Invoke the 'Handle' method with the command and cancellation token.
-            var result = method.Invoke(handler, new[] { command, cancellationToken });
+            var result = method.Invoke(handler, [command, cancellationToken]);
 
             if (result is Task task)
             {
@@ -150,33 +199,25 @@ namespace CQRSharp.Core.Dispatch
         }
 
         /// <summary>
-        /// Handles the command by invoking its handler and returns the result.
+        /// Handles the query by invoking its corresponding handler and returns the result.
         /// </summary>
-        /// <typeparam name="TResult">The type of the result expected.</typeparam>
-        /// <param name="command">The command to handle.</param>
-        /// <param name="handler">The handler instance.</param>
+        /// <typeparam name="TResult">The type of the result expected from the query handler.</typeparam>
+        /// <param name="query">The query to handle.</param>
+        /// <param name="handler">The handler instance responsible for processing the query.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        /// <returns>The result from the handler.</returns>
-        private async Task<TResult> HandleCommand<TResult>(object command, object handler, CancellationToken cancellationToken)
+        private async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken)
         {
-            //Get the 'Handle' method from the handler.
             var method = handler.GetType().GetMethod("Handle")
                 ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
 
-            //Invoke the 'Handle' method with the command and cancellation token.
-            var result = method.Invoke(handler, [command, cancellationToken]);
+            var result = method.Invoke(handler, new[] { query, cancellationToken });
 
             if (result is Task<TResult> task)
-            {
-                //Await the task and return the result.
                 return await task;
-            }
             else
-            {
-                //Throw an exception if the handler did not return a Task<TResult>.
                 throw new InvalidOperationException($"Handler did not return a Task<{typeof(TResult).Name}>.");
-            }
         }
+
 
         /// <summary>
         /// Retrieves the appropriate handler for the given command type.

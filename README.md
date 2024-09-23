@@ -209,8 +209,6 @@ The `Dispatcher` is responsible for:
 
 ## Planned Features
 
-- **Query Handling**: Extend support to include queries with `IQuery<TResult>` and `IQueryHandler<TQuery, TResult>`.
-- **Pipeline Behaviors**: Introduce middleware-style behaviors that can wrap around command handling. This would allow global logic setting, rather than having to decorate every single class individually, with easier order control.
 - **Additional order control for the pre- and post- execution attributes** via parametrization or other.
 - **Enhanced Validation Integration**: Seamless integration with popular validation libraries like FluentValidation.
 - **Performance Improvements**: Optimize the dispatcher and attribute invocation for better performance.
