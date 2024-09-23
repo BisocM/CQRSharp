@@ -6,7 +6,7 @@ namespace CQRSharpSample.Commands
     /// <summary>
     /// Command to calculate the sum of two integers.
     /// </summary>
-    public class CalculateSumCommand : ICommand<int>
+    public class CalculateSumQuery : IQuery<int>
     {
         public required int Value1 { get; set; }
         public required int Value2 { get; set; }
@@ -15,9 +15,9 @@ namespace CQRSharpSample.Commands
     /// <summary>
     /// Handler to calculate the sum of two integers.
     /// </summary>
-    public class CalculateSumCommandHandler : ICommandHandler<CalculateSumCommand, int>
+    public class CalculateSumQueryHandler : IQueryHandler<CalculateSumQuery, int>
     {
-        public Task<int> Handle(CalculateSumCommand command, CancellationToken cancellationToken)
+        public Task<int> Handle(CalculateSumQuery command, CancellationToken cancellationToken)
         {
             int result = command.Value1 + command.Value2;
             return Task.FromResult(result);

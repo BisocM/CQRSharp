@@ -7,7 +7,7 @@ namespace CQRSharpSample.Attributes
     {
         public Task OnBeforeHandle(object command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
-            Console.WriteLine($"[Attribute] Logging command {command.GetType().Name}");
+            Console.WriteLine($"[Attribute] Logging command ON ENTRY {command.GetType().Name}");
             return Task.CompletedTask;
         }
     }
