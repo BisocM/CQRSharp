@@ -2,6 +2,7 @@
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Interfaces.Handlers;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Reflection;
 
 namespace CQRSharp.Core.Extensions
@@ -21,6 +22,13 @@ namespace CQRSharp.Core.Extensions
         {
             //Register the dispatcher as a singleton service.
             services.AddSingleton<IDispatcher, Dispatcher>();
+
+            //Configure logging.
+            services.AddLogging(loggingBuilder =>
+            {
+                loggingBuilder.AddConsole();
+                loggingBuilder.SetMinimumLevel(LogLevel.Information);
+            });
 
             //Define the handler and pipeline behavior interfaces to search for.
             var handlerInterfaces = new[]
@@ -67,6 +75,30 @@ namespace CQRSharp.Core.Extensions
                         services.AddTransient(typeof(IPipelineBehavior<,>), type.GetGenericTypeDefinition());
                     }
                 }
+            }
+
+            return services;
+        }
+
+        /// <summary>
+        /// Adds pipeline behaviors to the service collection.
+        /// </summary>
+        /// <param name="services">The service collection to add pipeline behaviors to.</param>
+        /// <param name="pipelineTypes">An array of pipeline behavior types to register.</param>
+        /// <returns>The updated service collection.</returns>
+        public static IServiceCollection AddPipelines(this IServiceCollection services, params Type[] pipelineTypes)
+        {
+            foreach (var pipelineType in pipelineTypes)
+            {
+                //Validate that the type implements IPipelineBehavior<TRequest, TResponse>
+                var interfaces = pipelineType.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>));
+
+                if (!interfaces.Any())
+                    throw new ArgumentException($"Type {pipelineType.Name} does not implement IPipelineBehavior<TRequest, TResponse>");
+
+                //Register the pipeline behavior as an open generic type
+                services.AddTransient(typeof(IPipelineBehavior<,>), pipelineType);
             }
 
             return services;

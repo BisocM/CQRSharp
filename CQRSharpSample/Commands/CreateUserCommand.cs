@@ -6,6 +6,7 @@ using CQRSharpSample.Attributes;
 namespace CQRSharpSample.Commands
 {
     [LogEntry]
+    [LogExit]
     /// <summary>
     /// Command to create a new user.
     /// </summary>
