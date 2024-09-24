@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Dispatch;
 using CQRSharpSample.Commands;
+using CQRSharp.Core.Pipeline.Types;
 
 namespace CQRSharpSample
 {
@@ -13,6 +14,9 @@ namespace CQRSharpSample
             //Set up the DI container
             var services = new ServiceCollection();
             services.AddDispatcher(Assembly.GetExecutingAssembly());
+            
+            //Addthe pipelines you may want
+            services.AddPipelines(typeof(LoggingBehavior<,>));
 
             //Build service provider
             var serviceProvider = services.BuildServiceProvider();
@@ -24,6 +28,8 @@ namespace CQRSharpSample
         {
             //Get the dispatcher
             var dispatcher = serviceProvider.GetRequiredService<IDispatcher>();
+
+            #region Command Example
 
             //Create a cancellation token (optional)
             var cancellationToken = new CancellationToken();
@@ -38,7 +44,11 @@ namespace CQRSharpSample
             //Send the command to create the user.
             await dispatcher.Send(createUserCommand, cancellationToken);
 
-            //Send CalculateSumCommand
+            #endregion
+
+            #region Query Example
+
+            //Send CalculateSumQuery
             var calculateSumCommand = new CalculateSumQuery
             {
                 Value1 = 10,
@@ -48,6 +58,8 @@ namespace CQRSharpSample
             int sumResult = await dispatcher.Query(calculateSumCommand, cancellationToken);
 
             Console.WriteLine($"The sum is: {sumResult}");
+
+            #endregion
         }
     }
 }
