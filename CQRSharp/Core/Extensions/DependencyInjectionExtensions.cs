@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Dispatch;
+using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Interfaces.Handlers;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,8 +19,15 @@ namespace CQRSharp.Core.Extensions
         /// <param name="services">The service collection to add services to.</param>
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
-        public static IServiceCollection AddDispatcher(this IServiceCollection services, params Assembly[] assemblies)
+        public static IServiceCollection AddDispatcher(this IServiceCollection services, Action<CQRSharpOptions> configureOptions, params Assembly[] assemblies)
         {
+            //Create a new instance of CQRSharp options type.
+            var options = new CQRSharpOptions();
+            configureOptions?.Invoke(options);
+
+            //Register the options as a singleton service.
+            services.AddSingleton(options);
+
             //Register the dispatcher as a singleton service.
             services.AddSingleton<IDispatcher, Dispatcher>();
 

@@ -1,4 +1,4 @@
-﻿using CQRSharp.Core.Pipeline;
+﻿using CQRSharp.Core.Pipeline.Attributes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

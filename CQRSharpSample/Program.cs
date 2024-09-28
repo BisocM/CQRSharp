@@ -13,10 +13,15 @@ namespace CQRSharpSample
         {
             //Set up the DI container
             var services = new ServiceCollection();
-            services.AddDispatcher(Assembly.GetExecutingAssembly());
+            services.AddDispatcher(options =>
+            {
+                options.EnableExecutionContextLogging = false;
+                options.EnableSensitiveDataLogging = true;
+
+            }, Assembly.GetExecutingAssembly());
             
             //Addthe pipelines you may want
-            services.AddPipelines(typeof(LoggingBehavior<,>));
+            services.AddPipelines(typeof(ExecutionLoggingBehavior<,>));
 
             //Build service provider
             var serviceProvider = services.BuildServiceProvider();
@@ -42,7 +47,7 @@ namespace CQRSharpSample
             };
 
             //Send the command to create the user.
-            await dispatcher.Send(createUserCommand, cancellationToken);
+            await dispatcher.ExecuteCommand(createUserCommand, cancellationToken);
 
             #endregion
 
@@ -55,7 +60,7 @@ namespace CQRSharpSample
                 Value2 = 20
             };
 
-            int sumResult = await dispatcher.Query(calculateSumCommand, cancellationToken);
+            var sumResult = await dispatcher.ExecuteQuery<int>(calculateSumCommand, cancellationToken);
 
             Console.WriteLine($"The sum is: {sumResult}");
 

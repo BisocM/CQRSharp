@@ -1,4 +1,5 @@
-﻿using CQRSharp.Data;
+﻿using CQRSharp.Core.Pipeline.Attributes.Markers;
+using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
 using CQRSharpSample.Attributes;
@@ -13,6 +14,8 @@ namespace CQRSharpSample.Commands
     public class CreateUserCommand : ICommand
     {
         public required string Username { get; set; }
+
+        [SensitiveData]
         public required string Email { get; set; }
     }
 
@@ -27,8 +30,7 @@ namespace CQRSharpSample.Commands
             //For example, have some kind of code that instantiates a user object
             //And later updates the database with that data.
 
-            //Sample output.
-            Console.WriteLine($"User {command.Username} has been created. E-Mail: {command.Username}");
+            //Logic here.
 
             //Return Unit.Value to indicate completion.
             return Task.FromResult(Unit.Value);

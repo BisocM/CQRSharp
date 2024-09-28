@@ -1,8 +1,12 @@
 ﻿using CQRSharp.Core.Pipeline;
+using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
+
+//TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
+//It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
 
 namespace CQRSharp.Core.Dispatch
 {
@@ -17,7 +21,7 @@ namespace CQRSharp.Core.Dispatch
     {
 
         /// <inheritdoc/>
-        public async Task Send(ICommand command, CancellationToken cancellationToken = default)
+        public async Task ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
         {
             //Ensure the command is not null.
             ArgumentNullException.ThrowIfNull(command);
@@ -43,7 +47,7 @@ namespace CQRSharp.Core.Dispatch
         }
 
         /// <inheritdoc/>
-        public async Task<TResult> Query<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
+        public async Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
         {
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
@@ -72,7 +76,7 @@ namespace CQRSharp.Core.Dispatch
         /// Builds the middleware pipeline for the command.
         /// </summary>
         /// <typeparam name="TResult">The type of the result expected.</typeparam>
-        /// <param name="command">The command being handled.</param>
+        /// <param name="request">The command or query being handled.</param>
         /// <param name="handler">The handler instance.</param>
         /// <param name="serviceProvider">The scoped service provider.</param>
         /// <returns>A delegate representing the pipeline.</returns>
@@ -85,8 +89,8 @@ namespace CQRSharp.Core.Dispatch
             var resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
-            var behaviors = serviceProvider
-                .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))
+            List<dynamic> behaviors = serviceProvider
+                .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
                 .Reverse() //Reverse to maintain the correct order of execution.
                 .ToList();

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace CQRSharp.Core.Pipeline
+﻿namespace CQRSharp.Core.Pipeline.Attributes
 {
     /// <summary>
     /// Defines an interface for attributes that perform actions before a command is handled.
