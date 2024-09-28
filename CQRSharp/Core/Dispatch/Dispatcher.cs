@@ -1,8 +1,14 @@
 ﻿using CQRSharp.Core.Pipeline;
+using CQRSharp.Core.Pipeline.Attributes;
+using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
+
+//TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
+//It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
 
 namespace CQRSharp.Core.Dispatch
 {
@@ -17,7 +23,7 @@ namespace CQRSharp.Core.Dispatch
     {
 
         /// <inheritdoc/>
-        public async Task Send(ICommand command, CancellationToken cancellationToken = default)
+        public async Task ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
         {
             //Ensure the command is not null.
             ArgumentNullException.ThrowIfNull(command);
@@ -43,7 +49,7 @@ namespace CQRSharp.Core.Dispatch
         }
 
         /// <inheritdoc/>
-        public async Task<TResult> Query<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
+        public async Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
         {
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
@@ -72,12 +78,12 @@ namespace CQRSharp.Core.Dispatch
         /// Builds the middleware pipeline for the command.
         /// </summary>
         /// <typeparam name="TResult">The type of the result expected.</typeparam>
-        /// <param name="command">The command being handled.</param>
+        /// <param name="request">The command or query being handled.</param>
         /// <param name="handler">The handler instance.</param>
         /// <param name="serviceProvider">The scoped service provider.</param>
         /// <returns>A delegate representing the pipeline.</returns>
         private Func<object, CancellationToken, Task<TResult>> BuildPipeline<TResult>(
-            object request,
+            IRequest request,
             object handler,
             IServiceProvider serviceProvider)
         {
@@ -85,8 +91,8 @@ namespace CQRSharp.Core.Dispatch
             var resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
-            var behaviors = serviceProvider
-                .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))
+            List<dynamic> behaviors = serviceProvider
+                .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
                 .Reverse() //Reverse to maintain the correct order of execution.
                 .ToList();
@@ -94,6 +100,7 @@ namespace CQRSharp.Core.Dispatch
             //The final handler delegate.
             Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
             {
+                //Determine whether or not the request is a command or a query.
                 if (typeof(TResult) == typeof(Unit))
                 {
                     await HandleCommand(req, handler, ct);
@@ -104,13 +111,21 @@ namespace CQRSharp.Core.Dispatch
             };
 
             //Wrap the handler with the pipeline behaviors.
-            foreach (var behavior in behaviors)
+            foreach (dynamic behavior in behaviors)
             {
+                //Check if the request is exempt from the current behavior.
+                var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
+                Type behaviorType = behavior.GetType();
+
+                //Skip the behavior if the request is exempt.
+                if (exemptionAttribute != null && exemptionAttribute.ExemptedPipeline == behaviorType.GetGenericTypeDefinition())
+                    continue;
+
                 var next = handlerDelegate;
                 handlerDelegate = (req, ct) =>
                 {
                     //Invoke the behavior's Handle method.
-                    return behavior.Handle((dynamic)req, ct, (Func<Task<TResult>>)(() => next(req, ct)));
+                    return behavior.Handle((dynamic)req, ct, (Func<CancellationToken, Task<TResult>>)((ct) => next(req, ct)));
                 };
             }
 
@@ -123,11 +138,12 @@ namespace CQRSharp.Core.Dispatch
         /// <param name="command">The command being handled.</param>
         /// <param name="serviceProvider">The scoped service provider.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        private async Task InvokePreHandleAttributes(object command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        private async Task InvokePreHandleAttributes(IRequest command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             //Retrieve all attributes implementing IPreCommandAttribute.
             var attributes = command.GetType().GetCustomAttributes(true)
-                .OfType<IPreCommandAttribute>();
+                .OfType<IPreHandlerAttribute>()
+                .OrderBy(a => a.Priority);
 
             foreach (var attribute in attributes)
             {
@@ -145,28 +161,29 @@ namespace CQRSharp.Core.Dispatch
         }
 
         /// <summary>
-        /// Invokes all post-handle attributes associated with the command.
+        /// Invokes all post-handle attributes associated with the executable unit.
         /// </summary>
-        /// <param name="command">The command that was handled.</param>
+        /// <param name="request">The request that was handled.</param>
         /// <param name="serviceProvider">The scoped service provider.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-        private async Task InvokePostHandleAttributes(object command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        private async Task InvokePostHandleAttributes(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             //Retrieve all attributes implementing IPostCommandAttribute.
-            var attributes = command.GetType().GetCustomAttributes(true)
-                .OfType<IPostCommandAttribute>();
+            var attributes = request.GetType().GetCustomAttributes(true)
+                .OfType<IPostHandlerAttribute>()
+                .OrderBy(a => a.Priority);
 
             foreach (var attribute in attributes)
             {
                 try
                 {
                     //Invoke the OnAfterHandle method of the attribute.
-                    await attribute.OnAfterHandle(command, serviceProvider, cancellationToken);
+                    await attribute.OnAfterHandle(request, serviceProvider, cancellationToken);
                 }
                 catch (Exception ex)
                 {
                     //Wrap exceptions with additional context.
-                    throw new InvalidOperationException($"Error in post-handle attribute '{attribute.GetType().Name}' for command '{command.GetType().Name}': {ex.Message}", ex);
+                    throw new InvalidOperationException($"Error in post-handle attribute '{attribute.GetType().Name}' for command '{request.GetType().Name}': {ex.Message}", ex);
                 }
             }
         }

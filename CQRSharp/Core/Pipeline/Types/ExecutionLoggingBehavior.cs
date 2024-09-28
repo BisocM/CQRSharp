@@ -1,27 +1,40 @@
 ﻿using System.Diagnostics;
+using CQRSharp.Core.Options;
+using CQRSharp.Helpers;
+using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipeline.Types
 {
-    public sealed class LoggingBehavior<TCommand, TResult>(ILogger<LoggingBehavior<TCommand, TResult>> logger) : IPipelineBehavior<TCommand, TResult>
+    public sealed class ExecutionLoggingBehavior<TRequest, TResult>(
+        ILogger<ExecutionLoggingBehavior<TRequest, TResult>> logger,
+        DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
     {
         public async Task<TResult> Handle(
-            TCommand command,
+            TRequest request,
             CancellationToken cancellationToken,
-            Func<Task<TResult>> next)
+            Func<CancellationToken, Task<TResult>> next)
         {
+            //Check if the command is null or not.
+            ArgumentNullException.ThrowIfNull(request);
+
             //Get the commandName
-            var commandName = typeof(TCommand).Name;
+            var commandName = typeof(TRequest).Name;
 
             logger.LogInformation("Handling {CommandName}", commandName);
 
+            //TODO: Add JSON serialization for the context of the command.
             //TODO: Add command context data logging here, with sensitive data sanitization.
+            string sanitizedExecutionContextString = CommandSanitizer.Sanitize(request, options);
+
+            if (!string.IsNullOrEmpty(sanitizedExecutionContextString))
+                logger.LogInformation(sanitizedExecutionContextString);
 
             var stopwatch = Stopwatch.StartNew();
 
             try
             {
-                var result = await next();
+                var result = await next(cancellationToken);
 
                 stopwatch.Stop();
 

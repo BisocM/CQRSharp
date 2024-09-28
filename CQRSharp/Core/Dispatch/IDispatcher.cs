@@ -13,7 +13,7 @@ namespace CQRSharp.Core.Dispatch
         /// <param name="command">The command to send.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A task representing the asynchronous operation.</returns>
-        Task Send(ICommand command, CancellationToken cancellationToken = default);
+        Task ExecuteCommand(ICommand command, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Executes a query and returns a result.
@@ -22,6 +22,6 @@ namespace CQRSharp.Core.Dispatch
         /// <param name="query">The query to send.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A task that represents the asynchronous operation and contains the result.</returns>
-        Task<TResult> Query<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
+        Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
     }
 }
