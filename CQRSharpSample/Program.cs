@@ -13,15 +13,20 @@ namespace CQRSharpSample
         {
             //Set up the DI container
             var services = new ServiceCollection();
-            services.AddDispatcher(options =>
+            services.AddCQRS(options =>
             {
                 options.EnableExecutionContextLogging = false;
                 options.EnableSensitiveDataLogging = true;
 
+                options.Timeout = TimeSpan.FromSeconds(1);
+
             }, Assembly.GetExecutingAssembly());
             
             //Addthe pipelines you may want
-            services.AddPipelines(typeof(ExecutionLoggingBehavior<,>));
+            services.AddPipelines(
+                typeof(ExecutionLoggingBehavior<,>),
+                typeof(ResilienceBehavior<,>),
+                typeof(TimeoutBehavior<,>));
 
             //Build service provider
             var serviceProvider = services.BuildServiceProvider();

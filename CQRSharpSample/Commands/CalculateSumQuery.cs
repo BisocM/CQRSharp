@@ -1,8 +1,10 @@
 ﻿using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
+using CQRSharpSample.Attributes;
 
 namespace CQRSharpSample.Commands
 {
+    [Log]
     /// <summary>
     /// Command to calculate the sum of two integers.
     /// </summary>

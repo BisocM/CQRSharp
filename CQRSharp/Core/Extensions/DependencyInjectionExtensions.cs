@@ -19,10 +19,10 @@ namespace CQRSharp.Core.Extensions
         /// <param name="services">The service collection to add services to.</param>
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
-        public static IServiceCollection AddDispatcher(this IServiceCollection services, Action<CQRSharpOptions> configureOptions, params Assembly[] assemblies)
+        public static IServiceCollection AddCQRS(this IServiceCollection services, Action<DispatcherOptions> configureOptions, params Assembly[] assemblies)
         {
             //Create a new instance of CQRSharp options type.
-            var options = new CQRSharpOptions();
+            var options = new DispatcherOptions();
             configureOptions?.Invoke(options);
 
             //Register the options as a singleton service.
@@ -62,6 +62,7 @@ namespace CQRSharp.Core.Extensions
             })
             .Where(t => t != null && !t.IsAbstract && !t.IsInterface);
 
+            //Iterate through all retrieved types and register the relevant services.
             foreach (var type in types)
             {
                 //Get all implemented interfaces of the type.

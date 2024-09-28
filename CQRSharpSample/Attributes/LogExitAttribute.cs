@@ -1,18 +1,21 @@
 ﻿using CQRSharp.Core.Pipeline.Attributes;
+using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharpSample.Attributes
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class LogExitAttribute : Attribute, IPostCommandAttribute
+    public class LogExitAttribute(int priority) : Attribute, IPostHandlerAttribute
     {
-        public Task OnAfterHandle(object command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        public int Priority => priority;
+
+        public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             //The service provider can be used here to get instances of any additional services.
             var logger = serviceProvider.GetRequiredService<ILogger<LogEntryAttribute>>();
 
-            logger.LogInformation($"[Attribute] Logging command ON EXIT {command.GetType().Name}");
+            logger.LogInformation($"[Attribute] Logging command ON EXIT {request.GetType().Name}");
             return Task.CompletedTask;
         }
     }
