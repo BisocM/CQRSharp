@@ -13,7 +13,7 @@
     <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
     <PackageTags>CQRS;</PackageTags>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
     <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
