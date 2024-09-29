@@ -1,4 +1,7 @@
-﻿using CQRSharp.Core.Pipeline;
+﻿using CQRSharp.Core.Events;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Data;
@@ -19,7 +22,10 @@ namespace CQRSharp.Core.Dispatch
     /// Initializes a new instance of the <see cref="Dispatcher"/> class.
     /// </remarks>
     /// <param name="serviceProvider">The service provider for dependency resolution.</param>
-    public class Dispatcher(IServiceProvider serviceProvider) : IDispatcher
+    public sealed class Dispatcher(
+        IServiceProvider serviceProvider,
+        EventManager eventManager,
+        DispatcherOptions options) : IDispatcher
     {
 
         /// <inheritdoc/>
@@ -37,19 +43,33 @@ namespace CQRSharp.Core.Dispatch
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+            //Define the pipeline task.
+            async Task pipelineTask()
+            {
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
 
-            //Invoke the command handler.
-            var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
-            await pipeline(command, cancellationToken);
+                //Build and execute the command pipeline.
+                var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
+                await pipeline(command, cancellationToken);
 
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+                //Invoke post-handle attributes.
+                await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+            }
+
+            if (options.RunMode == RunMode.Async)
+            {
+                //Asynchronous execution - fire and forget.
+                var task = pipelineTask();
+                return;
+            }
+            else
+                //Synchronous execution - await the pipeline.
+                await pipelineTask();
         }
 
         /// <inheritdoc/>
-        public async Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
+        public async Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
         {
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
@@ -61,17 +81,34 @@ namespace CQRSharp.Core.Dispatch
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
+            async Task<TResult> pipelineTask()
+            {
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
 
-            //Build and execute the pipeline.
-            var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
-            var result = await pipeline(query, cancellationToken);
+                //Build and execute the query pipeline.
+                var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
+                var result = await pipeline(query, cancellationToken);
 
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
+                //Invoke post-handle attributes.
+                await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
 
-            return result;
+                eventManager.TriggerQueryCompleted(requestType.Name, result, cancellationToken);
+
+                return result;
+            }
+
+
+            if (options.RunMode == RunMode.Async)
+            {
+                //Asynchronous execution - fire and forget.
+                _ = pipelineTask();
+                return default;
+                //Since this is fire and forget, return default, as the result will not be awaited.
+            }
+            else
+                //Synchronous execution - await the pipeline.
+                return await pipelineTask();
         }
 
         /// <summary>
@@ -87,8 +124,8 @@ namespace CQRSharp.Core.Dispatch
             object handler,
             IServiceProvider serviceProvider)
         {
-            var requestType = request.GetType();
-            var resultType = typeof(TResult);
+            Type requestType = request.GetType();
+            Type resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
             List<dynamic> behaviors = serviceProvider
@@ -110,11 +147,12 @@ namespace CQRSharp.Core.Dispatch
                     return await HandleQuery<TResult>(req, handler, ct);
             };
 
+            //Check if the request is exempt from any behaviors.
+            PipelineExemptionAttribute? exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
+
             //Wrap the handler with the pipeline behaviors.
             foreach (dynamic behavior in behaviors)
             {
-                //Check if the request is exempt from the current behavior.
-                var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
                 Type behaviorType = behavior.GetType();
 
                 //Skip the behavior if the request is exempt.
@@ -141,7 +179,7 @@ namespace CQRSharp.Core.Dispatch
         private async Task InvokePreHandleAttributes(IRequest command, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             //Retrieve all attributes implementing IPreCommandAttribute.
-            var attributes = command.GetType().GetCustomAttributes(true)
+            IOrderedEnumerable<IPreHandlerAttribute> attributes = command.GetType().GetCustomAttributes(true)
                 .OfType<IPreHandlerAttribute>()
                 .OrderBy(a => a.Priority);
 
@@ -227,7 +265,7 @@ namespace CQRSharp.Core.Dispatch
             var method = handler.GetType().GetMethod("Handle")
                 ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
 
-            var result = method.Invoke(handler, new[] { query, cancellationToken });
+            var result = method.Invoke(handler, [query, cancellationToken]);
 
             if (result is Task<TResult> task)
                 return await task;

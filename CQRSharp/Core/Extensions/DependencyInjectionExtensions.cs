@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Dispatch;
+using CQRSharp.Core.Events;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Interfaces.Handlers;
@@ -27,6 +28,9 @@ namespace CQRSharp.Core.Extensions
 
             //Register the options as a singleton service.
             services.AddSingleton(options);
+
+            //Register the event dispatcher as a singleton service.
+            services.AddSingleton<EventManager>();
 
             //Register the dispatcher as a singleton service.
             services.AddSingleton<IDispatcher, Dispatcher>();

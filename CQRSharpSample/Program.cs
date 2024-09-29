@@ -4,6 +4,8 @@ using System.Reflection;
 using CQRSharp.Core.Dispatch;
 using CQRSharpSample.Commands;
 using CQRSharp.Core.Pipeline.Types;
+using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Events;
 
 namespace CQRSharpSample
 {
@@ -20,9 +22,10 @@ namespace CQRSharpSample
 
                 options.Timeout = TimeSpan.FromSeconds(1);
 
+                options.RunMode = RunMode.Async;
             }, Assembly.GetExecutingAssembly());
             
-            //Addthe pipelines you may want
+            //Add the pipelines you may want
             services.AddPipelines(
                 typeof(ExecutionLoggingBehavior<,>),
                 typeof(ResilienceBehavior<,>),
@@ -38,6 +41,17 @@ namespace CQRSharpSample
         {
             //Get the dispatcher
             var dispatcher = serviceProvider.GetRequiredService<IDispatcher>();
+
+            #region Event Test
+
+            var eventManager = serviceProvider.GetRequiredService<EventManager>();
+
+            eventManager.QueryCompleted += (sender, e, ct) =>
+            {
+                Console.WriteLine($"Query completed: {e.Result}");
+            };
+
+            #endregion
 
             #region Command Example
 
@@ -70,6 +84,9 @@ namespace CQRSharpSample
             Console.WriteLine($"The sum is: {sumResult}");
 
             #endregion
+
+            //Wait for the user creation to complete, since it was offloaded to a background thread.
+            await Task.Delay(50000);
         }
     }
 }

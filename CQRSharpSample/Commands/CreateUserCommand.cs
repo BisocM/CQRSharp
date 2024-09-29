@@ -3,12 +3,11 @@ using CQRSharp.Core.Pipeline.Types;
 using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
-using CQRSharpSample.Attributes;
 
 namespace CQRSharpSample.Commands
 {
-    [LogEntry(1)]
-    [LogExit(1)]
+    //[LogEntry(1)]
+    //[LogExit(1)]
     [PipelineExemption(typeof(TimeoutBehavior<,>))] //Demonstration of how to make a command exempt from behaviors.
     /// <summary>
     /// Command to create a new user.
@@ -34,6 +33,8 @@ namespace CQRSharpSample.Commands
             //This can contain logic to create a user.
             //For example, have some kind of code that instantiates a user object
             //And later updates the database with that data.
+
+            Console.WriteLine("User created successfully.");
 
             //Return Unit.Value to indicate completion.
             return Unit.Value;
