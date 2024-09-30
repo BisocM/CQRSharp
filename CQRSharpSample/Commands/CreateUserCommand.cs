@@ -29,7 +29,7 @@ namespace CQRSharpSample.Commands
         {
             //To demonstrate the functionality of the timeout pipeline behavior. Change the number to trigger a timeout.
             await Task.Delay(2000, cancellationToken);
-
+            
             //This can contain logic to create a user.
             //For example, have some kind of code that instantiates a user object
             //And later updates the database with that data.

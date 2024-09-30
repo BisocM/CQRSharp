@@ -1,5 +1,4 @@
-﻿using CQRSharp.Core.Events;
-using CQRSharp.Core.Options;
+﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes;
@@ -9,6 +8,9 @@ using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Core.BackgroundTasks;
 
 //TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
 //It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
@@ -24,7 +26,8 @@ namespace CQRSharp.Core.Dispatch
     /// <param name="serviceProvider">The service provider for dependency resolution.</param>
     public sealed class Dispatcher(
         IServiceProvider serviceProvider,
-        EventManager eventManager,
+        IBackgroundTaskQueue backgroundTaskQueue,
+        NotificationDispatcher eventManager,
         DispatcherOptions options) : IDispatcher
     {
 
@@ -39,33 +42,37 @@ namespace CQRSharp.Core.Dispatch
             //Retrieve the appropriate handler for the command.
             var handler = GetHandler(requestType, null, typeof(ICommandHandler<>));
 
-            //Create a new scope for handling the command.
-            using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
-
             if (options.RunMode == RunMode.Async)
             {
                 //Asynchronous execution - fire and forget.
-                var task = PipelineTask();
+                backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
                 return;
             }
 
             //Synchronous execution - await the pipeline.
-            await PipelineTask();
+            await PipelineTask(cancellationToken);
             return;
 
             //Define the pipeline task.
-            async Task PipelineTask()
+            async Task<Unit> PipelineTask(CancellationToken ct)
             {
-                //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+                using var scope = serviceProvider.CreateScope();
+                var scopedProvider = scope.ServiceProvider;
 
-                //Build and execute the command pipeline.
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(command, scopedProvider, ct);
+
+                //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
-                await pipeline(command, cancellationToken);
+                var result = await pipeline(command, ct);
 
                 //Invoke post-handle attributes.
-                await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+                await InvokePostHandleAttributes(command, scopedProvider, ct);
+
+                //Publish the event.
+                await eventManager.Publish(new QueryCompletedNotification(requestType.Name, result), ct);
+
+                return result;
             }
         }
 
@@ -79,31 +86,32 @@ namespace CQRSharp.Core.Dispatch
             var resultType = typeof(TResult);
             var handler = GetHandler(requestType, resultType, typeof(IQueryHandler<,>));
 
-            using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
-
             //Synchronous execution - await the pipeline.
-            if (options.RunMode != RunMode.Async) 
-                return await PipelineTask();
+            if (options.RunMode != RunMode.Async)
+                return await PipelineTask(cancellationToken);
 
             //Asynchronous execution - fire and forget.
-            _ = PipelineTask();
+            backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
             return default;
             //Since this is fire and forget, return default, as the result will not be awaited.
 
-            async Task<TResult> PipelineTask()
+            async Task<TResult> PipelineTask(CancellationToken ct)
             {
+                using var scope = serviceProvider.CreateScope();
+                var scopedProvider = scope.ServiceProvider;
+
                 //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
+                await InvokePreHandleAttributes(query, scopedProvider, ct);
 
                 //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
-                var result = await pipeline(query, cancellationToken);
+                var result = await pipeline(query, ct);
 
                 //Invoke post-handle attributes.
-                await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
+                await InvokePostHandleAttributes(query, scopedProvider, ct);
 
-                eventManager.TriggerQueryCompleted(requestType.Name, result, cancellationToken);
+                //Publish the event.
+                await eventManager.Publish(new QueryCompletedNotification(requestType.Name, result), ct);
 
                 return result;
             }
@@ -139,7 +147,7 @@ namespace CQRSharp.Core.Dispatch
                 if (typeof(TResult) == typeof(Unit))
                 {
                     await HandleCommand(req, handler, ct);
-                    return (TResult)(object)Unit.Value;
+                    return (TResult)(object)Unit.Success;
                 }
                 else
                     return await HandleQuery<TResult>(req, handler, ct);
@@ -149,7 +157,7 @@ namespace CQRSharp.Core.Dispatch
             var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
 
             //Wrap the handler with the pipeline behaviors.
-            foreach (dynamic? behavior in behaviors)
+            foreach (var behavior in behaviors)
             {
                 Type behaviorType = behavior.GetType();
 
@@ -161,7 +169,7 @@ namespace CQRSharp.Core.Dispatch
                 handlerDelegate = (req, ct) =>
                 {
                     //Invoke the behavior's Handle method.
-                    return behavior.Handle((dynamic)req, ct, (Func<CancellationToken, Task<TResult>>)((ct) => next(req, ct)));
+                    return behavior.Handle((dynamic)req, ct, (Func<CancellationToken, Task<TResult>>)((cancellationToken) => next(req, cancellationToken)));
                 };
             }
 

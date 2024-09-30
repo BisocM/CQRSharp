@@ -11,21 +11,21 @@ namespace CQRSharpSample.Attributes
     {
         public int Priority => 1;
 
-        public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
-        {
-            //The service provider can be used here to get instances of any additional services.
-            var logger = serviceProvider.GetRequiredService<ILogger<LogAttribute>>();
-
-            logger.LogInformation($"[Attribute] Logging command ON EXIT {request.GetType().Name}");
-            return Task.CompletedTask;
-        }
-
         public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             //The service provider can be used here to get instances of any additional services.
             var logger = serviceProvider.GetRequiredService<ILogger<LogAttribute>>();
 
             logger.LogInformation($"[Attribute] Logging command ON ENTRY {request.GetType().Name}");
+            return Task.CompletedTask;
+        }
+
+        public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        {
+            //The service provider can be used here to get instances of any additional services.
+            var logger = serviceProvider.GetRequiredService<ILogger<LogAttribute>>();
+
+            logger.LogInformation($"[Attribute] Logging command ON EXIT {request.GetType().Name}");
             return Task.CompletedTask;
         }
     }

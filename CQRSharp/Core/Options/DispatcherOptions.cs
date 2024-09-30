@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Core.Pipeline.Types;
 
@@ -48,13 +49,5 @@ namespace CQRSharp.Core.Options
         /// The default value is <see cref="RunMode.Sync"/>.
         /// </remarks>
         public RunMode RunMode { get; set; } = RunMode.Sync;
-
-        //TODO: Add fluent configuration properly.
-
-        //public CQRSharpOptions EnableSensitiveLogging(bool enabled = false)
-        //{
-        //    EnableSensitiveDataLogging = enabled;
-        //    return this;
-        //}
     }
 }
