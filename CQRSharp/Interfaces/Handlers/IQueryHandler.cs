@@ -7,7 +7,7 @@ namespace CQRSharp.Interfaces.Handlers
     /// </summary>
     /// <typeparam name="TCommand">The type of the command.</typeparam>
     /// <typeparam name="TResult">The type of the result returned by the command.</typeparam>
-    public interface IQueryHandler<TCommand, TResult> where TCommand : IQuery<TResult>
+    public interface IQueryHandler<in TCommand, TResult> where TCommand : IQuery<TResult>
     {
         Task<TResult> Handle(TCommand command, CancellationToken cancellationToken);
     }

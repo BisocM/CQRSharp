@@ -16,7 +16,7 @@ namespace CQRSharp.Core.Options
         public bool EnableSensitiveDataLogging { get; set; } = false;
 
         /// <summary>
-        /// Determines whether or not the execution context should be logged. Requires the implementation of the <see cref="ExecutionLoggingBehavior{TExecutable, TResult}"/> pipeline behavior.
+        /// Determines whether the execution context should be logged. Requires the implementation of the <see cref="ExecutionLoggingBehavior{TExecutable, TResult}"/> pipeline behavior.
         /// </summary>
         /// <remarks>
         /// The default value is <c>false</c>.

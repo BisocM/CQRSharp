@@ -4,10 +4,10 @@ using CQRSharpSample.Attributes;
 
 namespace CQRSharpSample.Commands
 {
-    [Log]
     /// <summary>
     /// Command to calculate the sum of two integers.
     /// </summary>
+    [Log]
     public class CalculateSumQuery : IQuery<int>
     {
         public required int Value1 { get; set; }

@@ -24,8 +24,8 @@ namespace CQRSharp.Core.Dispatch
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A task that represents the asynchronous operation and contains the result.</returns>
         /// <remarks>
-        /// Please pay attention to your application's runmode - synchronous or asynchronous.
-        /// If your runmode is <see cref="RunMode.Async"/>, the query will be executed asynchronously, meaning that this method will always return a default value.
+        /// Please pay attention to your application's run mode - synchronous or asynchronous.
+        /// If your run mode is <see cref="RunMode.Async"/>, the query will be executed asynchronously, meaning that this method will always return a default value.
         /// In order to retrieve data from asynchronous queries, you must subscribe to the <see cref="IQuery{TResult}"/> result event.
         /// </remarks>
         Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
