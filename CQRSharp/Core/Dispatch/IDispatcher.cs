@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Interfaces.Markers;
+using CQRSharp.Core.Options.Enums;
 
 namespace CQRSharp.Core.Dispatch
 {
@@ -22,6 +23,11 @@ namespace CQRSharp.Core.Dispatch
         /// <param name="query">The query to send.</param>
         /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
         /// <returns>A task that represents the asynchronous operation and contains the result.</returns>
-        Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
+        /// <remarks>
+        /// Please pay attention to your application's run mode - synchronous or asynchronous.
+        /// If your run mode is <see cref="RunMode.Async"/>, the query will be executed asynchronously, meaning that this method will always return a default value.
+        /// In order to retrieve data from asynchronous queries, you must subscribe to the <see cref="IQuery{TResult}"/> result event.
+        /// </remarks>
+        Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
     }
 }

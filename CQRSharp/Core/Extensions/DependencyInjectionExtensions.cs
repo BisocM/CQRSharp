@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Dispatch;
+using CQRSharp.Core.Events;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Interfaces.Handlers;
@@ -17,9 +18,11 @@ namespace CQRSharp.Core.Extensions
         /// Adds the dispatcher and command handlers to the service collection.
         /// </summary>
         /// <param name="services">The service collection to add services to.</param>
+        /// <param name="configureOptions">Configure the options for the dispatcher to use.</param>
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
-        public static IServiceCollection AddCQRS(this IServiceCollection services, Action<DispatcherOptions> configureOptions, params Assembly[] assemblies)
+        public static IServiceCollection AddCqrs(this IServiceCollection services,
+            Action<DispatcherOptions> configureOptions, params Assembly[] assemblies)
         {
             //Create a new instance of CQRSharp options type.
             var options = new DispatcherOptions();
@@ -27,6 +30,9 @@ namespace CQRSharp.Core.Extensions
 
             //Register the options as a singleton service.
             services.AddSingleton(options);
+
+            //Register the event dispatcher as a singleton service.
+            services.AddSingleton<EventManager>();
 
             //Register the dispatcher as a singleton service.
             services.AddSingleton<IDispatcher, Dispatcher>();
@@ -60,14 +66,14 @@ namespace CQRSharp.Core.Extensions
                     return ex.Types.Where(t => t != null);
                 }
             })
-            .Where(t => t != null && !t.IsAbstract && !t.IsInterface);
+            .Where(t => t is { IsAbstract: false, IsInterface: false });
 
             //Iterate through all retrieved types and register the relevant services.
             foreach (var type in types)
             {
                 //Get all implemented interfaces of the type.
                 var interfaces = type!.GetInterfaces()
-                                     .Where(i => i != null && i.IsGenericType);
+                                     .Where(i => i.IsGenericType);
 
                 foreach (var @interface in interfaces)
                 {

@@ -25,7 +25,7 @@ namespace CQRSharp.Core.Pipeline.Types
 
             //TODO: Add JSON serialization for the context of the command.
             //TODO: Add command context data logging here, with sensitive data sanitization.
-            string sanitizedExecutionContextString = CommandSanitizer.Sanitize(request, options);
+            var sanitizedExecutionContextString = CommandSanitizer.Sanitize(request, options);
 
             if (!string.IsNullOrEmpty(sanitizedExecutionContextString))
                 logger.LogInformation(sanitizedExecutionContextString);

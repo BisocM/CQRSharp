@@ -1,4 +1,7 @@
-﻿using CQRSharp.Core.Pipeline;
+﻿using CQRSharp.Core.Events;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Data;
@@ -19,7 +22,10 @@ namespace CQRSharp.Core.Dispatch
     /// Initializes a new instance of the <see cref="Dispatcher"/> class.
     /// </remarks>
     /// <param name="serviceProvider">The service provider for dependency resolution.</param>
-    public class Dispatcher(IServiceProvider serviceProvider) : IDispatcher
+    public sealed class Dispatcher(
+        IServiceProvider serviceProvider,
+        EventManager eventManager,
+        DispatcherOptions options) : IDispatcher
     {
 
         /// <inheritdoc/>
@@ -37,19 +43,34 @@ namespace CQRSharp.Core.Dispatch
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+            if (options.RunMode == RunMode.Async)
+            {
+                //Asynchronous execution - fire and forget.
+                var task = PipelineTask();
+                return;
+            }
 
-            //Invoke the command handler.
-            var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
-            await pipeline(command, cancellationToken);
+            //Synchronous execution - await the pipeline.
+            await PipelineTask();
+            return;
 
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+            //Define the pipeline task.
+            async Task PipelineTask()
+            {
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+
+                //Build and execute the command pipeline.
+                var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
+                await pipeline(command, cancellationToken);
+
+                //Invoke post-handle attributes.
+                await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+            }
         }
 
         /// <inheritdoc/>
-        public async Task<TResult> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
+        public async Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
         {
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
@@ -61,17 +82,31 @@ namespace CQRSharp.Core.Dispatch
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
+            //Synchronous execution - await the pipeline.
+            if (options.RunMode != RunMode.Async) 
+                return await PipelineTask();
 
-            //Build and execute the pipeline.
-            var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
-            var result = await pipeline(query, cancellationToken);
+            //Asynchronous execution - fire and forget.
+            _ = PipelineTask();
+            return default;
+            //Since this is fire and forget, return default, as the result will not be awaited.
 
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
+            async Task<TResult> PipelineTask()
+            {
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
 
-            return result;
+                //Build and execute the query pipeline.
+                var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
+                var result = await pipeline(query, cancellationToken);
+
+                //Invoke post-handle attributes.
+                await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
+
+                eventManager.TriggerQueryCompleted(requestType.Name, result, cancellationToken);
+
+                return result;
+            }
         }
 
         /// <summary>
@@ -91,7 +126,7 @@ namespace CQRSharp.Core.Dispatch
             var resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
-            List<dynamic> behaviors = serviceProvider
+            var behaviors = serviceProvider
                 .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
                 .Reverse() //Reverse to maintain the correct order of execution.
@@ -100,7 +135,7 @@ namespace CQRSharp.Core.Dispatch
             //The final handler delegate.
             Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
             {
-                //Determine whether or not the request is a command or a query.
+                //Determine whether the request is a command or a query.
                 if (typeof(TResult) == typeof(Unit))
                 {
                     await HandleCommand(req, handler, ct);
@@ -110,11 +145,12 @@ namespace CQRSharp.Core.Dispatch
                     return await HandleQuery<TResult>(req, handler, ct);
             };
 
+            //Check if the request is exempt from any behaviors.
+            var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
+
             //Wrap the handler with the pipeline behaviors.
-            foreach (dynamic behavior in behaviors)
+            foreach (dynamic? behavior in behaviors)
             {
-                //Check if the request is exempt from the current behavior.
-                var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
                 Type behaviorType = behavior.GetType();
 
                 //Skip the behavior if the request is exempt.
@@ -227,12 +263,12 @@ namespace CQRSharp.Core.Dispatch
             var method = handler.GetType().GetMethod("Handle")
                 ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
 
-            var result = method.Invoke(handler, new[] { query, cancellationToken });
+            var result = method.Invoke(handler, [query, cancellationToken]);
 
             if (result is Task<TResult> task)
                 return await task;
-            else
-                throw new InvalidOperationException($"Handler did not return a Task<{typeof(TResult).Name}>.");
+
+            throw new InvalidOperationException($"Handler did not return a Task<{typeof(TResult).Name}>.");
         }
 
 
@@ -249,13 +285,15 @@ namespace CQRSharp.Core.Dispatch
 
             if (handlerInterfaceType.IsGenericTypeDefinition)
             {
-                //Handle commands with or without result types.
-                if (resultType == null && handlerInterfaceType.GetGenericArguments().Length == 2)
-                    throw new InvalidOperationException("Result type cannot be null for handler interfaces with two generic arguments.");
-                else if (resultType == null)
-                    handlerType = handlerInterfaceType.MakeGenericType(requestType);
-                else
-                    handlerType = handlerInterfaceType.MakeGenericType(requestType, resultType);
+                handlerType = resultType switch
+                {
+                    //Handle commands with or without result types.
+                    null when handlerInterfaceType.GetGenericArguments().Length == 2 => throw
+                        new InvalidOperationException(
+                            "Result type cannot be null for handler interfaces with two generic arguments."),
+                    null => handlerInterfaceType.MakeGenericType(requestType),
+                    _ => handlerInterfaceType.MakeGenericType(requestType, resultType)
+                };
             }
             else
             {
