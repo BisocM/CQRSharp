@@ -123,18 +123,18 @@ namespace CQRSharp.Core.Dispatch
         /// <typeparam name="TResult">The type of the result expected.</typeparam>
         /// <param name="request">The command or query being handled.</param>
         /// <param name="handler">The handler instance.</param>
-        /// <param name="serviceProvider">The scoped service provider.</param>
+        /// <param name="services">The scoped service provider.</param>
         /// <returns>A delegate representing the pipeline.</returns>
         private Func<object, CancellationToken, Task<TResult>> BuildPipeline<TResult>(
             IRequest request,
             object handler,
-            IServiceProvider serviceProvider)
+            IServiceProvider services)
         {
             var requestType = request.GetType();
             var resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
-            var behaviors = serviceProvider
+            var behaviors = services
                 .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
                 .Reverse() //Reverse to maintain the correct order of execution.

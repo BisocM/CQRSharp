@@ -24,8 +24,11 @@ namespace CQRSharp.Core.Extensions
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
         public static IServiceCollection AddCqrs(this IServiceCollection services,
-            Action<DispatcherOptions> configureOptions, params Assembly[] assemblies)
+            Action<DispatcherOptions> configureOptions, params Assembly?[] assemblies)
         {
+            //Append the library's assembly to the assemblies array so that the pipelines pre-defined in the library are also registered by the container.
+            assemblies = assemblies.Append(Assembly.GetAssembly(typeof(DependencyInjectionExtensions))).ToArray();
+            
             //Create a new instance of DispatcherOptions.
             var options = new DispatcherOptions();
             configureOptions?.Invoke(options);
@@ -38,7 +41,7 @@ namespace CQRSharp.Core.Extensions
 
             //Register the event manager as a singleton service.
             services.AddSingleton<NotificationDispatcher>();
-
+            
             //Register the background task queue and service.
             services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
             services.AddHostedService<BackgroundTaskService>();
@@ -56,10 +59,10 @@ namespace CQRSharp.Core.Extensions
             return services;
         }
 
-        private static void RegisterHandlersAndBehaviors(IServiceCollection services, Assembly[] assemblies)
+        private static void RegisterHandlersAndBehaviors(IServiceCollection services, Assembly?[] assemblies)
         {
             //Get all types from the specified assemblies.
-            var allTypes = assemblies.SelectMany(a => a.GetTypes()).Where(t => t.IsClass && !t.IsAbstract);
+            var allTypes = assemblies.SelectMany(a => a?.GetTypes() ?? Type.EmptyTypes).Where(t => t is { IsClass: true, IsAbstract: false });
 
             foreach (var type in allTypes)
             {
@@ -76,9 +79,9 @@ namespace CQRSharp.Core.Extensions
                 var behaviorInterfaces = type.GetInterfaces()
                     .Where(i => i.IsGenericType &&
                                 i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>));
-
-                foreach (var behaviorInterface in behaviorInterfaces)
-                    services.AddTransient(behaviorInterface, type);
+                
+                if (behaviorInterfaces.Any())
+                    services.AddTransient(typeof(IPipelineBehavior<,>), type);
 
                 //Register notification handlers.
                 var notificationHandlerInterfaces = type.GetInterfaces()
