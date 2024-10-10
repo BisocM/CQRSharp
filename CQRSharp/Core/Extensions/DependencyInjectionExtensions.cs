@@ -1,4 +1,5 @@
-﻿using CQRSharp.Core.Dispatch;
+﻿using System.Collections.Concurrent;
+using CQRSharp.Core.Dispatch;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Interfaces.Handlers;
@@ -54,13 +55,17 @@ namespace CQRSharp.Core.Extensions
             });
 
             //Automatically register handlers and pipeline behaviors.
-            RegisterHandlersAndBehaviors(services, assemblies);
+            //Register the handler registry as a singleton service.
+            var handlerMappings = RegisterHandlersAndBehaviors(services, assemblies);
+            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMappings));
 
             return services;
         }
 
-        private static void RegisterHandlersAndBehaviors(IServiceCollection services, Assembly?[] assemblies)
+        private static ConcurrentDictionary<Type, Type> RegisterHandlersAndBehaviors(IServiceCollection services, Assembly?[] assemblies)
         {
+            var handlerMappings = new ConcurrentDictionary<Type, Type>();
+
             //Get all types from the specified assemblies.
             var allTypes = assemblies.SelectMany(a => a?.GetTypes() ?? Type.EmptyTypes).Where(t => t is { IsClass: true, IsAbstract: false });
 
@@ -73,7 +78,13 @@ namespace CQRSharp.Core.Extensions
                          i.GetGenericTypeDefinition() == typeof(IQueryHandler<,>)));
 
                 foreach (var handlerInterface in handlerInterfaces)
+                {
                     services.AddTransient(handlerInterface, type);
+
+                    //Map request type to handler type
+                    var requestType = handlerInterface.GetGenericArguments()[0];
+                    handlerMappings[requestType] = handlerInterface;
+                }
 
                 //Register pipeline behaviors.
                 var behaviorInterfaces = type.GetInterfaces()
@@ -91,6 +102,8 @@ namespace CQRSharp.Core.Extensions
                 foreach (var notificationHandlerInterface in notificationHandlerInterfaces)
                     services.AddTransient(notificationHandlerInterface, type);
             }
+
+            return handlerMappings;
         }
     }
 }

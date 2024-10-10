@@ -13,9 +13,7 @@ using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
-
-//TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
-//It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
+using CQRSharp.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Dispatch
 {
@@ -29,6 +27,7 @@ namespace CQRSharp.Core.Dispatch
     public sealed class Dispatcher(
         IServiceProvider serviceProvider,
         IBackgroundTaskQueue backgroundTaskQueue,
+        IHandlerRegistry handlerRegistry,
         NotificationDispatcher eventManager,
         DispatcherOptions options) : IDispatcher
     {
@@ -41,8 +40,6 @@ namespace CQRSharp.Core.Dispatch
 
             //Get the type of the command.
             var requestType = command.GetType();
-            //Retrieve the appropriate handler for the command.
-            var handler = GetHandler(requestType, null, typeof(ICommandHandler<>));
 
             if (options.RunMode == RunMode.Async)
             {
@@ -64,6 +61,9 @@ namespace CQRSharp.Core.Dispatch
                 //Invoke pre-handle attributes.
                 await InvokePreHandleAttributes(command, scopedProvider, ct);
 
+                //Retrieve the appropriate handler for the command.
+                var handler = GetHandler(requestType, scopedProvider);
+
                 //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
                 var result = await pipeline(command, ct);
@@ -83,7 +83,6 @@ namespace CQRSharp.Core.Dispatch
 
             var requestType = query.GetType();
             var resultType = typeof(TResult);
-            var handler = GetHandler(requestType, resultType, typeof(IQueryHandler<,>));
 
             //Synchronous execution - await the pipeline.
             if (options.RunMode != RunMode.Async)
@@ -104,6 +103,9 @@ namespace CQRSharp.Core.Dispatch
 
                 //Send off the notification for query initiation before the attributes are handled.
                 await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+
+                //Get the handler for the query.
+                var handler = GetHandler(requestType, scopedProvider);
 
                 //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
@@ -286,33 +288,15 @@ namespace CQRSharp.Core.Dispatch
         /// Retrieves the appropriate handler for the given command type.
         /// </summary>
         /// <param name="requestType">The type of the command.</param>
-        /// <param name="resultType">The result type expected from the handler.</param>
-        /// <param name="handlerInterfaceType">The handler interface type.</param>
+        /// <param name="scopedProvider">The scoped provider to resolve services.</param>
         /// <returns>The handler instance.</returns>
-        private object GetHandler(Type requestType, Type? resultType, Type handlerInterfaceType)
+        private object GetHandler(Type requestType, IServiceProvider scopedProvider)
         {
-            Type handlerType;
+            var handlerType = handlerRegistry.GetHandlerType(requestType)
+                              ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
 
-            if (handlerInterfaceType.IsGenericTypeDefinition)
-            {
-                handlerType = resultType switch
-                {
-                    //Handle commands with or without result types.
-                    null when handlerInterfaceType.GetGenericArguments().Length == 2 => throw
-                        new InvalidOperationException(
-                            "Result type cannot be null for handler interfaces with two generic arguments."),
-                    null => handlerInterfaceType.MakeGenericType(requestType),
-                    _ => handlerInterfaceType.MakeGenericType(requestType, resultType)
-                };
-            }
-            else
-            {
-                handlerType = handlerInterfaceType;
-            }
-
-            //Resolve the handler from the service provider.
-            var handler = serviceProvider.GetService(handlerType)
-                ?? throw new InvalidOperationException($"Handler for '{handlerType.Name}' not found.");
+            var handler = scopedProvider.GetRequiredService(handlerType)
+                          ?? throw new InvalidOperationException($"Handler of type '{handlerType.Name}' not found in the service provider.");
 
             return handler;
         }

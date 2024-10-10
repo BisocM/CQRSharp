@@ -9,26 +9,26 @@ namespace CQRSharpSample.Services
     {
         protected override async Task ExecuteAsync(CancellationToken cancellationToken)
         {
-            // Get the dispatcher
+            //Get the dispatcher
             var dispatcher = services.GetRequiredService<IDispatcher>();
 
             #region Command Example
 
-            // Send CreateUserCommand
+            //Send CreateUserCommand
             var createUserCommand = new CreateUserCommand
             {
                 Username = "john_doe",
                 Email = "john@example.com"
             };
 
-            // Send the command to create the user
+            //Send the command to create the user
             await dispatcher.ExecuteCommand(createUserCommand, cancellationToken);
 
             #endregion
 
             #region Query Example
 
-            // Send CalculateSumQuery
+            //Send CalculateSumQuery
             var calculateSumCommand = new CalculateSumQuery
             {
                 Value1 = 10,
@@ -39,7 +39,7 @@ namespace CQRSharpSample.Services
 
             #endregion
 
-            // Wait for the user creation to complete, since it was offloaded to a background thread
+            //Wait for the user creation to complete, since it was offloaded to a background thread
             await Task.Delay(5000, cancellationToken); // Reduced delay for demonstration
 
             Console.WriteLine("TestHostedService completed.");
