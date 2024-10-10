@@ -1,4 +1,4 @@
-﻿using CQRSharp.Interfaces.Markers;
+﻿using CQRSharp.Interfaces.Markers.Query;
 
 namespace CQRSharp.Interfaces.Handlers
 {

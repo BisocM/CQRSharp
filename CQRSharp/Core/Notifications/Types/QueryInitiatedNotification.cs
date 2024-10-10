@@ -3,9 +3,8 @@ using CQRSharp.Interfaces.Markers.Query;
 
 namespace CQRSharp.Core.Notifications.Types
 {
-    public sealed class QueryCompletedNotification<TResult>(IQuery<TResult> query, object? result) : INotification
+    public sealed class QueryInitiatedNotification<TResult>(IQuery<TResult> query) : INotification
     {
         public string QueryName { get; } = query.GetType().Name;
-        public object? Result { get; } = result;
     }
 }

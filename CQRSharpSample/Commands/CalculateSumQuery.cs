@@ -1,5 +1,5 @@
 ﻿using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Query;
 using CQRSharpSample.Attributes;
 
 namespace CQRSharpSample.Commands
@@ -8,7 +8,7 @@ namespace CQRSharpSample.Commands
     /// Command to calculate the sum of two integers.
     /// </summary>
     [Log]
-    public class CalculateSumQuery : IQuery<int>
+    public class CalculateSumQuery : QueryBase<int>
     {
         public required int Value1 { get; set; }
         public required int Value2 { get; set; }

@@ -11,6 +11,8 @@ using System.Reflection;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Interfaces.Markers.Query;
 
 //TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
 //It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
@@ -69,9 +71,6 @@ namespace CQRSharp.Core.Dispatch
                 //Invoke post-handle attributes.
                 await InvokePostHandleAttributes(command, scopedProvider, ct);
 
-                //Publish the event.
-                await eventManager.Publish(new QueryCompletedNotification(requestType.Name, result), ct);
-
                 return result;
             }
         }
@@ -103,6 +102,9 @@ namespace CQRSharp.Core.Dispatch
                 //Invoke pre-handle attributes.
                 await InvokePreHandleAttributes(query, scopedProvider, ct);
 
+                //Send off the notification for query initiation before the attributes are handled.
+                await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+
                 //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
                 var result = await pipeline(query, ct);
@@ -111,7 +113,7 @@ namespace CQRSharp.Core.Dispatch
                 await InvokePostHandleAttributes(query, scopedProvider, ct);
 
                 //Publish the event.
-                await eventManager.Publish(new QueryCompletedNotification(requestType.Name, result), ct);
+                await eventManager.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
 
                 return result;
             }

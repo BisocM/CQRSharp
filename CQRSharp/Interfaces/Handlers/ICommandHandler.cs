@@ -1,5 +1,5 @@
 ﻿using CQRSharp.Data;
-using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Command;
 
 namespace CQRSharp.Interfaces.Handlers
 {

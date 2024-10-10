@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using CQRSharp.Core.Options;
 using CQRSharp.Helpers;
-using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipeline.Types

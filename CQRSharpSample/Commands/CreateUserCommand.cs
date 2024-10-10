@@ -2,7 +2,7 @@
 using CQRSharp.Core.Pipeline.Types;
 using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Command;
 
 namespace CQRSharpSample.Commands
 {
@@ -12,7 +12,7 @@ namespace CQRSharpSample.Commands
     //[LogEntry(1)]
     //[LogExit(1)]
     [PipelineExemption(typeof(TimeoutBehavior<,>))] //Demonstration of how to make a command exempt from behaviors.
-    public class CreateUserCommand : ICommand
+    public class CreateUserCommand : CommandBase
     {
         public required string Username { get; set; }
 

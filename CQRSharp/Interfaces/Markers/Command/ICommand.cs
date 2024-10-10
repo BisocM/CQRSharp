@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Interfaces.Markers
+﻿namespace CQRSharp.Interfaces.Markers.Command
 {
     /// <summary>
     /// Marker interface for commands that do not return a result.

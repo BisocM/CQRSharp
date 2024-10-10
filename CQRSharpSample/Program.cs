@@ -1,9 +1,6 @@
 ﻿using CQRSharp.Core.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
-using CQRSharp.Core.Dispatch;
-using CQRSharpSample.Commands;
-using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options.Enums;
 using CQRSharpSample.Services;
 using Microsoft.Extensions.Hosting;

@@ -1,6 +1,6 @@
 ﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
-using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Request;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 

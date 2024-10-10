@@ -1,5 +1,6 @@
-﻿using CQRSharp.Interfaces.Markers;
-using CQRSharp.Core.Options.Enums;
+﻿using CQRSharp.Core.Options.Enums;
+using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Interfaces.Markers.Query;
 
 namespace CQRSharp.Core.Dispatch
 {

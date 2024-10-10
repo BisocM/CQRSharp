@@ -24,7 +24,7 @@ namespace CQRSharp.Core.Extensions
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
         public static IServiceCollection AddCqrs(this IServiceCollection services,
-            Action<DispatcherOptions> configureOptions, params Assembly?[] assemblies)
+            Action<DispatcherOptions>? configureOptions, params Assembly?[] assemblies)
         {
             //Append the library's assembly to the assemblies array so that the pipelines pre-defined in the library are also registered by the container.
             assemblies = assemblies.Append(Assembly.GetAssembly(typeof(DependencyInjectionExtensions))).ToArray();

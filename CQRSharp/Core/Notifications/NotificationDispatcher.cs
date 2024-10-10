@@ -9,10 +9,11 @@ namespace CQRSharp.Core.Notifications
         public async Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
             where TNotification : INotification
         {
-            // Get all handlers for the notification.
+            //Get all handlers for the notification.
             var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>();
 
-            // Invoke all handlers concurrently.
+            //Invoke all handlers concurrently.
+            //FIXME: This might cause issues with control flow later.
             var tasks = handlers.Select(handler => handler.Handle(notification, cancellationToken));
             await Task.WhenAll(tasks);
         }

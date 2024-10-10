@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Interfaces.Markers
+﻿namespace CQRSharp.Interfaces.Markers.Query
 {
     /// <summary>
     /// Marker interface for commands that return a result of type <typeparamref name="TResult"/>.
