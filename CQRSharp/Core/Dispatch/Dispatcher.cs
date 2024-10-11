@@ -1,30 +1,29 @@
-﻿using CQRSharp.Core.Events;
-using CQRSharp.Core.Options;
+﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Data;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
-
-//TODO: In larger applications with high concurrency, using reflection can have a more noticeable overhead than in small ones.
-//It might make sense here to have a ConcurrentDictionary or a similar data type to store the handlers and their types. This way, we can avoid the overhead of reflection.
+using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Interfaces.Markers.Query;
+using CQRSharp.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Dispatch
 {
     /// <summary>
     /// Dispatcher responsible for sending commands to their respective handlers and managing their execution.
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="Dispatcher"/> class.
-    /// </remarks>
     /// <param name="serviceProvider">The service provider for dependency resolution.</param>
     public sealed class Dispatcher(
         IServiceProvider serviceProvider,
-        EventManager eventManager,
+        IBackgroundTaskQueue backgroundTaskQueue,
+        IHandlerRegistry handlerRegistry,
+        NotificationDispatcher eventManager,
         DispatcherOptions options) : IDispatcher
     {
 
@@ -36,36 +35,38 @@ namespace CQRSharp.Core.Dispatch
 
             //Get the type of the command.
             var requestType = command.GetType();
-            //Retrieve the appropriate handler for the command.
-            var handler = GetHandler(requestType, null, typeof(ICommandHandler<>));
-
-            //Create a new scope for handling the command.
-            using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
 
             if (options.RunMode == RunMode.Async)
             {
                 //Asynchronous execution - fire and forget.
-                var task = PipelineTask();
+                backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
                 return;
             }
 
             //Synchronous execution - await the pipeline.
-            await PipelineTask();
+            await PipelineTask(cancellationToken);
             return;
 
             //Define the pipeline task.
-            async Task PipelineTask()
+            async Task<Unit> PipelineTask(CancellationToken ct)
             {
-                //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(command, scopedProvider, cancellationToken);
+                using var scope = serviceProvider.CreateScope();
+                var scopedProvider = scope.ServiceProvider;
 
-                //Build and execute the command pipeline.
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(command, scopedProvider, ct);
+
+                //Retrieve the appropriate handler for the command.
+                var handler = GetHandler(requestType, scopedProvider);
+
+                //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
-                await pipeline(command, cancellationToken);
+                var result = await pipeline(command, ct);
 
                 //Invoke post-handle attributes.
-                await InvokePostHandleAttributes(command, scopedProvider, cancellationToken);
+                await InvokePostHandleAttributes(command, scopedProvider, ct);
+
+                return result;
             }
         }
 
@@ -77,33 +78,39 @@ namespace CQRSharp.Core.Dispatch
 
             var requestType = query.GetType();
             var resultType = typeof(TResult);
-            var handler = GetHandler(requestType, resultType, typeof(IQueryHandler<,>));
-
-            using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
 
             //Synchronous execution - await the pipeline.
-            if (options.RunMode != RunMode.Async) 
-                return await PipelineTask();
+            if (options.RunMode != RunMode.Async)
+                return await PipelineTask(cancellationToken);
 
             //Asynchronous execution - fire and forget.
-            _ = PipelineTask();
+            backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
             return default;
             //Since this is fire and forget, return default, as the result will not be awaited.
 
-            async Task<TResult> PipelineTask()
+            async Task<TResult> PipelineTask(CancellationToken ct)
             {
+                using var scope = serviceProvider.CreateScope();
+                var scopedProvider = scope.ServiceProvider;
+
                 //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(query, scopedProvider, cancellationToken);
+                await InvokePreHandleAttributes(query, scopedProvider, ct);
+
+                //Send off the notification for query initiation before the attributes are handled.
+                await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+
+                //Get the handler for the query.
+                var handler = GetHandler(requestType, scopedProvider);
 
                 //Build and execute the query pipeline.
                 var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
-                var result = await pipeline(query, cancellationToken);
+                var result = await pipeline(query, ct);
 
                 //Invoke post-handle attributes.
-                await InvokePostHandleAttributes(query, scopedProvider, cancellationToken);
+                await InvokePostHandleAttributes(query, scopedProvider, ct);
 
-                eventManager.TriggerQueryCompleted(requestType.Name, result, cancellationToken);
+                //Publish the event.
+                await eventManager.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
 
                 return result;
             }
@@ -115,18 +122,18 @@ namespace CQRSharp.Core.Dispatch
         /// <typeparam name="TResult">The type of the result expected.</typeparam>
         /// <param name="request">The command or query being handled.</param>
         /// <param name="handler">The handler instance.</param>
-        /// <param name="serviceProvider">The scoped service provider.</param>
+        /// <param name="services">The scoped service provider.</param>
         /// <returns>A delegate representing the pipeline.</returns>
         private Func<object, CancellationToken, Task<TResult>> BuildPipeline<TResult>(
             IRequest request,
             object handler,
-            IServiceProvider serviceProvider)
+            IServiceProvider services)
         {
             var requestType = request.GetType();
             var resultType = typeof(TResult);
 
             //Retrieve all pipeline behaviors registered in the container.
-            var behaviors = serviceProvider
+            var behaviors = services
                 .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
                 .Reverse() //Reverse to maintain the correct order of execution.
@@ -139,7 +146,7 @@ namespace CQRSharp.Core.Dispatch
                 if (typeof(TResult) == typeof(Unit))
                 {
                     await HandleCommand(req, handler, ct);
-                    return (TResult)(object)Unit.Value;
+                    return (TResult)(object)Unit.Success;
                 }
                 else
                     return await HandleQuery<TResult>(req, handler, ct);
@@ -149,7 +156,7 @@ namespace CQRSharp.Core.Dispatch
             var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
 
             //Wrap the handler with the pipeline behaviors.
-            foreach (dynamic? behavior in behaviors)
+            foreach (var behavior in behaviors)
             {
                 Type behaviorType = behavior.GetType();
 
@@ -161,7 +168,7 @@ namespace CQRSharp.Core.Dispatch
                 handlerDelegate = (req, ct) =>
                 {
                     //Invoke the behavior's Handle method.
-                    return behavior.Handle((dynamic)req, ct, (Func<CancellationToken, Task<TResult>>)((ct) => next(req, ct)));
+                    return behavior.Handle((dynamic)req, ct, (Func<CancellationToken, Task<TResult>>)((cancellationToken) => next(req, cancellationToken)));
                 };
             }
 
@@ -276,33 +283,15 @@ namespace CQRSharp.Core.Dispatch
         /// Retrieves the appropriate handler for the given command type.
         /// </summary>
         /// <param name="requestType">The type of the command.</param>
-        /// <param name="resultType">The result type expected from the handler.</param>
-        /// <param name="handlerInterfaceType">The handler interface type.</param>
+        /// <param name="scopedProvider">The scoped provider to resolve services.</param>
         /// <returns>The handler instance.</returns>
-        private object GetHandler(Type requestType, Type? resultType, Type handlerInterfaceType)
+        private object GetHandler(Type requestType, IServiceProvider scopedProvider)
         {
-            Type handlerType;
+            var handlerType = handlerRegistry.GetHandlerType(requestType)
+                              ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
 
-            if (handlerInterfaceType.IsGenericTypeDefinition)
-            {
-                handlerType = resultType switch
-                {
-                    //Handle commands with or without result types.
-                    null when handlerInterfaceType.GetGenericArguments().Length == 2 => throw
-                        new InvalidOperationException(
-                            "Result type cannot be null for handler interfaces with two generic arguments."),
-                    null => handlerInterfaceType.MakeGenericType(requestType),
-                    _ => handlerInterfaceType.MakeGenericType(requestType, resultType)
-                };
-            }
-            else
-            {
-                handlerType = handlerInterfaceType;
-            }
-
-            //Resolve the handler from the service provider.
-            var handler = serviceProvider.GetService(handlerType)
-                ?? throw new InvalidOperationException($"Handler for '{handlerType.Name}' not found.");
+            var handler = scopedProvider.GetRequiredService(handlerType)
+                          ?? throw new InvalidOperationException($"Handler of type '{handlerType.Name}' not found in the service provider.");
 
             return handler;
         }
