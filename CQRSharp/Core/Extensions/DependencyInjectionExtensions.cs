@@ -81,7 +81,7 @@ namespace CQRSharp.Core.Extensions
                 {
                     services.AddTransient(handlerInterface, type);
 
-                    //Map request type to handler type
+                    //Map request type to handler interface.
                     var requestType = handlerInterface.GetGenericArguments()[0];
                     handlerMappings[requestType] = handlerInterface;
                 }

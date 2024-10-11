@@ -4,8 +4,6 @@ using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Data;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Interfaces.Markers;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Notifications;
@@ -20,9 +18,6 @@ namespace CQRSharp.Core.Dispatch
     /// <summary>
     /// Dispatcher responsible for sending commands to their respective handlers and managing their execution.
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="Dispatcher"/> class.
-    /// </remarks>
     /// <param name="serviceProvider">The service provider for dependency resolution.</param>
     public sealed class Dispatcher(
         IServiceProvider serviceProvider,
