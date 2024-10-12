@@ -25,7 +25,7 @@ namespace CQRSharpSample.Commands
     /// </summary>
     public class CreateUserCommandHandler : ICommandHandler<CreateUserCommand>
     {
-        public async Task<Unit> Handle(CreateUserCommand command, CancellationToken cancellationToken)
+        public async Task<CommandResult> Handle(CreateUserCommand command, CancellationToken cancellationToken)
         {
             //To demonstrate the functionality of the timeout pipeline behavior. Change the number to trigger a timeout.
             await Task.Delay(2000, cancellationToken);
@@ -36,8 +36,8 @@ namespace CQRSharpSample.Commands
 
             Console.WriteLine("User created successfully.");
 
-            //Return Unit.Success to indicate completion.
-            return Unit.Success;
+            //Return CommandResult.Success to indicate completion.
+            return CommandResult.Success;
         }
     }
 }

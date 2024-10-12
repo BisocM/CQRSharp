@@ -48,7 +48,7 @@ namespace CQRSharp.Core.Dispatch
             return;
 
             //Define the pipeline task.
-            async Task<Unit> PipelineTask(CancellationToken ct)
+            async Task<CommandResult> PipelineTask(CancellationToken ct)
             {
                 using var scope = serviceProvider.CreateScope();
                 var scopedProvider = scope.ServiceProvider;
@@ -56,12 +56,18 @@ namespace CQRSharp.Core.Dispatch
                 //Invoke pre-handle attributes.
                 await InvokePreHandleAttributes(command, scopedProvider, ct);
 
+                //Send off the notification for command initiation before the attributes are handled.
+                await eventManager.Publish(new CommandInitiatedNotification(command), ct);
+
                 //Retrieve the appropriate handler for the command.
                 var handler = GetHandler(requestType, scopedProvider);
 
                 //Build and execute the query pipeline.
-                var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
+                var pipeline = BuildPipeline<CommandResult>(command, handler, scopedProvider);
                 var result = await pipeline(command, ct);
+
+                //Send off the notification about command completion before the post-completion attributes are handled.
+                await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
 
                 //Invoke post-handle attributes.
                 await InvokePostHandleAttributes(command, scopedProvider, ct);
@@ -143,10 +149,10 @@ namespace CQRSharp.Core.Dispatch
             Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
             {
                 //Determine whether the request is a command or a query.
-                if (typeof(TResult) == typeof(Unit))
+                if (typeof(TResult) == typeof(CommandResult))
                 {
                     await HandleCommand(req, handler, ct);
-                    return (TResult)(object)Unit.Success;
+                    return (TResult)(object)CommandResult.Success;
                 }
                 else
                     return await HandleQuery<TResult>(req, handler, ct);
