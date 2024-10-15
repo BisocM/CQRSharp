@@ -8,6 +8,10 @@ using Microsoft.Extensions.Logging;
 using System.Reflection;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Pipeline.Types;
+using CQRSharp.Interfaces.Markers;
+using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Extensions
@@ -19,11 +23,17 @@ namespace CQRSharp.Core.Extensions
     {
         /// <summary>
         /// Adds the dispatcher and command handlers to the service collection.
+        /// <para>
+        /// Responsible for automatic registration of all <see cref="ICommand"/>, <see cref="IQuery{TResult}"/>, <see cref="INotification"/>, and <see cref="IPipelineBehavior{TRequest,TResult}"/> implementations in the specified assemblies.
+        /// Automatically includes the library assembly in the assemblies to scan, meaning that native pipelines - <see cref="ExecutionLoggingBehavior{TRequest,TResult}"/>,
+        /// <see cref="ResilienceBehavior{TRequest,TResult}"/>, <see cref="TimeoutBehavior{TRequest,TResult}"/> - are automatically activated.
+        /// </para>
         /// </summary>
         /// <param name="services">The service collection to add services to.</param>
         /// <param name="configureOptions">Configure the options for the dispatcher to use.</param>
         /// <param name="assemblies">Assemblies to scan for handlers and attributes.</param>
         /// <returns>The updated service collection.</returns>
+
         public static IServiceCollection AddCqrs(this IServiceCollection services,
             Action<DispatcherOptions>? configureOptions, params Assembly?[] assemblies)
         {

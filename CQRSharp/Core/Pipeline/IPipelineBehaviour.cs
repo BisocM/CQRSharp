@@ -1,11 +1,13 @@
-﻿namespace CQRSharp.Core.Pipeline
+﻿using CQRSharp.Interfaces.Markers.Request;
+
+namespace CQRSharp.Core.Pipeline
 {
     /// <summary>
     /// Defines an interface for pipeline behaviors that can be applied globally to all commands.
     /// </summary>
     /// <typeparam name="TRequest">The type of the command.</typeparam>
     /// <typeparam name="TResult">The type of the result returned by the command.</typeparam>
-    public interface IPipelineBehavior<TRequest, TResult>
+    public interface IPipelineBehavior<in TRequest, TResult> where TRequest : RequestBase
     {
         /// <summary>
         /// Handles the command by invoking the next behavior in the pipeline or the command handler.

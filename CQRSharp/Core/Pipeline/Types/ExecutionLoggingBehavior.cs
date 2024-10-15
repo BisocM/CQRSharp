@@ -8,7 +8,7 @@ namespace CQRSharp.Core.Pipeline.Types
 {
     public sealed class ExecutionLoggingBehavior<TRequest, TResult>(
         ILogger<ExecutionLoggingBehavior<TRequest, TResult>> logger,
-        DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+        DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
     {
         public async Task<TResult> Handle(
             TRequest request,

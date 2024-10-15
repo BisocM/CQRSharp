@@ -1,11 +1,12 @@
 ﻿using CQRSharp.Core.Options;
+using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipeline.Types
 {
     public sealed class ResilienceBehavior<TRequest, TResult>(
         ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-        DispatcherOptions options) : IPipelineBehavior<TRequest, TResult>
+        DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
     {
         public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken, Func<CancellationToken, Task<TResult>> next)
         {

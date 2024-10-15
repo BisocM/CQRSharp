@@ -33,6 +33,10 @@ namespace CQRSharp.Core.Dispatch
             //Ensure the command is not null.
             ArgumentNullException.ThrowIfNull(command);
 
+            //Assign a unique identifier
+            if (command is RequestBase requestBase)
+                requestBase.Id = Guid.NewGuid();
+
             //Get the type of the command.
             var requestType = command.GetType();
 
@@ -82,8 +86,12 @@ namespace CQRSharp.Core.Dispatch
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
 
+            //Assign a unique identifier
+            if (query is RequestBase requestBase)
+                requestBase.Id = Guid.NewGuid();
+
+            //Get the type of the request.
             var requestType = query.GetType();
-            var resultType = typeof(TResult);
 
             //Synchronous execution - await the pipeline.
             if (options.RunMode != RunMode.Async)

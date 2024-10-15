@@ -7,7 +7,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp", "CQRSharp\CQRSha
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharpSample", "CQRSharpSample\CQRSharpSample.csproj", "{2F79B54B-DC8D-4B73-AFC0-FE58EAFE76C6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Kafka", "CQRSharp.Kafka\CQRSharp.Kafka.csproj", "{620D797C-E42A-4AC2-9834-1463C5681B51}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Kafka", "CQRSharp.Kafka\CQRSharp.Kafka.csproj", "{620D797C-E42A-4AC2-9834-1463C5681B51}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.RateLimiting", "CQRSharp.RateLimiting\CQRSharp.RateLimiting.csproj", "{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Tests", "CQRSharp.Tests\CQRSharp.Tests.csproj", "{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,6 +30,14 @@ Global
 		{620D797C-E42A-4AC2-9834-1463C5681B51}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{620D797C-E42A-4AC2-9834-1463C5681B51}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{620D797C-E42A-4AC2-9834-1463C5681B51}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
