@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
+    <Authors>$(AssemblyName)</Authors>
+    <Company>BisocM</Company>
+    <PackageProjectUrl></PackageProjectUrl>
+    <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+    <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+    <PackageTags>CQRS;</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <Version>1.1.4</Version>
+    <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\CQRSharp_Icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Core\Pipeline\Types\RateLimiting\" />
+  </ItemGroup>
+
+</Project>

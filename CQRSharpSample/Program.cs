@@ -3,8 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Kafka.Extensions;
+using CQRSharp.RateLimiting.Extensions;
 using CQRSharpSample.Services;
 using Microsoft.Extensions.Hosting;
+using CQRSharp.RateLimiting.Enums;
+using CQRSharp.RateLimiting.Options;
 
 namespace CQRSharpSample
 {
@@ -21,13 +24,15 @@ namespace CQRSharpSample
 
                         options.RunMode = RunMode.Async;
 
-                    }, Assembly.GetExecutingAssembly())
-                    .AddKafka(kafkaOptions =>
+                    }, Assembly.GetExecutingAssembly());
+
+                    services.AddRateLimiting<SimpleUserIdentifierFactory>(options =>
                     {
-                        //WIP Kafka configurations
-                        kafkaOptions.CommandTopic = "customCommandTopic";
+                        options.MaxTokens = 2;
+                        options.ReplenishRatePerSecond = 20;
+                        options.Scope = RateLimitScope.PerCommand;
                     });
-                    
+
                     services.AddHostedService<TestHostedService>();
                 })
                 .Build();
