@@ -208,7 +208,7 @@ namespace CQRSharp.Core.Dispatch
                 }
             }
         }
-
+        
         /// <summary>
         /// Invokes all post-handle attributes associated with the executable unit.
         /// </summary>

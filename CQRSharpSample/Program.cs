@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Options.Enums;
+using CQRSharp.Kafka.Extensions;
 using CQRSharpSample.Services;
 using Microsoft.Extensions.Hosting;
 
@@ -20,7 +21,12 @@ namespace CQRSharpSample
 
                         options.RunMode = RunMode.Async;
 
-                    }, Assembly.GetExecutingAssembly());
+                    }, Assembly.GetExecutingAssembly())
+                    .AddKafka(kafkaOptions =>
+                    {
+                        //WIP Kafka configurations
+                        kafkaOptions.CommandTopic = "customCommandTopic";
+                    });
                     
                     services.AddHostedService<TestHostedService>();
                 })
