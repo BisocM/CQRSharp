@@ -57,11 +57,11 @@ namespace CQRSharp.Core.Dispatch
                 using var scope = serviceProvider.CreateScope();
                 var scopedProvider = scope.ServiceProvider;
 
-                //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(command, scopedProvider, ct);
-
                 //Send off the notification for command initiation before the attributes are handled.
                 await eventManager.Publish(new CommandInitiatedNotification(command), ct);
+
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(command, scopedProvider, ct);
 
                 //Retrieve the appropriate handler for the command.
                 var handler = GetHandler(requestType, scopedProvider);
@@ -107,11 +107,11 @@ namespace CQRSharp.Core.Dispatch
                 using var scope = serviceProvider.CreateScope();
                 var scopedProvider = scope.ServiceProvider;
 
-                //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(query, scopedProvider, ct);
-
                 //Send off the notification for query initiation before the attributes are handled.
                 await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+                
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(query, scopedProvider, ct);
 
                 //Get the handler for the query.
                 var handler = GetHandler(requestType, scopedProvider);
@@ -150,7 +150,6 @@ namespace CQRSharp.Core.Dispatch
             var behaviors = services
                 .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
-                .Reverse() //Reverse to maintain the correct order of execution.
                 .ToList();
 
             //The final handler delegate.

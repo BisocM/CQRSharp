@@ -1,11 +1,13 @@
 ﻿using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 using CQRSharp.Core.Pipeline;
+using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.RateLimiting.Handlers;
 using CQRSharp.RateLimiting.Exceptions;
 
 namespace CQRSharp.RateLimiting.Behaviors
 {
+    [PipelinePriority(0)]
     public sealed class RateLimitingBehavior<TRequest, TResult>(
         ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
         RateLimiter rateLimiter,

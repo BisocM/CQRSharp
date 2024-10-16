@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using System.Reflection;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Pipeline.Attributes;
 using CQRSharp.Core.Pipeline.Types;
 using CQRSharp.Interfaces.Markers;
 using CQRSharp.Interfaces.Markers.Command;
@@ -79,6 +80,11 @@ namespace CQRSharp.Core.Extensions
             //Get all types from the specified assemblies.
             var allTypes = assemblies.SelectMany(a => a?.GetTypes() ?? Type.EmptyTypes).Where(t => t is { IsClass: true, IsAbstract: false });
 
+            //Pipeline behaviors have to get separated so that we can adjust the priority in which they are executed, if needed.
+            //Handling pipeline priority is done here for the reason that this is more performative than doing it at runtime.
+            //At runtime, the Pipeline Builder in the dispatcher class would have to reflect on the pipeline object and find the priority attribute.
+            var pipelineBehaviors = new List<(Type BehaviorType, int Priority)>();
+
             foreach (var type in allTypes)
             {
                 //Register command handlers.
@@ -96,13 +102,17 @@ namespace CQRSharp.Core.Extensions
                     handlerMappings[requestType] = handlerInterface;
                 }
 
-                //Register pipeline behaviors.
-                var behaviorInterfaces = type.GetInterfaces()
-                    .Where(i => i.IsGenericType &&
-                                i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>));
-                
-                if (behaviorInterfaces.Any())
-                    services.AddTransient(typeof(IPipelineBehavior<,>), type);
+                //Retrieve the behavior interface.
+                var behaviorInterface = type.GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType &&
+                                         i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>));
+
+                if (behaviorInterface != null)
+                {
+                    var priorityAttr = type.GetCustomAttribute<PipelinePriorityAttribute>();
+                    var priority = priorityAttr?.Priority ?? PipelinePriorityAttribute.DefaultPriority;
+                    pipelineBehaviors.Add((type, priority));
+                }
 
                 //Register notification handlers.
                 var notificationHandlerInterfaces = type.GetInterfaces()
@@ -112,6 +122,10 @@ namespace CQRSharp.Core.Extensions
                 foreach (var notificationHandlerInterface in notificationHandlerInterfaces)
                     services.AddTransient(notificationHandlerInterface, type);
             }
+
+            //Sort behaviors by priority and register in sorted order.
+            foreach (var (behaviorType, _) in pipelineBehaviors.OrderBy(pb => pb.Priority))
+                services.AddTransient(typeof(IPipelineBehavior<,>), behaviorType);
 
             return handlerMappings;
         }
