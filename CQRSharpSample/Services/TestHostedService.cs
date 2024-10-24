@@ -15,14 +15,23 @@ namespace CQRSharpSample.Services
             #region Command Example
 
             //Send CreateUserCommand
-            var createUserCommand = new CreateUserCommand
+            await dispatcher.ExecuteCommand(new CreateUserCommand
             {
                 Username = "john_doe",
                 Email = "john@example.com"
-            };
+            }, cancellationToken);
 
-            //Send the command to create the user
-            await dispatcher.ExecuteCommand(createUserCommand, cancellationToken);
+            await dispatcher.ExecuteCommand(new CreateUserCommand
+            {
+                Username = "john_doe",
+                Email = "john@example.com"
+            }, cancellationToken);
+
+            await dispatcher.ExecuteCommand(new CreateUserCommand
+            {
+                Username = "john_doe",
+                Email = "john@example.com"
+            }, cancellationToken);
 
             #endregion
 
@@ -40,7 +49,7 @@ namespace CQRSharpSample.Services
             #endregion
 
             //Wait for the user creation to complete, since it was offloaded to a background thread
-            await Task.Delay(5000, cancellationToken); // Reduced delay for demonstration
+            await Task.Delay(5000, cancellationToken); //Reduced delay for demonstration
 
             Console.WriteLine("TestHostedService completed.");
         }

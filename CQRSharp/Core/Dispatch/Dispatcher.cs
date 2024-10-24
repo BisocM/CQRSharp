@@ -33,6 +33,10 @@ namespace CQRSharp.Core.Dispatch
             //Ensure the command is not null.
             ArgumentNullException.ThrowIfNull(command);
 
+            //Assign a unique identifier
+            if (command is RequestBase requestBase)
+                requestBase.Id = Guid.NewGuid();
+
             //Get the type of the command.
             var requestType = command.GetType();
 
@@ -48,10 +52,13 @@ namespace CQRSharp.Core.Dispatch
             return;
 
             //Define the pipeline task.
-            async Task<Unit> PipelineTask(CancellationToken ct)
+            async Task<CommandResult> PipelineTask(CancellationToken ct)
             {
                 using var scope = serviceProvider.CreateScope();
                 var scopedProvider = scope.ServiceProvider;
+
+                //Send off the notification for command initiation before the attributes are handled.
+                await eventManager.Publish(new CommandInitiatedNotification(command), ct);
 
                 //Invoke pre-handle attributes.
                 await InvokePreHandleAttributes(command, scopedProvider, ct);
@@ -60,8 +67,11 @@ namespace CQRSharp.Core.Dispatch
                 var handler = GetHandler(requestType, scopedProvider);
 
                 //Build and execute the query pipeline.
-                var pipeline = BuildPipeline<Unit>(command, handler, scopedProvider);
+                var pipeline = BuildPipeline<CommandResult>(command, handler, scopedProvider);
                 var result = await pipeline(command, ct);
+
+                //Send off the notification about command completion before the post-completion attributes are handled.
+                await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
 
                 //Invoke post-handle attributes.
                 await InvokePostHandleAttributes(command, scopedProvider, ct);
@@ -76,8 +86,12 @@ namespace CQRSharp.Core.Dispatch
             //Ensure the query is not null.
             ArgumentNullException.ThrowIfNull(query);
 
+            //Assign a unique identifier
+            if (query is RequestBase requestBase)
+                requestBase.Id = Guid.NewGuid();
+
+            //Get the type of the request.
             var requestType = query.GetType();
-            var resultType = typeof(TResult);
 
             //Synchronous execution - await the pipeline.
             if (options.RunMode != RunMode.Async)
@@ -93,11 +107,11 @@ namespace CQRSharp.Core.Dispatch
                 using var scope = serviceProvider.CreateScope();
                 var scopedProvider = scope.ServiceProvider;
 
-                //Invoke pre-handle attributes.
-                await InvokePreHandleAttributes(query, scopedProvider, ct);
-
                 //Send off the notification for query initiation before the attributes are handled.
                 await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+                
+                //Invoke pre-handle attributes.
+                await InvokePreHandleAttributes(query, scopedProvider, ct);
 
                 //Get the handler for the query.
                 var handler = GetHandler(requestType, scopedProvider);
@@ -136,17 +150,16 @@ namespace CQRSharp.Core.Dispatch
             var behaviors = services
                 .GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType))//Populate the generic type arguments in the pipeline behavior.
                 .Cast<dynamic>()
-                .Reverse() //Reverse to maintain the correct order of execution.
                 .ToList();
 
             //The final handler delegate.
             Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
             {
                 //Determine whether the request is a command or a query.
-                if (typeof(TResult) == typeof(Unit))
+                if (typeof(TResult) == typeof(CommandResult))
                 {
                     await HandleCommand(req, handler, ct);
-                    return (TResult)(object)Unit.Success;
+                    return (TResult)(object)CommandResult.Success;
                 }
                 else
                     return await HandleQuery<TResult>(req, handler, ct);
@@ -202,7 +215,7 @@ namespace CQRSharp.Core.Dispatch
                 }
             }
         }
-
+        
         /// <summary>
         /// Invokes all post-handle attributes associated with the executable unit.
         /// </summary>

@@ -9,5 +9,7 @@ namespace CQRSharp.Core.Dispatch
             handlerMappings.TryGetValue(requestType, out var handlerType);
             return handlerType;
         }
+
+        public Type? GetCommandTypeByName(string commandName) => handlerMappings.FirstOrDefault(x => x.Value.Name == commandName).Key;
     }
 }

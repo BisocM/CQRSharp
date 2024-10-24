@@ -9,6 +9,6 @@ namespace CQRSharp.Interfaces.Handlers
     /// <typeparam name="TCommand">The type of the command.</typeparam>
     public interface ICommandHandler<in TCommand> where TCommand : ICommand
     {
-        Task<Unit> Handle(TCommand command, CancellationToken cancellationToken);
+        Task<CommandResult> Handle(TCommand command, CancellationToken cancellationToken);
     }
 }

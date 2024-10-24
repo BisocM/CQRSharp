@@ -1,5 +1,4 @@
 ﻿using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipeline;
 using CQRSharp.Core.Pipeline.Attributes.Markers;
 using CQRSharp.Core.Pipeline.Types;
 

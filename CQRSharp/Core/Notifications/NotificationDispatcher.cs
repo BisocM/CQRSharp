@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Notifications
 {
-    public sealed class NotificationDispatcher(IServiceProvider serviceProvider)
+    public class NotificationDispatcher(IServiceProvider serviceProvider)
     {
-        public async Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
+        public virtual async Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
             where TNotification : INotification
         {
             //Get all handlers for the notification.

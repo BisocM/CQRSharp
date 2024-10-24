@@ -3,5 +3,6 @@
     public interface IHandlerRegistry
     {
         Type? GetHandlerType(Type requestType);
+        Type? GetCommandTypeByName(string commandName);
     }
 }
