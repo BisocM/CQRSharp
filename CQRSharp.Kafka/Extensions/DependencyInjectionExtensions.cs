@@ -1,6 +1,6 @@
 ﻿using Confluent.Kafka;
-using CQRSharp.Core.Notifications;
-using CQRSharp.Kafka.Dispatcher;
+using CQRSharp.Core.Pipeline;
+using CQRSharp.Kafka.Behaviors;
 using CQRSharp.Kafka.Services;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,24 +12,28 @@ namespace CQRSharp.Kafka.Extensions
         /// Adds the necessary services for integrating CQRS with Kafka to the specified <see cref="IServiceCollection"/>.
         /// </summary>
         /// <param name="services">The <see cref="IServiceCollection"/> to add the services to.</param>
-        /// <param name="configureKafka">An action to configure the <see cref="KafkaOptions"/>.</param>
         /// <returns>The <see cref="IServiceCollection"/> so that additional calls can be chained.</returns>
-        public static IServiceCollection AddKafka(this IServiceCollection services,
-            Action<KafkaOptions>? configureKafka)
+        public static IServiceCollection AddKafkaSupport(this IServiceCollection services, Action<KafkaOptions> configureOptions)
         {
-            //Configure the Kafka options with the user's configuration.
-            var kafkaOptions = new KafkaOptions();
-            configureKafka?.Invoke(kafkaOptions);
-            services.AddSingleton(kafkaOptions);
+            //Configure Kafka options
+            var options = new KafkaOptions();
+            configureOptions(options);
+            services.AddSingleton(options);
 
-            //Initialize the producer with the options configured by the user earlier.
-            var producerConfig = new ProducerConfig { BootstrapServers = kafkaOptions.BootstrapServers };
-            services.AddSingleton(new ProducerBuilder<string, string>(producerConfig).Build());
+            //Register Kafka producer
+            services.AddSingleton<IProducer<string, string>>(provider =>
+            {
+                var kafkaOptions = provider.GetRequiredService<KafkaOptions>();
+                var producerConfig = new ProducerConfig { BootstrapServers = kafkaOptions.BootstrapServers };
+                return new ProducerBuilder<string, string>(producerConfig).Build();
+            });
 
-            //Add the Kafka dispatcher to the service collection.
-            services.AddHostedService<KafkaConsumerService>();
-            services.AddSingleton<NotificationDispatcher, KafkaNotificationDispatcher>();
-            
+            //Register the Kafka publishing behavior
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(KafkaPublishingBehavior<,>));
+
+            //Register Kafka consumer hosted service, ensuring IHandlerRegistry is available
+            services.AddHostedService<KafkaCommandConsumerService>();
+
             return services;
         }
     }
