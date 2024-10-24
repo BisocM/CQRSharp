@@ -4,7 +4,22 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Title>CQRSharp RateLimiting</Title>
+    <Description>An extension library for CQRSharp that implements a rate limiting pipeline.</Description>
+    <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+    <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+    <PackageTags>cqrs;cqrsharp</PackageTags>
+    <Version>1.0.0</Version>
+    <Authors>BisocM</Authors>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\CQRSharp_Icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
