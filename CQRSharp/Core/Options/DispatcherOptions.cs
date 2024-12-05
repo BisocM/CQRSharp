@@ -1,6 +1,6 @@
 ﻿using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipeline.Attributes.Markers;
-using CQRSharp.Core.Pipeline.Types;
+using CQRSharp.Core.Pipelines.Attributes.Markers;
+using CQRSharp.Core.Pipelines.Types;
 
 namespace CQRSharp.Core.Options
 {

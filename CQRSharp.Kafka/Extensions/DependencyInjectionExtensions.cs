@@ -1,5 +1,5 @@
 ﻿using Confluent.Kafka;
-using CQRSharp.Core.Pipeline;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Kafka.Behaviors;
 using CQRSharp.Kafka.Services;
 using Microsoft.Extensions.DependencyInjection;

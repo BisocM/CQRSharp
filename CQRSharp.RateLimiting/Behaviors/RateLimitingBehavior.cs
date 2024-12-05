@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
-using CQRSharp.Core.Pipeline;
-using CQRSharp.Core.Pipeline.Attributes;
+using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.RateLimiting.Handlers;
 using CQRSharp.RateLimiting.Exceptions;
 

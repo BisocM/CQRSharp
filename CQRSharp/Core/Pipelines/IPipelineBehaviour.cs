@@ -1,6 +1,6 @@
 ﻿using CQRSharp.Interfaces.Markers.Request;
 
-namespace CQRSharp.Core.Pipeline
+namespace CQRSharp.Core.Pipelines
 {
     /// <summary>
     /// Defines an interface for pipeline behaviors that can be applied globally to all commands.

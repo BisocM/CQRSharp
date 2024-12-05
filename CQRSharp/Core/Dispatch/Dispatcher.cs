@@ -1,8 +1,8 @@
 ﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipeline;
-using CQRSharp.Core.Pipeline.Attributes;
-using CQRSharp.Core.Pipeline.Attributes.Markers;
+using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Pipelines.Attributes;
+using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Data;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;

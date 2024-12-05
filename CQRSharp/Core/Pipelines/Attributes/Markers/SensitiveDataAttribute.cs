@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Pipeline.Attributes.Markers
+﻿namespace CQRSharp.Core.Pipelines.Attributes.Markers
 {
     /// <summary>
     /// Specialized attribute for marking certain properties as sensitive data. Used for built-in logger.

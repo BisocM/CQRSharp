@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Pipeline.Attributes
+﻿namespace CQRSharp.Core.Pipelines.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class PipelinePriorityAttribute(int priority) : Attribute

@@ -1,4 +1,4 @@
-﻿using CQRSharp.Core.Pipeline;
+﻿using CQRSharp.Core.Pipelines;
 using CQRSharp.RateLimiting.Behaviors;
 using CQRSharp.RateLimiting.Enums;
 using CQRSharp.RateLimiting.Handlers;

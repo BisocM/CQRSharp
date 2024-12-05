@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Pipeline.Attributes.Markers
+﻿namespace CQRSharp.Core.Pipelines.Attributes.Markers
 {
     /// <summary>
     /// Marker class that allows the dispatcher to exempt a command from being processed by a specific pipeline.

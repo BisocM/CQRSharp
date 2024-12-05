@@ -1,5 +1,5 @@
-﻿using CQRSharp.Core.Pipeline.Attributes.Markers;
-using CQRSharp.Core.Pipeline.Types;
+﻿using CQRSharp.Core.Pipelines.Attributes.Markers;
+using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Data;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers.Command;

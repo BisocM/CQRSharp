@@ -1,11 +1,11 @@
 ﻿using System.Diagnostics;
 using CQRSharp.Core.Options;
-using CQRSharp.Core.Pipeline.Attributes;
+using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Helpers;
 using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Core.Pipeline.Types
+namespace CQRSharp.Core.Pipelines.Types
 {
     //Set this to the lowest priority, since all it does is log the execution of the command.
     [PipelinePriority(int.MaxValue)]
@@ -13,6 +13,7 @@ namespace CQRSharp.Core.Pipeline.Types
         ILogger<ExecutionLoggingBehavior<TRequest, TResult>> logger,
         DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
     {
+        /// <inheritdoc />
         public async Task<TResult> Handle(
             TRequest request,
             CancellationToken cancellationToken,

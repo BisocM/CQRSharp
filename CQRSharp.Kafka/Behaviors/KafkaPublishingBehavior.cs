@@ -1,10 +1,11 @@
-﻿using CQRSharp.Core.Pipeline;
+﻿using CQRSharp.Core.Pipelines;
 using CQRSharp.Interfaces.Markers.Request;
 using CQRSharp.Interfaces.Markers.Command;
 using Microsoft.Extensions.Logging;
 using Confluent.Kafka;
 using System.Reflection;
 using System.Text.Json;
+using CQRSharp.Kafka.Attributes;
 
 namespace CQRSharp.Kafka.Behaviors
 {

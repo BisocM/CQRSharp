@@ -2,12 +2,13 @@
 using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Core.Pipeline.Types
+namespace CQRSharp.Core.Pipelines.Types
 {
     public sealed class TimeoutBehavior<TRequest, TResult>(
         ILogger<TimeoutBehavior<TRequest, TResult>> logger,
         DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
     {
+        /// <inheritdoc />
         public async Task<TResult> Handle(
             TRequest request,
             CancellationToken cancellationToken,
