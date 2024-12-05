@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Kafka", "CQRSharp.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.RateLimiting", "CQRSharp.RateLimiting\CQRSharp.RateLimiting.csproj", "{A11C97D9-E757-4CD1-A46A-C7A58F80AB5D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Tests", "CQRSharp.Tests\CQRSharp.Tests.csproj", "{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Tests", "CQRSharp.Tests\CQRSharp.Tests.csproj", "{F0C88418-5CA0-4B7F-BC2A-1292ED66F0B4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
