@@ -4,6 +4,9 @@ using CQRSharp.Core.Pipelines.Types;
 
 namespace CQRSharp.Core.Options
 {
+    /// <summary>
+    /// Represents the configuration options for the dispatcher.
+    /// </summary>
     public sealed class DispatcherOptions
     {
         /// <summary>

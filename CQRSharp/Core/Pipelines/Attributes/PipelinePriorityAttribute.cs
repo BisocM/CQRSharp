@@ -1,5 +1,12 @@
 ﻿namespace CQRSharp.Core.Pipelines.Attributes
 {
+    /// <summary>
+    /// An attribute used to specify the execution priority of a pipeline behavior.
+    /// </summary>
+    /// <remarks>
+    /// Pipeline behaviors are executed in order based on their priority values. A lower priority value indicates a higher priority execution order.
+    /// If no priority is specified, the default priority value is <see cref="DefaultPriority"/>.
+    /// </remarks>
     [AttributeUsage(AttributeTargets.Class)]
     public sealed class PipelinePriorityAttribute(int priority) : Attribute
     {
