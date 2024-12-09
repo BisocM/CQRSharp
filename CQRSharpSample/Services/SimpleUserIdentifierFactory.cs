@@ -7,7 +7,7 @@ namespace CQRSharpSample.Services
     {
         public string GetIdentifier(RequestBase? request)
         {
-            return new Guid().ToString();
+            return "example.user_1";
         }
     }
 }

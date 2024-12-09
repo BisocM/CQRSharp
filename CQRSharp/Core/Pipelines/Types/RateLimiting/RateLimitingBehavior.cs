@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines.Types.RateLimiting
 {
-    [PipelinePriority(0)]
+    [PipelinePriority(int.MinValue)]
     public sealed class RateLimitingBehavior<TRequest, TResult>(
         ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
         RateLimiter rateLimiter,

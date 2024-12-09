@@ -7,6 +7,6 @@ public class SimpleRequestIdentificationFactory : IRequestIdentificationFactory
 {
     public string GetIdentifier(RequestBase request)
     {
-        return new Guid().ToString();
+        return Guid.NewGuid().ToString();
     }
 }
