@@ -1,10 +1,7 @@
 using System.Collections.Concurrent;
+using CQRSharp.Core.Factories;
+using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharp.Interfaces.Markers.Request;
-using CQRSharp.RateLimiting.Behaviors;
-using CQRSharp.RateLimiting.Enums;
-using CQRSharp.RateLimiting.Exceptions;
-using CQRSharp.RateLimiting.Handlers;
-using CQRSharp.RateLimiting.Options;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -16,7 +13,7 @@ namespace CQRSharp.Tests
     {
         private readonly Mock<ILogger<RateLimitingBehavior<RequestBase, object>>> _behaviorLoggerMock;
         private readonly Mock<ILogger<RateLimiter>> _rateLimiterLoggerMock;
-        private readonly Mock<IUserIdentifierFactory> _userIdentifierFactoryMock;
+        private readonly Mock<IUserIdentificationFactory> _userIdentifierFactoryMock;
         private RateLimiterOptions _rateLimiterOptions;
         private RateLimiter _rateLimiter;
         private RateLimitingBehavior<RequestBase, object> _rateLimitingBehavior;
@@ -26,7 +23,7 @@ namespace CQRSharp.Tests
             //Initialize mocks
             _behaviorLoggerMock = new Mock<ILogger<RateLimitingBehavior<RequestBase, object>>>();
             _rateLimiterLoggerMock = new Mock<ILogger<RateLimiter>>();
-            _userIdentifierFactoryMock = new Mock<IUserIdentifierFactory>();
+            _userIdentifierFactoryMock = new Mock<IUserIdentificationFactory>();
 
             //Configure RateLimiterOptions with defaults
             _rateLimiterOptions = new RateLimiterOptions
@@ -89,7 +86,8 @@ namespace CQRSharp.Tests
                 await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!));
 
             //Act: Wait for token refill and retry
-            await Task.Delay(TimeSpan.FromSeconds(_rateLimiterOptions.MaxTokens / _rateLimiterOptions.ReplenishRatePerSecond + 1));
+            await Task.Delay(
+                TimeSpan.FromSeconds(_rateLimiterOptions.MaxTokens / _rateLimiterOptions.ReplenishRatePerSecond + 1));
 
             //Assert: Should not throw, indicating the token was refilled
             await _rateLimitingBehavior.Handle(

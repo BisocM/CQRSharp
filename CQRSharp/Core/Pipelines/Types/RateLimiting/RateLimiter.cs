@@ -1,9 +1,7 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.RateLimiting.Enums;
-using CQRSharp.RateLimiting.Options;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.RateLimiting.Handlers
+namespace CQRSharp.Core.Pipelines.Types.RateLimiting
 {
     /// <summary>
     /// Provides functionality to limit the rate of requests per user or globally.
@@ -147,14 +145,13 @@ namespace CQRSharp.RateLimiting.Handlers
                 DateTime now = DateTime.UtcNow;
                 TimeSpan timeElapsed = now - _lastRefillTimestamp;
 
-                double tokensToAdd = timeElapsed.TotalSeconds * (_maxTokens / _replenishInterval.TotalSeconds);
+                var tokensToAdd = timeElapsed.TotalSeconds * (_maxTokens / _replenishInterval.TotalSeconds);
 
-                if (tokensToAdd >= 1)
-                {
-                    _tokens = Math.Min(_maxTokens, _tokens + tokensToAdd);
-                    _lastRefillTimestamp = now;
-                    _logger.LogDebug("Refilled tokens. Current token count: {TokenCount}", _tokens);
-                }
+                if (!(tokensToAdd >= 1)) return;
+                
+                _tokens = Math.Min(_maxTokens, _tokens + tokensToAdd);
+                _lastRefillTimestamp = now;
+                _logger.LogDebug("Refilled tokens. Current token count: {TokenCount}", _tokens);
             }
         }
     }

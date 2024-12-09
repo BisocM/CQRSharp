@@ -7,9 +7,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Reflection;
 using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Types;
+using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharp.Interfaces.Markers;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
@@ -72,7 +74,88 @@ namespace CQRSharp.Core.Extensions
 
             return services;
         }
+        
+        /// <summary>
+        /// Method for registration of the consumer-implemented user identification factory.
+        /// In order to implement the factory, create a new class that inherits from the <see cref="IUserIdentificationFactory"/>,
+        /// implement the interface and pass the class as a generic type here.
+        /// </summary>
+        /// <remarks>
+        /// Implemented as transient - does not keep instance data.
+        /// </remarks>
+        /// <param name="services">The service collection.</param>
+        /// <typeparam name="TIdentifierFactory">The user-implemented type which stores the unique method for generating
+        /// a user ID to be passed in each command's context.</typeparam>
+        /// <returns>Returns IServiceCollection to allow chaining of registration calls.</returns>
+        public static IServiceCollection AddUserIdentificationFactory<TIdentifierFactory>(this IServiceCollection services)
+            where TIdentifierFactory : class, IUserIdentificationFactory =>
+            services.AddTransient<IUserIdentificationFactory, TIdentifierFactory>();
+        
+        /// <summary>
+        /// Method for registration of the consumer-implemented request identification factory.
+        /// In order to implement the factory, create a new class that inherits from <see cref="IRequestIdentificationFactory"/>,
+        /// implement the interface and pass the class as a generic type here.
+        /// </summary>
+        /// <remarks>
+        /// Implemented as a transient - does not keep instance data.
+        /// </remarks>
+        /// <param name="services">The service collection.</param>
+        /// <typeparam name="TIdentifierFactory">The user-implemented type which stores the unique method for generating
+        /// an ID for each command or query.</typeparam>
+        /// <returns>
+        /// The updated <see cref="IServiceCollection"/> instance, enabling chaining of registration calls.
+        /// </returns>
+        public static IServiceCollection AddRequestIdentificationFactory<TIdentifierFactory>(this IServiceCollection services)
+            where TIdentifierFactory : class, IRequestIdentificationFactory =>
+            services.AddTransient<IRequestIdentificationFactory, TIdentifierFactory>();
 
+        /// <summary>
+        /// Adds the rate limiting behavior and all related services to the service collection.
+        /// This method registers the <see cref="RateLimitingBehavior{TRequest,TResult}"/> pipeline behavior, and a custom
+        /// user identifier factory class provided by the library consumer.
+        /// </summary>
+        /// <typeparam name="TIdentifierService">
+        /// The type that implements <see cref="IUserIdentificationFactory"/> used to retrieve unique user identifiers
+        /// for rate limiting purposes. This must be implemented and provided by the library consumer.
+        /// </typeparam>
+        /// <param name="services">
+        /// The <see cref="IServiceCollection"/> to which the rate limiting services will be added.
+        /// </param>
+        /// <param name="configureOptions">Configuration for the rate limiter.</param>
+        /// <returns>
+        /// The updated <see cref="IServiceCollection"/> instance, enabling chaining of registration calls.
+        /// </returns>
+        /// <remarks>
+        /// This method adds essential components for rate limiting within the CQRS pipeline.
+        /// The implementation of <see cref="IUserIdentificationFactory"/> is added as transient - no instanced data.
+        /// </remarks>
+        public static IServiceCollection AddRateLimiting<TIdentifierService>(
+            this IServiceCollection services,
+            Action<RateLimiterOptions> configureOptions) where TIdentifierService : class, IUserIdentificationFactory
+        {
+            if (configureOptions == null)
+                throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
+
+            var config = new RateLimiterOptions
+            {
+                MaxTokens = 0,
+                ReplenishRatePerSecond = 0,
+                Scope = RateLimitScope.Global
+            };
+            configureOptions(config);
+
+            if (config.MaxTokens <= 0 || config.ReplenishRatePerSecond <= 0)
+                throw new ArgumentException("Rate limiting configuration is invalid. MaxTokens and ReplenishRatePerSecond must be greater than zero.");
+
+            services.AddSingleton(config);
+            services.AddSingleton<RateLimiter>();
+
+            //Register the user identifier factory that the user provides.
+            services.AddTransient<IUserIdentificationFactory, TIdentifierService>();
+
+            return services;
+        }
+        
         private static ConcurrentDictionary<Type, Type> RegisterHandlersAndBehaviors(IServiceCollection services, Assembly?[] assemblies)
         {
             var handlerMappings = new ConcurrentDictionary<Type, Type>();
@@ -90,8 +173,8 @@ namespace CQRSharp.Core.Extensions
                 //Register command handlers.
                 var handlerInterfaces = type.GetInterfaces()
                     .Where(i => i.IsGenericType &&
-                        (i.GetGenericTypeDefinition() == typeof(ICommandHandler<>) ||
-                         i.GetGenericTypeDefinition() == typeof(IQueryHandler<,>)));
+                                (i.GetGenericTypeDefinition() == typeof(ICommandHandler<>) ||
+                                 i.GetGenericTypeDefinition() == typeof(IQueryHandler<,>)));
 
                 foreach (var handlerInterface in handlerInterfaces)
                 {

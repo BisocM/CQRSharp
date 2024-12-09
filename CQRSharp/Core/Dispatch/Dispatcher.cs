@@ -9,6 +9,7 @@ using System.Reflection;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Factories;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Markers.Request;
@@ -33,9 +34,9 @@ namespace CQRSharp.Core.Dispatch
             //Ensure the command is not null.
             ArgumentNullException.ThrowIfNull(command);
 
-            //Assign a unique identifier
+            //Create the command context for this particular request.
             if (command is RequestBase requestBase)
-                requestBase.Id = Guid.NewGuid();
+                InitializeRequestContext(requestBase);
 
             //Get the type of the command.
             var requestType = command.GetType();
@@ -88,7 +89,7 @@ namespace CQRSharp.Core.Dispatch
 
             //Assign a unique identifier
             if (query is RequestBase requestBase)
-                requestBase.Id = Guid.NewGuid();
+                InitializeRequestContext(requestBase);
 
             //Get the type of the request.
             var requestType = query.GetType();
@@ -307,6 +308,22 @@ namespace CQRSharp.Core.Dispatch
                           ?? throw new InvalidOperationException($"Handler of type '{handlerType.Name}' not found in the service provider.");
 
             return handler;
+        }
+        
+        /// <summary>
+        /// Method used to generate execution context for any request type.
+        /// </summary>
+        /// <param name="requestBase">The request object.</param>
+        private void InitializeRequestContext(RequestBase requestBase)
+        {
+            //TODO: Maybe find a cleaner way to implement this. It would be nice if Dispatcher was more SRP than it currently is.
+            var userIdentificationFactory = serviceProvider.GetService<IUserIdentificationFactory>();
+            var requestIdentificationFactory = serviceProvider.GetService<IRequestIdentificationFactory>();
+
+            requestBase.Context = new RequestContextBase(
+                requestIdentificationFactory != null ? requestIdentificationFactory.GetIdentifier(requestBase) : "Request identification factory not registered.",
+                userIdentificationFactory != null ? userIdentificationFactory.GetIdentifier(requestBase) : "User identification factory not registered."
+            );
         }
     }
 }

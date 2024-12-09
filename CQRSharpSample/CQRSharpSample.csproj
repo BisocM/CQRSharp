@@ -13,7 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CQRSharp.Kafka\CQRSharp.Kafka.csproj" />
-    <ProjectReference Include="..\CQRSharp.RateLimiting\CQRSharp.RateLimiting.csproj" />
     <ProjectReference Include="..\CQRSharp\CQRSharp.csproj" />
   </ItemGroup>
 

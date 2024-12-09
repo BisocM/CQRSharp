@@ -1,13 +1,13 @@
-﻿using CQRSharp.Interfaces.Markers.Request;
-using CQRSharp.RateLimiting.Handlers;
+﻿using CQRSharp.Core.Factories;
+using CQRSharp.Interfaces.Markers.Request;
 
 namespace CQRSharpSample.Services
 {
-    public class SimpleUserIdentifierFactory : IUserIdentifierFactory
+    public class SimpleUserIdentifierFactory : IUserIdentificationFactory
     {
-        public string GetIdentifier(RequestBase request)
+        public string GetIdentifier(RequestBase? request)
         {
-            return "user1";
+            return new Guid().ToString();
         }
     }
 }

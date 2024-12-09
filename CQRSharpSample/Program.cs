@@ -2,12 +2,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Kafka.Extensions;
-using CQRSharp.RateLimiting.Extensions;
+using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharpSample.Services;
 using Microsoft.Extensions.Hosting;
-using CQRSharp.RateLimiting.Enums;
-using CQRSharp.RateLimiting.Options;
 
 namespace CQRSharpSample
 {
@@ -24,14 +21,18 @@ namespace CQRSharpSample
 
                         options.RunMode = RunMode.Async;
 
-                    }, Assembly.GetExecutingAssembly());
-
-                    services.AddRateLimiting<SimpleUserIdentifierFactory>(options =>
+                    }, Assembly.GetExecutingAssembly())
+                    .AddRateLimiting<SimpleUserIdentifierFactory>(options =>
                     {
                         options.MaxTokens = 2;
                         options.ReplenishRatePerSecond = 20;
                         options.Scope = RateLimitScope.PerCommand;
-                    });
+                    })
+                    .AddRequestIdentificationFactory<SimpleRequestIdentificationFactory>();
+                    
+                    //NOTE: There is no inherent conflict in calling AddRateLimiting() and AddUserIdentificationFactory() at the same time.
+                    //it is just useless bloat, but AddRateLimiting() already registers the identification factory.
+                    //.AddUserIdentificationFactory<SimpleUserIdentifierFactory>();
 
                     services.AddHostedService<TestHostedService>();
                 })
