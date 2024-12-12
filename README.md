@@ -1,8 +1,10 @@
 # CQRSharp
+
 [![NuGet version (CQRSharp)](https://img.shields.io/nuget/v/CQRSharp.svg?style=flat-square)](https://www.nuget.org/packages/CQRSharp/)
 [![CodeQL](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql)
 
-A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.
+A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET
+applications.
 
 For more information, please check out the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
 

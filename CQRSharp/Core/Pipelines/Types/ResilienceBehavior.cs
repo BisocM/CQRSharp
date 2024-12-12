@@ -7,15 +7,15 @@ namespace CQRSharp.Core.Pipelines.Types;
 
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-    DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> 
+    DispatcherOptions options) : IPipelineBehavior<TRequest, TResult>
     where TRequest : RequestBase
 {
-    public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken, Func<CancellationToken, Task<TResult>> next)
+    public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken,
+        Func<CancellationToken, Task<TResult>> next)
     {
-        int retries = 0;
+        var retries = 0;
 
         while (true)
-        {
             try
             {
                 //Attempt to execute the next delegate in the pipeline.
@@ -24,14 +24,17 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
             catch (RateLimitExceededException rateLimitException)
             {
                 //The rate limit has been hit. Don't retry; just propagate the exception.
-                logger.LogError(rateLimitException, "Rate limit exceeded for request {RequestName}. No retries will be attempted.", typeof(TRequest).Name);
+                logger.LogError(rateLimitException,
+                    "Rate limit exceeded for request {RequestName}. No retries will be attempted.",
+                    typeof(TRequest).Name);
                 throw;
             }
             catch (Exception ex) when (retries < options.MaxRetries)
             {
                 //For other exceptions, if we still have retries left, log and retry.
                 retries++;
-                logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}", typeof(TRequest).Name, retries, options.MaxRetries);
+                logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}",
+                    typeof(TRequest).Name, retries, options.MaxRetries);
 
                 //Add a delay before retrying. This is optional and can be configured in DispatcherOptions.
                 var delayMs = 1000;
@@ -43,6 +46,5 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 logger.LogError(ex, "All retries exhausted for request {RequestName}.", typeof(TRequest).Name);
                 throw;
             }
-        }
     }
 }

@@ -1,15 +1,14 @@
-﻿namespace CQRSharp.Core.Pipelines.Types.RateLimiting
-{
-    public enum RateLimitScope
-    {
-        /// <summary>
-        /// Rate limiting applies globally for each user across all commands.
-        /// </summary>
-        Global,
+﻿namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 
-        /// <summary>
-        /// Rate limiting applies per command for each user.
-        /// </summary>
-        PerCommand
-    }
+public enum RateLimitScope
+{
+    /// <summary>
+    ///     Rate limiting applies globally for each user across all commands.
+    /// </summary>
+    Global,
+
+    /// <summary>
+    ///     Rate limiting applies per command for each user.
+    /// </summary>
+    PerCommand
 }

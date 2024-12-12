@@ -1,7 +1,14 @@
-﻿namespace CQRSharp.Interfaces.Markers.Request
+﻿using CQRSharp.Data.Context;
+
+namespace CQRSharp.Interfaces.Markers.Request;
+
+/// <summary>
+///     Marker interface to indicate that a class is used to handle a request. Major inheritors are ICommand and IQuery.
+/// </summary>
+public interface IRequest
 {
     /// <summary>
-    /// Marker interface to indicate that a class is used to handle a request. Major inheritors are ICommand and IQuery.
+    ///     A context object that stores request-level metadata like RequestId and UserId.
     /// </summary>
-    public interface IRequest { }
+    public IRequestContext? Context { get; set; }
 }

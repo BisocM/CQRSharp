@@ -1,7 +1,8 @@
-﻿namespace CQRSharp.Interfaces.Markers
+﻿namespace CQRSharp.Interfaces.Markers;
+
+/// <summary>
+///     Marker interface for notifications.
+/// </summary>
+public interface INotification
 {
-    /// <summary>
-    /// Marker interface for notifications.
-    /// </summary>
-    public interface INotification { }
 }
