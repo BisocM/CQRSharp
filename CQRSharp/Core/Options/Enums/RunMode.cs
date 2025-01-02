@@ -29,7 +29,7 @@ public enum RunMode
     ///     The executing call does not await for task completion, thus, will always return a default result.
     ///     In order to retrieve the results of asynchronous execution, you must subscribe to the
     ///     <see cref="CommandCompletedNotification" />
-    ///     or the <see cref="QueryCompletedNotification" />.
+    ///     or the <see cref="QueryCompletedNotification{TResult}"/>.
     /// </summary>
     /// <remarks>
     ///     In this mode, operations are executed asynchronously, meaning the initiating thread will not

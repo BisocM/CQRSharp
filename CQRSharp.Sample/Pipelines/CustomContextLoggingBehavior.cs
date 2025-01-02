@@ -18,7 +18,8 @@ namespace CQRSharp.Sample.Pipelines
             _logger = logger;
         }
 
-        public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken, Func<CancellationToken, Task<TResult>> next)
+        public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next,
+            CancellationToken cancellationToken)
         {
             // Check if request's context is our custom context
             if (request.Context is CustomRequestContext customContext)

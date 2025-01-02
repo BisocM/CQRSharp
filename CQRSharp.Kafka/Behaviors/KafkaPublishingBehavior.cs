@@ -16,7 +16,8 @@ namespace CQRSharp.Kafka.Behaviors
         : IPipelineBehavior<TRequest, TResult>
         where TRequest : RequestBase, ICommand
     {
-        public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken, Func<CancellationToken, Task<TResult>> next)
+        public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next,
+            CancellationToken cancellationToken)
         {
             if (!ShouldPublishToKafka(request)) return await next(cancellationToken);
             var commandName = typeof(TRequest).Name;

@@ -1,4 +1,4 @@
-﻿using CQRSharp.Data.Context;
+﻿using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Interfaces.Markers.Request;
 

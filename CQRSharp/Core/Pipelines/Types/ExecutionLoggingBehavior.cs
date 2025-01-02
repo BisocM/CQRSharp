@@ -14,10 +14,9 @@ public sealed class ExecutionLoggingBehavior<TRequest, TResult>(
     DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
 {
     /// <inheritdoc />
-    public async Task<TResult> Handle(
-        TRequest request,
-        CancellationToken cancellationToken,
-        Func<CancellationToken, Task<TResult>> next)
+    public async Task<TResult> Handle(TRequest request,
+        Func<CancellationToken, Task<TResult>> next,
+        CancellationToken cancellationToken)
     {
         //Check if the command is null or not.
         ArgumentNullException.ThrowIfNull(request);

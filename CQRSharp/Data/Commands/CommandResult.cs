@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Data;
+﻿namespace CQRSharp.Data.Commands;
 
 /// <summary>
 ///     Represents the result of a command execution.

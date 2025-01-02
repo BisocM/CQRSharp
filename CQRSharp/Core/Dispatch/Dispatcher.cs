@@ -8,8 +8,8 @@ using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
-using CQRSharp.Data;
-using CQRSharp.Data.Context;
+using CQRSharp.Data.Commands;
+using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Markers.Request;
@@ -53,7 +53,7 @@ public sealed class Dispatcher(
         return;
 
         //Define the pipeline task.
-        async Task<CommandResult> PipelineTask(CancellationToken ct)
+        async Task PipelineTask(CancellationToken ct)
         {
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
@@ -62,7 +62,7 @@ public sealed class Dispatcher(
             await eventManager.Publish(new CommandInitiatedNotification(command), ct);
 
             //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(command, scopedProvider, ct);
+            await Dispatcher.InvokePreHandleAttributes(command, scopedProvider, ct);
 
             //Retrieve the appropriate handler for the command.
             var handler = GetHandler(requestType, scopedProvider);
@@ -75,9 +75,9 @@ public sealed class Dispatcher(
             await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
 
             //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(command, scopedProvider, ct);
+            await Dispatcher.InvokePostHandleAttributes(command, scopedProvider, ct);
 
-            return result;
+            return;
         }
     }
 
@@ -113,7 +113,7 @@ public sealed class Dispatcher(
             await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
 
             //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(query, scopedProvider, ct);
+            await Dispatcher.InvokePreHandleAttributes(query, scopedProvider, ct);
 
             //Get the handler for the query.
             var handler = GetHandler(requestType, scopedProvider);
@@ -123,7 +123,7 @@ public sealed class Dispatcher(
             var result = await pipeline(query, ct);
 
             //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(query, scopedProvider, ct);
+            await Dispatcher.InvokePostHandleAttributes(query, scopedProvider, ct);
 
             //Publish the event.
             await eventManager.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
@@ -160,13 +160,11 @@ public sealed class Dispatcher(
         Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
         {
             //Determine whether the request is a command or a query.
-            if (typeof(TResult) == typeof(CommandResult))
-            {
-                await HandleCommand(req, handler, ct);
-                return (TResult)(object)CommandResult.Success;
-            }
-
-            return await HandleQuery<TResult>(req, handler, ct);
+            if (typeof(TResult) != typeof(CommandResult))
+                return await HandleQuery<TResult>(req, handler, ct);
+            
+            await HandleCommand(req, handler, ct);
+            return (TResult)(object)CommandResult.Success;
         };
 
         //Check if the request is exempt from any behaviors.
@@ -186,8 +184,11 @@ public sealed class Dispatcher(
             handlerDelegate = (req, ct) =>
             {
                 //Invoke the behavior's Handle method.
-                return behavior.Handle((dynamic)req, ct,
-                    (Func<CancellationToken, Task<TResult>>)(cancellationToken => next(req, cancellationToken)));
+                return behavior.Handle(
+                    (dynamic)req,
+                    (Func<CancellationToken, Task<TResult>>)(cancellationToken => next(req, cancellationToken)),
+                    ct
+                );
             };
         }
 
@@ -200,7 +201,7 @@ public sealed class Dispatcher(
     /// <param name="command">The command being handled.</param>
     /// <param name="serviceProvider">The scoped service provider.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private async Task InvokePreHandleAttributes(IRequest command, IServiceProvider serviceProvider,
+    private static async Task InvokePreHandleAttributes(IRequest command, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
         //Retrieve all attributes implementing IPreCommandAttribute.
@@ -229,7 +230,7 @@ public sealed class Dispatcher(
     /// <param name="request">The request that was handled.</param>
     /// <param name="serviceProvider">The scoped service provider.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private async Task InvokePostHandleAttributes(IRequest request, IServiceProvider serviceProvider,
+    private static async Task InvokePostHandleAttributes(IRequest request, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
         //Retrieve all attributes implementing IPostCommandAttribute.
@@ -258,7 +259,7 @@ public sealed class Dispatcher(
     /// <param name="command">The command to handle.</param>
     /// <param name="handler">The handler instance.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private async Task HandleCommand(object command, object handler, CancellationToken cancellationToken)
+    private static async Task HandleCommand(object command, object handler, CancellationToken cancellationToken)
     {
         //Get the 'Handle' method from the handler.
         var method = handler.GetType().GetMethod("Handle")
@@ -282,7 +283,7 @@ public sealed class Dispatcher(
     /// <param name="query">The query to handle.</param>
     /// <param name="handler">The handler instance responsible for processing the query.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken)
+    private static async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken)
     {
         var method = handler.GetType().GetMethod("Handle")
                      ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
@@ -318,7 +319,7 @@ public sealed class Dispatcher(
     ///     Method used to generate execution context for any request type.
     /// </summary>
     /// <param name="requestBase">The request object.</param>
-    private void InitializeRequestContext(IRequest requestBase)
+    private void InitializeRequestContext(RequestBase requestBase)
     {
         // If the user already provided a context, don't overwrite it.
         if (requestBase.Context != null)

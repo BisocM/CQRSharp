@@ -1,9 +1,9 @@
-﻿using CQRSharp.Data.Context;
+﻿using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Sample.Context
 {
     public class CustomRequestContext(string requestId, string userId, string userRole, string sourceIp)
-        : IRequestContext
+        : RequestContextBase(requestId, userId)
     {
         public string? RequestId { get; } = requestId;
         public string? UserId { get; } = userId;

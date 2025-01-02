@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Data;
+using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Sample.Commands;
 using CQRSharp.Sample.Models;

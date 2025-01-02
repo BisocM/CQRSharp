@@ -8,6 +8,12 @@ namespace CQRSharp.Helpers;
 
 public static class CommandSanitizer
 {
+    private static readonly JsonSerializerOptions DefaultOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+    
     /// <summary>
     ///     Sanitizes the command object by redacting sensitive data, determining whether or not to display the command
     ///     context.
@@ -34,10 +40,7 @@ public static class CommandSanitizer
                 isSensitive && !options.EnableSensitiveDataLogging ? "***REDACTED***" : value;
         }
 
-        return $"Execution Context: {JsonSerializer.Serialize(sanitizedCommand, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Converters = { new JsonStringEnumConverter() }
-        })}";
+        
+        return $"Execution Context: {JsonSerializer.Serialize(sanitizedCommand, DefaultOptions)}";
     }
 }

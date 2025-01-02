@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Data.Context;
+﻿namespace CQRSharp.Interfaces.Context;
 
 /// <summary>
 ///     A common interface for all request contexts. This interface mandates that every context

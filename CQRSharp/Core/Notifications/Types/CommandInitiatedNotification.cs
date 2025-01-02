@@ -1,5 +1,6 @@
 ﻿using CQRSharp.Interfaces.Markers;
 using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 

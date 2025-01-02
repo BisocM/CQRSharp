@@ -53,7 +53,7 @@ namespace CQRSharp.Tests
 
             //Act & Assert
             await _rateLimitingBehavior.Handle(
-                request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                request, _ => Task.FromResult<object>(null!), CancellationToken.None);
         }
 
         [Fact]
@@ -66,11 +66,11 @@ namespace CQRSharp.Tests
 
             //Act: Consume all tokens within rate limit
             for (int i = 0; i < _rateLimiterOptions.MaxTokens; i++)
-                await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Assert: Expect RateLimitExceededException on subsequent request
             await Assert.ThrowsAsync<RateLimitExceededException>(async () =>
-                await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!)));
+                await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None));
         }
 
         [Fact]
@@ -83,7 +83,7 @@ namespace CQRSharp.Tests
 
             //Consume all tokens
             for (int i = 0; i < _rateLimiterOptions.MaxTokens; i++)
-                await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Act: Wait for token refill and retry
             await Task.Delay(
@@ -91,7 +91,7 @@ namespace CQRSharp.Tests
 
             //Assert: Should not throw, indicating the token was refilled
             await _rateLimitingBehavior.Handle(
-                request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                request, _ => Task.FromResult<object>(null!), CancellationToken.None);
         }
 
         [Fact]
@@ -105,15 +105,15 @@ namespace CQRSharp.Tests
 
             //Act: Consume all tokens for request1
             for (var i = 0; i < _rateLimiterOptions.MaxTokens; i++)
-                await _rateLimitingBehavior.Handle(request1, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                await _rateLimitingBehavior.Handle(request1, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Assert: Expect limit exceeded for request1
             await Assert.ThrowsAsync<RateLimitExceededException>(async () =>
-                await _rateLimitingBehavior.Handle(request1, CancellationToken.None, _ => Task.FromResult<object>(null!)));
+                await _rateLimitingBehavior.Handle(request1, _ => Task.FromResult<object>(null!), CancellationToken.None));
 
             //request2 should still be allowed as it has a separate rate limit in PerCommand scope
             await _rateLimitingBehavior.Handle(
-                request2, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                request2, _ => Task.FromResult<object>(null!), CancellationToken.None);
         }
 
         [Fact]
@@ -134,11 +134,11 @@ namespace CQRSharp.Tests
 
             //Act: Consume all tokens using request1
             for (var i = 0; i < _rateLimiterOptions.MaxTokens; i++)
-                await _rateLimitingBehavior.Handle(request1, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                await _rateLimitingBehavior.Handle(request1, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Assert: Expect limit exceeded for request2
             await Assert.ThrowsAsync<RateLimitExceededException>(async () =>
-                await _rateLimitingBehavior.Handle(request2, CancellationToken.None, _ => Task.FromResult<object>(null!)));
+                await _rateLimitingBehavior.Handle(request2, _ => Task.FromResult<object>(null!), CancellationToken.None));
         }
 
         [Fact]
@@ -153,24 +153,19 @@ namespace CQRSharp.Tests
             _userIdentifierFactoryMock.Setup(factory => factory.GetIdentifier(It.IsAny<RequestBase>()))
                 .Returns(() =>
                 {
-                    if (callCount < _rateLimiterOptions.MaxTokens)
-                    {
-                        callCount++;
-                        return userId1;
-                    }
-                    else
-                    {
-                        return userId2;
-                    }
+                    if (callCount >= _rateLimiterOptions.MaxTokens) return userId2;
+                    callCount++;
+                    
+                    return userId1;
                 });
 
             //Act: Consume all tokens for user1
             for (int i = 0; i < _rateLimiterOptions.MaxTokens; i++)
-                await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Assert: user2 should still be allowed
             await _rateLimitingBehavior.Handle(
-                request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                request, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
             //Optionally, verify that GetIdentifier was called the expected number of times
             _userIdentifierFactoryMock.Verify(factory => factory.GetIdentifier(It.IsAny<RequestBase>()), Times.Exactly(_rateLimiterOptions.MaxTokens + 1));
@@ -185,7 +180,7 @@ namespace CQRSharp.Tests
 
             //Act & Assert
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!)));
+                await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None));
         }
 
         [Fact]
@@ -206,7 +201,7 @@ namespace CQRSharp.Tests
                 {
                     try
                     {
-                        await _rateLimitingBehavior.Handle(request, CancellationToken.None, _ => Task.FromResult<object>(null!));
+                        await _rateLimitingBehavior.Handle(request, _ => Task.FromResult<object>(null!), CancellationToken.None);
                     }
                     catch (Exception ex)
                     {

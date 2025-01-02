@@ -10,8 +10,8 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
     DispatcherOptions options) : IPipelineBehavior<TRequest, TResult>
     where TRequest : RequestBase
 {
-    public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken,
-        Func<CancellationToken, Task<TResult>> next)
+    public async Task<TResult> Handle(TRequest request,
+        Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
         var retries = 0;
 
@@ -36,8 +36,9 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}",
                     typeof(TRequest).Name, retries, options.MaxRetries);
 
+                //TODO: Says this is "optional", never implements the option to DispatcherOptions. Based?
                 //Add a delay before retrying. This is optional and can be configured in DispatcherOptions.
-                var delayMs = 1000;
+                const int delayMs = 1000;
                 await Task.Delay(delayMs, cancellationToken);
             }
             catch (Exception ex)

@@ -13,9 +13,9 @@ public interface IPipelineBehavior<in TRequest, TResult> where TRequest : Reques
     ///     Handles the command by invoking the next behavior in the pipeline or the command handler.
     /// </summary>
     /// <param name="request">The command being handled.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <param name="next">The next delegate to be invoked.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task representing the asynchronous operation, containing the result.</returns>
-    Task<TResult> Handle(TRequest request, CancellationToken cancellationToken,
-        Func<CancellationToken, Task<TResult>> next);
+    Task<TResult> Handle(TRequest request,
+        Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken);
 }

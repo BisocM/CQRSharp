@@ -1,6 +1,4 @@
-﻿using CQRSharp.Interfaces.Markers;
-
-namespace CQRSharp.Interfaces.Notifications;
+﻿namespace CQRSharp.Interfaces.Notifications;
 
 /// <summary>
 ///     Interface for handling notifications.

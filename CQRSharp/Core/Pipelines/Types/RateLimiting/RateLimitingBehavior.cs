@@ -12,8 +12,8 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
     IUserIdentificationFactory userIdentifierFactory)
     : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
 {
-    public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken,
-        Func<CancellationToken, Task<TResult>> next)
+    public async Task<TResult> Handle(TRequest request,
+        Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
         //Ensure the request can be cast to RequestBase for identifier extraction
         if (request is not RequestBase baseRequest)
@@ -22,27 +22,27 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
             throw new InvalidOperationException("Request must inherit from RequestBase to support rate limiting.");
         }
 
-        if (request.Context.UserId == null)
+        if (request.Context?.UserId == null)
         {
             logger.LogWarning("User identifier could not be determined for request {RequestId}.",
-                baseRequest.Context.RequestId);
+                baseRequest.Context?.RequestId);
             throw new InvalidOperationException("User identifier could not be determined for rate limiting.");
         }
 
         logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.", request.Context.UserId,
-            baseRequest.Context.RequestId);
+            baseRequest.Context?.RequestId);
 
         //Apply rate limiting based on the user identifier
         var isAllowed = rateLimiter.AllowRequest(request.Context.UserId, baseRequest.GetType().Name);
         if (!isAllowed)
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
-                request.Context.UserId, baseRequest.Context.RequestId, baseRequest.GetType().Name);
+                request.Context.UserId, baseRequest.Context?.RequestId, baseRequest.GetType().Name);
             throw new RateLimitExceededException(request, "Rate limit exceeded for user.");
         }
 
         logger.LogInformation("Request {RequestId} for user {Identifier} passed rate limiting check.",
-            baseRequest.Context.RequestId, request.Context.UserId);
+            baseRequest.Context?.RequestId, request.Context.UserId);
 
         return await next(cancellationToken);
     }
