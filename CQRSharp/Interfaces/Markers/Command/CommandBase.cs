@@ -1,10 +1,11 @@
-﻿using CQRSharp.Data.Context;
+﻿using CQRSharp.Core.Factories;
+using CQRSharp.Data.Context;
 using CQRSharp.Interfaces.Markers.Request;
 
 namespace CQRSharp.Interfaces.Markers.Command;
 
 /// <summary>
-///     Base class for commands.
+/// Base class for commands that can optionally specify a custom TContext.
 /// </summary>
 public abstract class CommandBase<TContext> : RequestBase, ICommand
     where TContext : IRequestContext
@@ -22,6 +23,8 @@ public abstract class CommandBase<TContext> : RequestBase, ICommand
 
 /// <summary>
 /// Non-generic CommandBase for those who do not need custom context.
+/// In this case, the Dispatcher resolves the command context via the in-built
+/// <see cref="DefaultRequestContextFactory"/>.
 /// </summary>
 public abstract class CommandBase : CommandBase<RequestContextBase>
 {

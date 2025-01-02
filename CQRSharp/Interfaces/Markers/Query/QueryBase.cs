@@ -1,10 +1,11 @@
-﻿using CQRSharp.Data.Context;
+﻿using CQRSharp.Core.Factories;
+using CQRSharp.Data.Context;
 using CQRSharp.Interfaces.Markers.Request;
 
 namespace CQRSharp.Interfaces.Markers.Query;
 
 /// <summary>
-///     Base class for queries.
+/// Base class for queries that can optionally specify a custom TContext.
 /// </summary>
 /// <typeparam name="TResult">The return type of the query.</typeparam>
 /// <typeparam name="TContext">A user-defined context type implementing <see cref="IRequestContext"/>.</typeparam>
@@ -24,6 +25,8 @@ public abstract class QueryBase<TResult, TContext>
 
 /// <summary>
 /// Non-generic QueryBase for those who do not need custom context.
+/// In this case, the Dispatcher resolves the command context via the in-built
+/// <see cref="DefaultRequestContextFactory"/>.
 /// </summary>
 public abstract class QueryBase<TResult> : QueryBase<TResult, RequestContextBase>
 {

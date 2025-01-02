@@ -21,7 +21,7 @@
 -Created a command identification factory mechanism
 -Moved Notification.cs -&gt; Notifications
 -Renamed wrongly-named Notification.cs
--Implemented a unified request context - RequestContextBase. The consumer user can implement a new class that inherits from it and extend it with any lazy loaded properties or similar.</PackageReleaseNotes>
+-Implemented a unified request context.</PackageReleaseNotes>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     </PropertyGroup>
 
