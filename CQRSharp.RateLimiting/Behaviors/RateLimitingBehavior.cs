@@ -1,8 +1,8 @@
-﻿using CQRSharp.Interfaces.Markers.Request;
+﻿using CQRSharp.Core.Factories;
+using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.RateLimiting.Handlers;
 using CQRSharp.RateLimiting.Exceptions;
 
 namespace CQRSharp.RateLimiting.Behaviors
@@ -11,7 +11,7 @@ namespace CQRSharp.RateLimiting.Behaviors
     public sealed class RateLimitingBehavior<TRequest, TResult>(
         ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
         RateLimiter rateLimiter,
-        IUserIdentifierFactory userIdentifierFactory) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
+        IUserIdentificationFactory userIdentifierFactory) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
     {
         public async Task<TResult> Handle(TRequest request, CancellationToken cancellationToken, Func<CancellationToken, Task<TResult>> next)
         {

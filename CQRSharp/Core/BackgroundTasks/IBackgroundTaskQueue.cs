@@ -1,8 +1,7 @@
-﻿namespace CQRSharp.Core.BackgroundTasks
+﻿namespace CQRSharp.Core.BackgroundTasks;
+
+public interface IBackgroundTaskQueue
 {
-    public interface IBackgroundTaskQueue
-    {
-        void QueueBackgroundWorkItem(Func<CancellationToken, Task>? workItem);
-        Task<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken);
-    }
+    void QueueBackgroundWorkItem(Func<CancellationToken, Task>? workItem);
+    Task<Func<CancellationToken, Task>> DequeueAsync(CancellationToken cancellationToken);
 }
