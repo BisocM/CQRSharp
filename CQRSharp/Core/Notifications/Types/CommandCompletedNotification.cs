@@ -1,6 +1,4 @@
-﻿using CQRSharp.Data;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Markers;
+﻿using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Notifications;
 

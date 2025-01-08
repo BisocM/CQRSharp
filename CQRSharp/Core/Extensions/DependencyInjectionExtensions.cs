@@ -10,7 +10,6 @@ using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Interfaces.Markers;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Notifications;
@@ -53,6 +52,9 @@ public static class DependencyInjectionExtensions
         //Register the options as a singleton service.
         services.AddSingleton(options);
 
+        //Add the default context factory. If the user wants their own, they will just have to override this with their own transient call.
+        services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
+        
         //Register the dispatcher as a singleton service.
         services.AddSingleton<IDispatcher, Dispatcher>();
 
@@ -79,59 +81,10 @@ public static class DependencyInjectionExtensions
     }
 
     /// <summary>
-    ///     Method for registration of the consumer-implemented user identification factory.
-    ///     In order to implement the factory, create a new class that inherits from the
-    ///     <see cref="IUserIdentificationFactory" />,
-    ///     implement the interface and pass the class as a generic type here.
-    /// </summary>
-    /// <remarks>
-    ///     Implemented as transient - does not keep instance data.
-    /// </remarks>
-    /// <param name="services">The service collection.</param>
-    /// <typeparam name="TIdentifierFactory">
-    ///     The user-implemented type which stores the unique method for generating
-    ///     a user ID to be passed in each command's context.
-    /// </typeparam>
-    /// <returns>Returns IServiceCollection to allow chaining of registration calls.</returns>
-    public static IServiceCollection AddUserIdentificationFactory<TIdentifierFactory>(this IServiceCollection services)
-        where TIdentifierFactory : class, IUserIdentificationFactory
-    {
-        return services.AddTransient<IUserIdentificationFactory, TIdentifierFactory>();
-    }
-
-    /// <summary>
-    ///     Method for registration of the consumer-implemented request identification factory.
-    ///     In order to implement the factory, create a new class that inherits from
-    ///     <see cref="IRequestIdentificationFactory" />,
-    ///     implement the interface and pass the class as a generic type here.
-    /// </summary>
-    /// <remarks>
-    ///     Implemented as a transient - does not keep instance data.
-    /// </remarks>
-    /// <param name="services">The service collection.</param>
-    /// <typeparam name="TIdentifierFactory">
-    ///     The user-implemented type which stores the unique method for generating
-    ///     an ID for each command or query.
-    /// </typeparam>
-    /// <returns>
-    ///     The updated <see cref="IServiceCollection" /> instance, enabling chaining of registration calls.
-    /// </returns>
-    public static IServiceCollection AddRequestIdentificationFactory<TIdentifierFactory>(
-        this IServiceCollection services)
-        where TIdentifierFactory : class, IRequestIdentificationFactory
-    {
-        return services.AddTransient<IRequestIdentificationFactory, TIdentifierFactory>();
-    }
-
-    /// <summary>
     ///     Adds the rate limiting behavior and all related services to the service collection.
     ///     This method registers the <see cref="RateLimitingBehavior{TRequest,TResult}" /> pipeline behavior, and a custom
     ///     user identifier factory class provided by the library consumer.
     /// </summary>
-    /// <typeparam name="TIdentifierService">
-    ///     The type that implements <see cref="IUserIdentificationFactory" /> used to retrieve unique user identifiers
-    ///     for rate limiting purposes. This must be implemented and provided by the library consumer.
-    /// </typeparam>
     /// <param name="services">
     ///     The <see cref="IServiceCollection" /> to which the rate limiting services will be added.
     /// </param>
@@ -139,13 +92,9 @@ public static class DependencyInjectionExtensions
     /// <returns>
     ///     The updated <see cref="IServiceCollection" /> instance, enabling chaining of registration calls.
     /// </returns>
-    /// <remarks>
-    ///     This method adds essential components for rate limiting within the CQRS pipeline.
-    ///     The implementation of <see cref="IUserIdentificationFactory" /> is added as transient - no instanced data.
-    /// </remarks>
-    public static IServiceCollection AddRateLimiting<TIdentifierService>(
+    public static IServiceCollection AddRateLimiting(
         this IServiceCollection services,
-        Action<RateLimiterOptions> configureOptions) where TIdentifierService : class, IUserIdentificationFactory
+        Action<RateLimiterOptions> configureOptions)
     {
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
@@ -164,9 +113,6 @@ public static class DependencyInjectionExtensions
 
         services.AddSingleton(config);
         services.AddSingleton<RateLimiter>();
-
-        //Register the user identifier factory that the user provides.
-        services.AddTransient<IUserIdentificationFactory, TIdentifierService>();
 
         return services;
     }

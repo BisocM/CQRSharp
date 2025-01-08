@@ -9,7 +9,6 @@ using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Markers.Request;
@@ -76,8 +75,6 @@ public sealed class Dispatcher(
 
             //Invoke post-handle attributes.
             await Dispatcher.InvokePostHandleAttributes(command, scopedProvider, ct);
-
-            return;
         }
     }
 
@@ -207,7 +204,7 @@ public sealed class Dispatcher(
         //Retrieve all attributes implementing IPreCommandAttribute.
         var attributes = command.GetType().GetCustomAttributes(true)
             .OfType<IPreHandlerAttribute>()
-            .OrderBy(a => a.Priority);
+            .OrderBy(a => a.PreHandlerExecutionPriority);
 
         foreach (var attribute in attributes)
             try
@@ -236,7 +233,7 @@ public sealed class Dispatcher(
         //Retrieve all attributes implementing IPostCommandAttribute.
         var attributes = request.GetType().GetCustomAttributes(true)
             .OfType<IPostHandlerAttribute>()
-            .OrderBy(a => a.Priority);
+            .OrderBy(a => a.PostHandlerExecutionPriority);
 
         foreach (var attribute in attributes)
             try
@@ -326,26 +323,7 @@ public sealed class Dispatcher(
             return;
 
         //Try to resolve a custom factory
-        var contextFactory = serviceProvider.GetService<IRequestContextFactory>();
-        if (contextFactory != null)
-        {
-            requestBase.Context = contextFactory.CreateContext(requestBase);
-        }
-        else
-        {
-            //Fallback to default
-            var userIdentificationFactory = serviceProvider.GetService<IUserIdentificationFactory>();
-            var requestIdentificationFactory = serviceProvider.GetService<IRequestIdentificationFactory>();
-
-            var requestId = requestIdentificationFactory != null
-                ? requestIdentificationFactory.GetIdentifier(requestBase)
-                : "Request ID factory not registered.";
-
-            var userId = userIdentificationFactory != null
-                ? userIdentificationFactory.GetIdentifier(requestBase)
-                : "User ID factory not registered.";
-
-            requestBase.Context = new RequestContextBase(requestId, userId);
-        }
+        var contextFactory = serviceProvider.GetRequiredService<IRequestContextFactory>();
+        requestBase.Context = contextFactory.CreateContext(requestBase);
     }
 }

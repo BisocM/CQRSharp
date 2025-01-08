@@ -10,7 +10,7 @@ public interface IPostHandlerAttribute
     /// <summary>
     ///     Determines the priority of the attribute. Lower values are executed first.
     /// </summary>
-    int Priority { get; }
+    int PostHandlerExecutionPriority { get; }
 
     /// <summary>
     ///     Invoked after the handler has been executed.

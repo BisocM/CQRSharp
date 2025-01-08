@@ -3,7 +3,6 @@ using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
-using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Factories;
 using CQRSharp.Sample.Models;
 using CQRSharp.Sample.Notifications;
@@ -21,25 +20,18 @@ public class Program
         var host = Host.CreateDefaultBuilder(args)
             .ConfigureServices((context, services) =>
             {
-                // Register user and request identification factories
-                services.AddUserIdentificationFactory<SampleUserIdentificationFactory>();
-                services.AddRequestIdentificationFactory<SampleRequestIdentificationFactory>();
-
-                // Register rate limiting
-                services.AddRateLimiting<SampleUserIdentificationFactory>(options =>
+                //Register rate limiting
+                services.AddRateLimiting(options =>
                 {
                     options.MaxTokens = 5;
                     options.ReplenishRatePerSecond = 1;
                     options.Scope = RateLimitScope.Global;
                 });
 
-                // Register a simple in-memory repository
+                //Register a simple in-memory repository
                 services.AddSingleton<InMemoryUserRepository>();
-
-                //Register custom context factory.
-                services.AddTransient<IRequestContextFactory, CustomRequestContextFactory>();
                 
-                // Add CQRSharp to the services, scanning the current assembly for handlers and attributes
+                //Add CQRSharp to the services, scanning the current assembly for handlers and attributes
                 services.AddCqrs(options =>
                 {
                     // Enable execution context logging
@@ -54,14 +46,17 @@ public class Program
                     options.Timeout = TimeSpan.FromSeconds(10);
                     options.MaxRetries = 3;
                 }, Assembly.GetExecutingAssembly());
+                
+                //Register custom context factory. Make sure this happens AFTER AddCqrs, so we override the default context factory.
+                services.AddTransient<IRequestContextFactory, CustomRequestContextFactory>();
 
-                // Register notification handlers
+                //Register notification handlers
                 services.AddTransient<UserCommandInitiatedHandler>();
                 services.AddTransient<UserCommandCompletedHandler>();
                 services.AddTransient<UserQueryInitiatedHandler>();
                 services.AddTransient<UserQueryCompletedHandler>();
 
-                // Add our demo hosted service
+                //Add our demo hosted service
                 services.AddHostedService<DemoHostedService>();
             })
             .ConfigureLogging(logging =>
