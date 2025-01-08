@@ -8,8 +8,7 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 [PipelinePriority(int.MinValue)]
 public sealed class RateLimitingBehavior<TRequest, TResult>(
     ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
-    RateLimiter rateLimiter,
-    IUserIdentificationFactory userIdentifierFactory)
+    RateLimiter rateLimiter)
     : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
 {
     public async Task<TResult> Handle(TRequest request,

@@ -1,25 +1,18 @@
 ﻿using CQRSharp.Core.Factories;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;
-using Microsoft.Extensions.DependencyInjection;
+using CQRSharp.Sample.Context;
 
-namespace CQRSharp.Sample.Context
+namespace CQRSharp.Sample.Factories
 {
     public class CustomRequestContextFactory(IServiceProvider serviceProvider) : IRequestContextFactory
     {
         public IRequestContext CreateContext(IRequest request)
         {
-            var userIdentificationFactory = serviceProvider.GetService<IUserIdentificationFactory>();
-            var requestIdentificationFactory = serviceProvider.GetService<IRequestIdentificationFactory>();
-
             //Provide fallback if factories aren't registered
-            var requestId = requestIdentificationFactory != null
-                ? requestIdentificationFactory.GetIdentifier(request)
-                : "Request ID factory not registered.";
+            var requestId = Guid.NewGuid().ToString();
 
-            var userId = userIdentificationFactory != null
-                ? userIdentificationFactory.GetIdentifier(request)
-                : "User ID factory not registered.";
+            var userId = "STATIC_USER";
 
             //For demonstration purposes, we hardcode role and IP.
             var userRole = "Admin";

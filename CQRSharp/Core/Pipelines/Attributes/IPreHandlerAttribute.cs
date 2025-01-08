@@ -10,7 +10,7 @@ public interface IPreHandlerAttribute
     /// <summary>
     ///     Determines the priority of the attribute. Lower values are executed first.
     /// </summary>
-    int Priority { get; }
+    int PreHandlerExecutionPriority { get; }
 
     /// <summary>
     ///     Invoked before the handler is executed.

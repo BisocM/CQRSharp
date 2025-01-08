@@ -1,5 +1,4 @@
-﻿using CQRSharp.Interfaces.Markers;
-using CQRSharp.Interfaces.Notifications;
+﻿using CQRSharp.Interfaces.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Notifications;

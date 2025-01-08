@@ -1,9 +1,10 @@
 ﻿using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Interfaces.Markers.Command;
-using CQRSharp.Sample.Context;
+using CQRSharp.Sample.Attributes;
 
 namespace CQRSharp.Sample.Commands;
 
+[CustomInterceptor(2)]
 public class CreateUserCommand : CommandBase
 {
     public string UserName { get; set; }
