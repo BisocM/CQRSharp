@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Options.Enums;
+using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 
@@ -15,7 +16,7 @@ public interface IDispatcher
     /// <param name="command">The command to send.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task ExecuteCommand(ICommand command, CancellationToken cancellationToken = default);
+    Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Executes a query and returns a result.

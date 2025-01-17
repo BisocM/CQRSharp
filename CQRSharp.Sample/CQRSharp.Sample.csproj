@@ -17,4 +17,8 @@
         <ProjectReference Include="..\CQRSharp\CQRSharp.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Management\" />
+    </ItemGroup>
+
 </Project>
