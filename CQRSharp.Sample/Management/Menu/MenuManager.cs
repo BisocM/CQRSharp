@@ -106,12 +106,13 @@ namespace CQRSharp.Sample.Management.Menu
                         //Reset the cancellation token to make sure that the command does not get cancelled.
                         _cancellationManager.ResetCancellation();
 
-                        //Execute the command.
-                        var result = await _dispatcher.ExecuteCommand(command, _cancellationManager.Token);
+                        //Execute the command. Add the logging statement BEFORE the dispatcher call, since it is a blocking call.
+                        //So saying "sent to dispatcher" after command executed already makes no sense!
                         _logger.LogInformation("Command successfully sent to the dispatcher.");
+                        var result = await _dispatcher.ExecuteCommand(command, _cancellationManager.Token);
 
                         //TODO: Bit of an annoying way of doing this, so maybe clean this up?
-                        Console.Clear();
+                        //Console.Clear();
 
                         if (result is { IsSuccess: false })
                         {

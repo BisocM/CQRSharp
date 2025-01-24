@@ -1,8 +1,10 @@
 ﻿using System.Reflection;
+using CQRSharp.Core.Dispatch;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Sample.Data;
 using CQRSharp.Sample.Factories;
 using CQRSharp.Sample.Management.Cancellation;
 using CQRSharp.Sample.Management.Menu;
@@ -42,7 +44,7 @@ public class Program
                     options.ReplenishRatePerSecond = 1;
                     options.Scope = RateLimitScope.Global;
                 })
-                .AddTransient<IRequestContextFactory, CustomRequestContextFactory>(); //Register our context factory here!
+                .AddTransient<IRequestContextFactory, CustomRequestContextFactory>(); //Register our context factory here! AFTER CQRSharp is configured.
                 
                 //Register the MenuManager & the CancellationManager
                 services.AddSingleton<MenuManager>();
@@ -50,6 +52,8 @@ public class Program
                 
                 //Add our demo hosted service
                 services.AddHostedService<SampleHostedService>();
+
+                services.AddSingleton<CustomInMemoryUserStore>();
             })
             .ConfigureLogging(logging =>
             {
