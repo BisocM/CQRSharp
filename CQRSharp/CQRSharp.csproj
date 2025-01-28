@@ -13,15 +13,12 @@
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <PackageTags>CQRS;</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.0.0</Version>
+        <Version>2.1.0</Version>
         <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <RepositoryType>git</RepositoryType>
-        <PackageReleaseNotes>-Merged the user identification mechanism into the original library
--Created a command identification factory mechanism
--Moved Notification.cs -&gt; Notifications
--Renamed wrongly-named Notification.cs
--Implemented a unified request context.</PackageReleaseNotes>
+        <PackageReleaseNotes>-Fixed the RateLimiterTests, as the new system for user identifier generation would throw off the current tests. -Introduced GeneralTests which has various unit tests for other functionalities. -Removed IUserIdentificationFactory and IRequestIdentificationFactory, since it made no sense to have a library-sided Request and User identification handled via our interfaces. If a library consumer has a requirement for UserId and RequestId, they can create their own, custom contexts, and specify their retrieval logic there. -Updated the Sample project.
+-Squashing additional XML documentation issues.</PackageReleaseNotes>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
     </PropertyGroup>
 

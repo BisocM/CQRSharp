@@ -28,11 +28,11 @@ public sealed class Dispatcher(
     DispatcherOptions options) : IDispatcher
 {
     /// <inheritdoc />
-    public async Task ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
+    public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
     {
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
-
+        
         //Create the command context for this particular request.
         if (command is RequestBase requestBase)
             InitializeRequestContext(requestBase);
@@ -40,19 +40,17 @@ public sealed class Dispatcher(
         //Get the type of the command.
         var requestType = command.GetType();
 
-        if (options.RunMode == RunMode.Async)
-        {
-            //Asynchronous execution - fire and forget.
-            backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
-            return;
-        }
-
         //Synchronous execution - await the pipeline.
-        await PipelineTask(cancellationToken);
-        return;
+        if (options.RunMode != RunMode.Async)
+            return await PipelineTask(cancellationToken);
+
+        //Asynchronous execution - fire and forget.
+        //Since this is fire and forget, return default, as the result will not be awaited.
+        backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
+        return default;
 
         //Define the pipeline task.
-        async Task PipelineTask(CancellationToken ct)
+        async Task<CommandResult> PipelineTask(CancellationToken ct)
         {
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
@@ -61,20 +59,22 @@ public sealed class Dispatcher(
             await eventManager.Publish(new CommandInitiatedNotification(command), ct);
 
             //Invoke pre-handle attributes.
-            await Dispatcher.InvokePreHandleAttributes(command, scopedProvider, ct);
+            await InvokePreHandleAttributes(command, scopedProvider, ct);
 
             //Retrieve the appropriate handler for the command.
             var handler = GetHandler(requestType, scopedProvider);
 
             //Build and execute the query pipeline.
             var pipeline = BuildPipeline<CommandResult>(command, handler, scopedProvider);
-            var result = await pipeline(command, ct);
+            CommandResult result = await pipeline(command, ct);
 
             //Send off the notification about command completion before the post-completion attributes are handled.
             await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
 
             //Invoke post-handle attributes.
-            await Dispatcher.InvokePostHandleAttributes(command, scopedProvider, ct);
+            await InvokePostHandleAttributes(command, scopedProvider, ct);
+
+            return result;
         }
     }
 
@@ -97,9 +97,9 @@ public sealed class Dispatcher(
             return await PipelineTask(cancellationToken);
 
         //Asynchronous execution - fire and forget.
+        //Since this is fire and forget, return default, as the result will not be awaited.
         backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
         return default;
-        //Since this is fire and forget, return default, as the result will not be awaited.
 
         async Task<TResult> PipelineTask(CancellationToken ct)
         {
@@ -110,7 +110,7 @@ public sealed class Dispatcher(
             await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
 
             //Invoke pre-handle attributes.
-            await Dispatcher.InvokePreHandleAttributes(query, scopedProvider, ct);
+            await InvokePreHandleAttributes(query, scopedProvider, ct);
 
             //Get the handler for the query.
             var handler = GetHandler(requestType, scopedProvider);
@@ -120,7 +120,7 @@ public sealed class Dispatcher(
             var result = await pipeline(query, ct);
 
             //Invoke post-handle attributes.
-            await Dispatcher.InvokePostHandleAttributes(query, scopedProvider, ct);
+            await InvokePostHandleAttributes(query, scopedProvider, ct);
 
             //Publish the event.
             await eventManager.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
@@ -161,7 +161,7 @@ public sealed class Dispatcher(
                 return await HandleQuery<TResult>(req, handler, ct);
             
             await HandleCommand(req, handler, ct);
-            return (TResult)(object)CommandResult.Success;
+            return (TResult)(object)CommandResult.FromSuccess();
         };
 
         //Check if the request is exempt from any behaviors.

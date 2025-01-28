@@ -5,6 +5,7 @@ using CQRSharp.Sample.Context;
 
 namespace CQRSharp.Sample.Factories
 {
+    //This class is REQUIRED for the automatic population of all the contexts for all commands.
     public class CustomRequestContextFactory(IServiceProvider serviceProvider) : IRequestContextFactory
     {
         public IRequestContext CreateContext(IRequest request)
@@ -14,11 +15,7 @@ namespace CQRSharp.Sample.Factories
 
             var userId = "STATIC_USER";
 
-            //For demonstration purposes, we hardcode role and IP.
-            var userRole = "Admin";
-            var sourceIp = "192.168.1.42";
-
-            return new CustomRequestContext(requestId, userId, userRole, sourceIp);
+            return new SampleRequestContext(requestId, userId);
         }
     }
 }
