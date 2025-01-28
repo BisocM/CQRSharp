@@ -1,13 +1,11 @@
-﻿using System.Reflection;
-using CQRSharp.Core.BackgroundTasks;
+﻿using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Caching;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
@@ -32,7 +30,7 @@ public sealed class Dispatcher(
     {
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
-        
+
         //Create the command context for this particular request.
         if (command is RequestBase requestBase)
             InitializeRequestContext(requestBase);
@@ -66,7 +64,7 @@ public sealed class Dispatcher(
 
             //Build and execute the query pipeline.
             var pipeline = BuildPipeline<CommandResult>(command, handler, scopedProvider);
-            CommandResult result = await pipeline(command, ct);
+            var result = await pipeline(command, ct);
 
             //Send off the notification about command completion before the post-completion attributes are handled.
             await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
@@ -159,22 +157,30 @@ public sealed class Dispatcher(
             //Determine whether the request is a command or a query.
             if (typeof(TResult) != typeof(CommandResult))
                 return await HandleQuery<TResult>(req, handler, ct);
-            
+
             await HandleCommand(req, handler, ct);
             return (TResult)(object)CommandResult.FromSuccess();
         };
 
         //Check if the request is exempt from any behaviors.
-        var exemptionAttribute = request.GetType().GetCustomAttribute<PipelineExemptionAttribute>();
+        var registry = services.GetRequiredService<IHandlerRegistry>();
+        var metadata = registry.GetMetadata(requestType);
+        var exemptionAttributes = metadata?.PipelineExemptions;
 
         //Wrap the handler with the pipeline behaviors.
         foreach (var behavior in behaviors)
         {
             Type behaviorType = behavior.GetType();
 
-            //Skip the behavior if the request is exempt.
-            if (exemptionAttribute != null &&
-                exemptionAttribute.ExemptedPipeline == behaviorType.GetGenericTypeDefinition())
+            //If there are multiple pipeline exemptions, skip if *any* match
+            var isExempt = false;
+            if (exemptionAttributes is { Length: > 0 } && behaviorType.IsGenericType)
+            {
+                var genericDef = behaviorType.GetGenericTypeDefinition();
+                isExempt = exemptionAttributes.Any(e => e.ExemptedPipeline == genericDef);
+            }
+
+            if (isExempt)
                 continue;
 
             var next = handlerDelegate;
@@ -195,29 +201,32 @@ public sealed class Dispatcher(
     /// <summary>
     ///     Invokes all pre-handle attributes associated with the command.
     /// </summary>
-    /// <param name="command">The command being handled.</param>
+    /// <param name="request">The command being handled.</param>
     /// <param name="serviceProvider">The scoped service provider.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task InvokePreHandleAttributes(IRequest command, IServiceProvider serviceProvider,
+    private static async Task InvokePreHandleAttributes(IRequest request, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
-        //Retrieve all attributes implementing IPreCommandAttribute.
-        var attributes = command.GetType().GetCustomAttributes(true)
-            .OfType<IPreHandlerAttribute>()
-            .OrderBy(a => a.PreHandlerExecutionPriority);
+        //Retrieve the relevant command metadata from the registry
+        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var metadata = registry.GetMetadata(request.GetType());
+        if (metadata == null)
+            throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
 
+        //Retrieve the attribute list
+        var attributes = metadata.PreHandlers;
+
+        //Execute them in order
         foreach (var attribute in attributes)
             try
             {
-                //Invoke the OnBeforeHandle method of the attribute.
-                await attribute.OnBeforeHandle(command, serviceProvider, cancellationToken);
+                await attribute.OnBeforeHandle(request, serviceProvider, cancellationToken);
             }
             catch (Exception ex)
             {
-                //Wrap exceptions with additional context.
                 throw new InvalidOperationException(
-                    $"Error in pre-handle attribute '{attribute.GetType().Name}' for command '{command.GetType().Name}': {ex.Message}",
-                    ex);
+                    $"Error in pre-handle attribute '{attribute.GetType().Name}' " +
+                    $"for command '{request.GetType().Name}': {ex.Message}", ex);
             }
     }
 
@@ -230,23 +239,26 @@ public sealed class Dispatcher(
     private static async Task InvokePostHandleAttributes(IRequest request, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
-        //Retrieve all attributes implementing IPostCommandAttribute.
-        var attributes = request.GetType().GetCustomAttributes(true)
-            .OfType<IPostHandlerAttribute>()
-            .OrderBy(a => a.PostHandlerExecutionPriority);
+        //Retrieve the relevant command metadata from the registry
+        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var metadata = registry.GetMetadata(request.GetType());
+        if (metadata == null)
+            throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
 
+        //Retrieve the attribute list
+        var attributes = metadata.PostHandlers;
+
+        //Execute them in order
         foreach (var attribute in attributes)
             try
             {
-                //Invoke the OnAfterHandle method of the attribute.
                 await attribute.OnAfterHandle(request, serviceProvider, cancellationToken);
             }
             catch (Exception ex)
             {
-                //Wrap exceptions with additional context.
                 throw new InvalidOperationException(
-                    $"Error in post-handle attribute '{attribute.GetType().Name}' for command '{request.GetType().Name}': {ex.Message}",
-                    ex);
+                    $"Error in post-handle attribute '{attribute.GetType().Name}' " +
+                    $"for command '{request.GetType().Name}': {ex.Message}", ex);
             }
     }
 
@@ -280,7 +292,8 @@ public sealed class Dispatcher(
     /// <param name="query">The query to handle.</param>
     /// <param name="handler">The handler instance responsible for processing the query.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken)
+    private static async Task<TResult> HandleQuery<TResult>(object query, object handler,
+        CancellationToken cancellationToken)
     {
         var method = handler.GetType().GetMethod("Handle")
                      ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
@@ -318,7 +331,7 @@ public sealed class Dispatcher(
     /// <param name="requestBase">The request object.</param>
     private void InitializeRequestContext(RequestBase requestBase)
     {
-        // If the user already provided a context, don't overwrite it.
+        //If the user already provided a context, don't overwrite it.
         if (requestBase.Context != null)
             return;
 

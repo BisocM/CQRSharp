@@ -13,7 +13,7 @@ public static class CommandSanitizer
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() }
     };
-    
+
     /// <summary>
     ///     Sanitizes the command object by redacting sensitive data, determining whether or not to display the command
     ///     context.
@@ -40,7 +40,7 @@ public static class CommandSanitizer
                 isSensitive && !options.EnableSensitiveDataLogging ? "***REDACTED***" : value;
         }
 
-        
+
         return $"Execution Context: {JsonSerializer.Serialize(sanitizedCommand, DefaultOptions)}";
     }
 }

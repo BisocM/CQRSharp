@@ -27,6 +27,17 @@ public sealed class RateLimiter
 
         //Convert replenish rate per second to a TimeSpan interval.
         _replenishInterval = TimeSpan.FromSeconds(1.0 / _config.ReplenishRatePerSecond);
+
+        //Optionally schedule a recurring cleanup
+        if (_config.MaxIdleTime > TimeSpan.Zero)
+        {
+            var timer = new Timer(
+                state => CleanupStaleBuckets(), //Callback to cleanup method
+                null, //No state object
+                _config.CleanupInterval, //Initial delay
+                _config.CleanupInterval //Periodic interval
+            );
+        }
     }
 
     /// <summary>
@@ -60,6 +71,19 @@ public sealed class RateLimiter
             key, canProceed ? "passed" : "was blocked by", bucket.CurrentTokenCount);
 
         return canProceed;
+    }
+
+    private void CleanupStaleBuckets()
+    {
+        //TODO: This is a potential hotspot in very very high concurrency scenarios. Might want to consider other options.
+        var now = DateTime.UtcNow;
+        var idleLimit = _config.MaxIdleTime;
+        var removedCount =
+            (from kvp in _buckets let bucket = kvp.Value where now - bucket.LastAccessed > idleLimit select kvp).Count(
+                kvp => _buckets.TryRemove(kvp.Key, out _));
+
+        if (removedCount > 0)
+            _logger.LogInformation("RateLimiter: Removed {Count} stale buckets.", removedCount);
     }
 
     private static void ValidateConfiguration(RateLimiterOptions config)
@@ -102,6 +126,9 @@ public sealed class RateLimiter
             _lastRefillTimestamp = DateTime.UtcNow;
         }
 
+        //This is updated on every TryConsume call.
+        public DateTime LastAccessed { get; private set; }
+
         /// <summary>
         ///     Gets the current token count.
         /// </summary>
@@ -124,6 +151,8 @@ public sealed class RateLimiter
         {
             lock (_syncLock)
             {
+                //Update the LastAccessed timestamp.
+                LastAccessed = DateTime.UtcNow;
                 RefillTokens();
 
                 if (_tokens < 1)

@@ -47,7 +47,8 @@ public sealed class DispatcherOptions
     ///     The run mode for command execution.
     ///     If set to <see cref="Enums.RunMode.Async" />, commands will be executed asynchronously - meaning that concurrency
     ///     is allowed, and command execution is non-blocking.
-    ///     If set to <see cref="RunMode.Sync" />, commands will be executed synchronously - meaning that commands will be
+    ///     If set to <see cref="Enums.RunMode.Sync" />, commands will be executed synchronously - meaning that commands will
+    ///     be
     ///     executed in the order they are received.
     /// </summary>
     /// <remarks>
