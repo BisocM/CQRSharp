@@ -25,7 +25,7 @@ namespace CQRSharp.Tests
         {
             //Arrange
             var request = new MockRequest { };
-            var options = new DispatcherOptions
+            var options = new LoggingOptions()
             {
                 EnableExecutionContextLogging = false,
                 EnableSensitiveDataLogging = false
