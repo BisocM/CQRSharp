@@ -23,4 +23,16 @@ public sealed class RateLimiterOptions
     ///     that triggered the rate limit.
     /// </summary>
     public RateLimitScope Scope { get; set; } = RateLimitScope.Global;
+
+
+    /// <summary>
+    ///     The maximum duration of idle time after which a token bucket is automatically cleaned up.
+    /// </summary>
+    public TimeSpan MaxIdleTime { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    ///     The interval at which the system will clean up unused or expired tokens
+    ///     to free up memory and maintain optimal performance.
+    /// </summary>
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromMinutes(5);
 }

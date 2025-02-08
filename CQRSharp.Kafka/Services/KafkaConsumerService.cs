@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using Confluent.Kafka;
+using CQRSharp.Core.Caching;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using CQRSharp.Core.Dispatch;

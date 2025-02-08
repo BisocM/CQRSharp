@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
 using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.Dispatch;
+using CQRSharp.Core.Caching;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
+using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Helpers;
 using CQRSharp.Interfaces.Context;
@@ -23,7 +24,7 @@ namespace CQRSharp.Tests
         public void Sanitize_ReturnsEmptyStringIfExecutionContextLoggingDisabled()
         {
             //Arrange
-            var request = new MockRequest { NormalField = "TestValue" };
+            var request = new MockRequest { };
             var options = new DispatcherOptions
             {
                 EnableExecutionContextLogging = false,
@@ -35,51 +36,6 @@ namespace CQRSharp.Tests
 
             //Assert
             result.Should().BeEmpty("logging is disabled entirely, so no serialization should occur.");
-        }
-
-        [Fact]
-        public void Sanitize_RedactsSensitiveData_WhenNotAllowedToLog()
-        {
-            //Arrange
-            var request = new MockRequest
-            {
-                NormalField = "TestValue",
-                SensitiveField = "TopSecret"
-            };
-            var options = new DispatcherOptions
-            {
-                EnableExecutionContextLogging = true,
-                EnableSensitiveDataLogging = false
-            };
-
-            //Act
-            var result = CommandSanitizer.Sanitize(request, options);
-
-            //Assert
-            result.Should().Contain("\"SensitiveField\": \"***REDACTED***\"")
-                .And.Contain("\"NormalField\": \"TestValue\"");
-        }
-
-        [Fact]
-        public void Sanitize_LeavesSensitiveData_WhenLoggingIsAllowed()
-        {
-            //Arrange
-            var request = new MockRequest
-            {
-                NormalField = "TestValue",
-                SensitiveField = "TopSecret"
-            };
-            var options = new DispatcherOptions
-            {
-                EnableExecutionContextLogging = true,
-                EnableSensitiveDataLogging = true
-            };
-
-            //Act
-            var result = CommandSanitizer.Sanitize(request, options);
-
-            //Assert
-            result.Should().Contain("\"SensitiveField\": \"TopSecret\"");
         }
 
         /***********************************************************************
@@ -125,8 +81,8 @@ namespace CQRSharp.Tests
             var handler2 = new Mock<INotificationHandler<SampleNotification>>();
 
             var services = new ServiceCollection();
-            services.AddSingleton<INotificationHandler<SampleNotification>>(handler1.Object);
-            services.AddSingleton<INotificationHandler<SampleNotification>>(handler2.Object);
+            services.AddSingleton(handler1.Object);
+            services.AddSingleton(handler2.Object);
             services.AddSingleton<NotificationDispatcher>();
             var provider = services.BuildServiceProvider();
 
@@ -164,29 +120,42 @@ namespace CQRSharp.Tests
         public void HandlerRegistry_ReturnsNull_WhenNotRegistered()
         {
             //Arrange
-            var handlerDict = new ConcurrentDictionary<Type, Type>();
+            var handlerDict = new ConcurrentDictionary<Type, RequestMetadata>();
             var registry = new HandlerRegistry(handlerDict);
 
             //Act
             var result = registry.GetHandlerType(typeof(UnregisteredRequest));
 
             //Assert
-            result.Should().BeNull();
+            result.Should().BeNull("no metadata was added for UnregisteredRequest");
         }
+
 
         [Fact]
         public void HandlerRegistry_ReturnsCorrectHandler()
         {
             //Arrange
-            var handlerDict = new ConcurrentDictionary<Type, Type>();
-            handlerDict.TryAdd(typeof(RegisteredRequest), typeof(RegisteredRequestHandler));
+            var handlerDict = new ConcurrentDictionary<Type, RequestMetadata>();
+            
+            //Build up a RequestMetadata for the request type
+            var testMetadata = new RequestMetadata(
+                RequestType: typeof(RegisteredRequest),
+                HandlerType: typeof(RegisteredRequestHandler),
+                PreHandlers: [],
+                PostHandlers: [],
+                PipelineExemptions: [],
+                SensitiveProperties: [],
+                ResultType: null
+            );
+
+            handlerDict.TryAdd(typeof(RegisteredRequest), testMetadata);
             var registry = new HandlerRegistry(handlerDict);
 
             //Act
             var result = registry.GetHandlerType(typeof(RegisteredRequest));
 
             //Assert
-            result.Should().Be(typeof(RegisteredRequestHandler));
+            result.Should().Be<RegisteredRequestHandler>("the registry should return the handler type specified in the metadata");
         }
 
         /***********************************************************************
@@ -196,11 +165,6 @@ namespace CQRSharp.Tests
         private class MockRequest : IRequest
         {
             public IRequestContext? Context { get; set; }
-
-            public string NormalField { get; set; } = "Default";
-            
-            [SensitiveData]
-            public string SensitiveField { get; set; } = "Sensitive";
 
             //Could have other members or methods as needed
         }

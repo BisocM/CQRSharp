@@ -7,11 +7,20 @@ using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines.Types;
 
-//Set this to the lowest priority, since all it does is log the execution of the command.
-[PipelinePriority(int.MaxValue)]
+/// <summary>
+/// Represents a behavior in the pipeline that logs the execution of a command or a request.
+/// This class is executed with the lowest priority among pipeline behaviors because it is intended solely for logging purposes.
+/// </summary>
+/// <remarks>
+/// Logging includes command execution details such as the command name and sanitized context data.
+/// It can also include JSON serialization for command context if implemented.
+/// </remarks>
+/// <typeparam name="TRequest">The type of the request being handled. It must derive from <see cref="RequestBase"/>.</typeparam>
+/// <typeparam name="TResult">The type of the result returned by the request handler.</typeparam>
+[PipelinePriority(int.MaxValue)] //Set this to the lowest priority, since all it does is log the execution of the command.
 public sealed class ExecutionLoggingBehavior<TRequest, TResult>(
     ILogger<ExecutionLoggingBehavior<TRequest, TResult>> logger,
-    DispatcherOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
+    LoggingOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
 {
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,

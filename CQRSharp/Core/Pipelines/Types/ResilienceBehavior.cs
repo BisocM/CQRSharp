@@ -7,7 +7,7 @@ namespace CQRSharp.Core.Pipelines.Types;
 
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-    DispatcherOptions options) : IPipelineBehavior<TRequest, TResult>
+    ResilienceOptions options) : IPipelineBehavior<TRequest, TResult>
     where TRequest : RequestBase
 {
     public async Task<TResult> Handle(TRequest request,

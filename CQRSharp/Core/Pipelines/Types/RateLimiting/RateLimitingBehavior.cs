@@ -1,5 +1,4 @@
-﻿using CQRSharp.Core.Factories;
-using CQRSharp.Core.Pipelines.Attributes;
+﻿using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
