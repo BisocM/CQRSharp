@@ -25,17 +25,8 @@ public class Program
                 //Add CQRSharp to the services, scanning the current assembly for handlers and attributes
                 services.AddCqrs(options =>
                 {
-                    //Enable execution context logging
-                    options.EnableExecutionContextLogging = true;
-
-                    //Disable sensitive data logging to show the redaction
-                    options.EnableSensitiveDataLogging = false;
-
                     //Synchronous run mode so we can observe results directly
                     options.RunMode = RunMode.Sync;
-
-                    options.Timeout = TimeSpan.FromSeconds(10);
-                    options.MaxRetries = 1;
 
                 }, Assembly.GetExecutingAssembly())
                 .AddRateLimiting(options =>
@@ -43,6 +34,22 @@ public class Program
                     options.MaxTokens = 5;
                     options.ReplenishRatePerSecond = 1;
                     options.Scope = RateLimitScope.Global;
+                })
+                .AddTimeoutBehavior(o =>
+                {
+                    o.Timeout = TimeSpan.FromSeconds(10);
+                })
+                .AddResilienceBehavior(o =>
+                {
+                    o.MaxRetries = 1;
+                })
+                .AddExecutionLoggingBehavior(o =>
+                {
+                    //Enable execution context logging
+                    o.EnableExecutionContextLogging = true;
+
+                    //Disable sensitive data logging to show the redaction
+                    o.EnableSensitiveDataLogging = false;
                 })
                 .AddTransient<IRequestContextFactory, CustomRequestContextFactory>(); //Register our context factory here! AFTER CQRSharp is configured.
                 

@@ -10,7 +10,6 @@ using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Core.Pipelines.Types;
-using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Handlers;
 using CQRSharp.Interfaces.Markers.Command;
@@ -46,9 +45,9 @@ public static class DependencyInjectionExtensions
     public static IServiceCollection AddCqrs(this IServiceCollection services,
         Action<DispatcherOptions>? configureOptions, params Assembly?[] assemblies)
     {
-        //Append the library's assembly to the assemblies array so that the pipelines pre-defined in the library are also registered by the container.
-        assemblies = assemblies.Append(Assembly.GetAssembly(typeof(DependencyInjectionExtensions))).ToArray();
-
+        //Earlier, this used to automatically append the library's assembly to the passed assembly. This was an issue since
+        //then we would force our default behaviors onto the user. We've removed this behavior.
+        
         //Create a new instance of DispatcherOptions.
         var options = new DispatcherOptions();
         configureOptions?.Invoke(options);
@@ -84,43 +83,6 @@ public static class DependencyInjectionExtensions
         return services;
     }
 
-    /// <summary>
-    ///     Adds the rate limiting behavior and all related services to the service collection.
-    ///     This method registers the <see cref="RateLimitingBehavior{TRequest,TResult}" /> pipeline behavior, and a custom
-    ///     user identifier factory class provided by the library consumer.
-    /// </summary>
-    /// <param name="services">
-    ///     The <see cref="IServiceCollection" /> to which the rate limiting services will be added.
-    /// </param>
-    /// <param name="configureOptions">Configuration for the rate limiter.</param>
-    /// <returns>
-    ///     The updated <see cref="IServiceCollection" /> instance, enabling chaining of registration calls.
-    /// </returns>
-    public static IServiceCollection AddRateLimiting(
-        this IServiceCollection services,
-        Action<RateLimiterOptions> configureOptions)
-    {
-        if (configureOptions == null)
-            throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
-
-        var config = new RateLimiterOptions
-        {
-            MaxTokens = 0,
-            ReplenishRatePerSecond = 0,
-            Scope = RateLimitScope.Global
-        };
-        configureOptions(config);
-
-        if (config.MaxTokens <= 0 || config.ReplenishRatePerSecond <= 0)
-            throw new ArgumentException(
-                "Rate limiting configuration is invalid. MaxTokens and ReplenishRatePerSecond must be greater than zero.");
-
-        services.AddSingleton(config);
-        services.AddSingleton<RateLimiter>();
-
-        return services;
-    }
-
     private static ConcurrentDictionary<Type, RequestMetadata> RegisterAndBuildMetadata(
         IServiceCollection services,
         Assembly?[] assemblies)
@@ -151,6 +113,7 @@ public static class DependencyInjectionExtensions
                 //Also store a mapping from the "request type" to the "handler interface"
                 //so we can fill in our metadata. The request is the 1st generic arg.
                 var requestType = handlerInterface.GetGenericArguments()[0];
+                
                 //We'll see if we already have an entry in requestMetadataMap
                 if (!requestMetadataMap.TryGetValue(requestType, out var existing))
                 {
@@ -158,7 +121,7 @@ public static class DependencyInjectionExtensions
                     requestMetadataMap[requestType] = existing;
                 }
 
-                // Create a new RequestMetadata with an updated HandlerType
+                //Create a new RequestMetadata with an updated HandlerType
                 var updated = existing with { HandlerType = handlerInterface };
                 requestMetadataMap[requestType] = updated;
             }

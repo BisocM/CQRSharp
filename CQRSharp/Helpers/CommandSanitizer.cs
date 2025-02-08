@@ -21,7 +21,7 @@ public static class CommandSanitizer
     /// <param name="request">The request which needs sanitization.</param>
     /// <param name="options">The library options object.</param>
     /// <returns></returns>
-    public static string Sanitize(IRequest request, DispatcherOptions options)
+    public static string Sanitize(IRequest request, LoggingOptions options)
     {
         //If the command context logging is not enabled, just return immediately.
         if (!options.EnableExecutionContextLogging)
