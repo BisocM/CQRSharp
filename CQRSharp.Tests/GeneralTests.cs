@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
 using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.Caching;
+using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
-using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Helpers;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;

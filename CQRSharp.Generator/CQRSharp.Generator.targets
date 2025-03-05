@@ -1,0 +1,27 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <!--
+      Creates a linker XML file using the consumer's assembly name.
+    -->
+    <Target Name="GenerateCQRSharpLinkerFile" BeforeTargets="LinkTrim">
+        <!--
+          Write a linker file in the intermediate output directory.
+          The file is named using the consumer's AssemblyName.
+          The generated linker file instructs the linker to preserve the
+          type CQRSharp.Generated.GeneratedHandlerRegistry from the consumer assembly.
+        -->
+        <WriteLinesToFile
+                File="$(IntermediateOutputPath)$(AssemblyName).CQRSharp.Generated.linker.xml"
+                Lines="
+&lt;linker&gt;
+  &lt;assembly fullname=&quot;$(AssemblyName)&quot;&gt;
+    &lt;type fullname=&quot;CQRSharp.Generated.GeneratedHandlerRegistry&quot; preserve=&quot;all&quot; /&gt;
+  &lt;/assembly&gt;
+&lt;/linker&gt;"
+                Overwrite="true" />
+
+        <!-- Include the generated linker file as a TrimmerRootDescriptor so the linker picks it up -->
+        <ItemGroup>
+            <TrimmerRootDescriptor Include="$(IntermediateOutputPath)$(AssemblyName).CQRSharp.Generated.linker.xml" />
+        </ItemGroup>
+    </Target>
+</Project>

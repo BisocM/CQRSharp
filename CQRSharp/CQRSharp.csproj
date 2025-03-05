@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -56,7 +57,7 @@ No major breaking changes—this version remains backward compatible while intro
 ⏭️ What’s Next?  
 - Further enhancements to pipeline behaviors and command execution.  
 - Additional performance and memory efficiency improvements.  </PackageReleaseNotes>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -75,12 +76,12 @@ No major breaking changes—this version remains backward compatible while intro
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0"/>
-        <PackageReference Include="System.Text.Json" Version="9.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2" />
+        <PackageReference Include="System.Text.Json" Version="9.0.2" />
     </ItemGroup>
 
 </Project>
