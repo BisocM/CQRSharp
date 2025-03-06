@@ -27,6 +27,8 @@ public static class CommandSanitizer
         if (!options.EnableExecutionContextLogging)
             return string.Empty;
 
+        //Instead of getting the type and the properties via reflection, use the request metadata
+        
         var properties = request.GetType().GetProperties();
         var sanitizedCommand = new Dictionary<string, object?>();
 

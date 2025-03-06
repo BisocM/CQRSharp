@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Tests", "CQRSharp.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Generator", "CQRSharp.Generator\CQRSharp.Generator.csproj", "{784873D8-C612-48D5-BA34-F84E4FC86351}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Generator.Sample", "CQRSharp.Generator.Sample\CQRSharp.Generator.Sample.csproj", "{784873D8-C612-48D5-BA34-F84E4FC86351}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Generator.Sample", "CQRSharp.Generator.Sample\CQRSharp.Generator.Sample.csproj", "{C4823579-62E2-4929-B131-0990DA52BCFF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,14 +41,8 @@ Global
 		{784873D8-C612-48D5-BA34-F84E4FC86351}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{784873D8-C612-48D5-BA34-F84E4FC86351}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{784873D8-C612-48D5-BA34-F84E4FC86351}.Release|Any CPU.Build.0 = Release|Any CPU
-		{396F99A7-DF93-4837-9CB7-DC6690A7ABE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{396F99A7-DF93-4837-9CB7-DC6690A7ABE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{396F99A7-DF93-4837-9CB7-DC6690A7ABE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{396F99A7-DF93-4837-9CB7-DC6690A7ABE4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{9B1E7E23-757B-4D47-B4FC-2CCEAFD6EE21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{9B1E7E23-757B-4D47-B4FC-2CCEAFD6EE21}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{9B1E7E23-757B-4D47-B4FC-2CCEAFD6EE21}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{9B1E7E23-757B-4D47-B4FC-2CCEAFD6EE21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C4823579-62E2-4929-B131-0990DA52BCFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C4823579-62E2-4929-B131-0990DA52BCFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
