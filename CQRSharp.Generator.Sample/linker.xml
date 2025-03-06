@@ -1,5 +1,0 @@
-﻿<linker>
-    <assembly fullname="CQRSharp.Generator.Sample">
-        <type fullname="*" preserve="all" />
-    </assembly>
-</linker>

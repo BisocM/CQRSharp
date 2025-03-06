@@ -15,8 +15,8 @@
                 Lines="
 &lt;linker&gt;
   &lt;assembly fullname=&quot;$(AssemblyName)&quot;&gt;
+    &lt;type fullname=&quot;CQRSharp.Generated.GeneratedPipelineRegistry&quot; preserve=&quot;all&quot; /&gt;
     &lt;type fullname=&quot;CQRSharp.Generated.GeneratedHandlerRegistry&quot; preserve=&quot;all&quot; /&gt;
-    &lt;type fullname=&quot;CQRSharp.Generated.PipelineBuilders&quot; preserve=&quot;all&quot; /&gt;
   &lt;/assembly&gt;
 &lt;/linker&gt;"
                 Overwrite="true" />

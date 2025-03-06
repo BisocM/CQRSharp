@@ -1,0 +1,6 @@
+<linker>
+    <assembly fullname="CQRSharp.Sample">
+        <type fullname="CQRSharp.Generated.GeneratedPipelineRegistry" preserve="all" />
+        <type fullname="CQRSharp.Generated.GeneratedHandlerRegistry" preserve="all" />
+    </assembly>
+</linker>
