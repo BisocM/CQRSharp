@@ -28,7 +28,6 @@ namespace CQRSharp.Generator
                         return symbol;
                     return null;
                 })
-                .Where(symbol => symbol is not null)
                 .Collect();
 
             context.RegisterSourceOutput(requestSymbolsProvider, (spc, collectedSymbols) =>
@@ -59,14 +58,10 @@ namespace CQRSharp.Generator
                     var requestType = symbol!.ToDisplayString();
                     
                     //Determine the result type: if the type implements IQuery<T>, use T; otherwise, assume CommandResult.
-                    string resultType;
                     var iQuery = symbol.AllInterfaces.FirstOrDefault(i =>
                         i.IsGenericType &&
                         i.OriginalDefinition.ToDisplayString() == "CQRSharp.Interfaces.Markers.Query.IQuery<T>");
-                    if (iQuery != null && iQuery.TypeArguments.Length == 1)
-                        resultType = iQuery.TypeArguments[0].ToDisplayString();
-                    else
-                        resultType = "CQRSharp.Data.Commands.CommandResult";
+                    var resultType = iQuery is { TypeArguments.Length: 1 } ? iQuery.TypeArguments[0].ToDisplayString() : "CQRSharp.Data.Commands.CommandResult";
 
                     sb.AppendLine("                {");
                     sb.AppendLine($"                    typeof({requestType}),");

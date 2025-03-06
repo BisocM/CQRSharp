@@ -6,8 +6,9 @@
         <!--
           Write a linker file in the intermediate output directory.
           The file is named using the consumer's AssemblyName.
-          The generated linker file instructs the linker to preserve the
-          type CQRSharp.Generated.GeneratedHandlerRegistry from the consumer assembly.
+          The generated linker file instructs the linker to preserve the following types:
+            - CQRSharp.Generated.GeneratedHandlerRegistry
+            - CQRSharp.Generated.PipelineBuilders
         -->
         <WriteLinesToFile
                 File="$(IntermediateOutputPath)$(AssemblyName).CQRSharp.Generated.linker.xml"
@@ -15,6 +16,7 @@
 &lt;linker&gt;
   &lt;assembly fullname=&quot;$(AssemblyName)&quot;&gt;
     &lt;type fullname=&quot;CQRSharp.Generated.GeneratedHandlerRegistry&quot; preserve=&quot;all&quot; /&gt;
+    &lt;type fullname=&quot;CQRSharp.Generated.PipelineBuilders&quot; preserve=&quot;all&quot; /&gt;
   &lt;/assembly&gt;
 &lt;/linker&gt;"
                 Overwrite="true" />
