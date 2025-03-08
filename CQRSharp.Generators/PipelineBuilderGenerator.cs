@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Linq;
 using System.Text;
-using CQRSharp.Core.Extensions;
+using CQRSharp.Shared.Constants;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-namespace CQRSharp.Generator
+namespace CQRSharp.Generators
 {
     [Generator]
     public class PipelineBuilderGenerator : IIncrementalGenerator
@@ -26,7 +26,7 @@ namespace CQRSharp.Generator
                         var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node, cancellationToken);
                         if (symbol is not INamedTypeSymbol namedSymbol)
                             return null;
-
+                                
                         var iRequest = ctx.SemanticModel.Compilation.GetTypeByMetadataName("CQRSharp.Interfaces.Markers.Request.IRequest");
                         return iRequest != null && namedSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, iRequest))
                             ? namedSymbol

@@ -1,86 +1,83 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <!-- Build Configuration -->
     <PropertyGroup>
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-        <GenerateDocumentationFile>True</GenerateDocumentationFile>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <!-- NuGet Package Metadata -->
+    <PropertyGroup>
         <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
         <Authors>$(AssemblyName)</Authors>
         <Company>BisocM</Company>
-        <PackageProjectUrl>https://github.com/BisocM/CQRSharp</PackageProjectUrl>
+        <PackageProjectUrl>cqrsharp.bisocm.org</PackageProjectUrl>
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
-        <PackageTags>CQRS;</PackageTags>
+        <RepositoryType>git</RepositoryType>
+        <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.0</Version>
+        <Version>2.2.2</Version>
         <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <RepositoryType>git</RepositoryType>
-        <PackageReleaseNotes>Modified NuGet-Compatible Release Notes for 2.2.0
+        <PackageReleaseNotes>
+            🚀 Release Notes for 2.2.1
 
-Since NuGet does not support markdown formatting, you need to replace markdown elements with plain text formatting. Below is a revised version that should work properly on the NuGet page:
+            🔧 Roslyn Generators
+            Inclusion of Roslyn compile-time generators - goodbye reflection!
 
-# Release Notes - Version 2.2.0  
-Refactor Rate Limiting, Pipeline Configuration, and Code Cleanup  
+            The library has now been fully updated to leverage compile-time generators over reflection in all its running processes. This will not only allow the library to be fully compatible with native AoT, but also improve its performance in high-throughput applications.
 
- 🚀 What's New in 2.2.0?  
-This release introduces significant optimizations, refactors, and modular improvements to the system, focusing on rate limiting, pipeline configuration, and overall code clarity.
+            Now, instead of dynamically generating pipelines, they are generated at compile time, outputting a map of all pipelines with relevant method calls into a predetermined registry - `PipelineRegsitry`. Similarly, the `HandlerRegistry` that previously mapped commands to handler methods at runtime is now generated at compile time.
 
- 🔧 Enhancements &amp; Optimizations  
+            Keeping all data cached in registries does increase the application's trace, but it greatly contributes to reducing the overhead caused by reflection.
 
-Rate Limiting Enhancements:  
-- Introduced periodic expiration for stale user/command pairs in _buckets, reducing memory usage.  
-- Optimized bucket management logic for better efficiency and responsiveness.  
+            📂 Breaking Changes?
+            No major breaking changes—this version remains backward compatible while introducing a more modular and optimized architecture.
 
-Dispatcher Refactor for DRY Compliance:  
-- Removed redundant reflection in Dispatcher.  
-- Introduced a centralized registry (RequestMetadata) that eagerly stores metadata, reducing computation overhead.  
-- Improves performance and makes command execution more maintainable.  
-
-Pipeline Configuration Refactor:  
-- Separated DispatcherOptions into modular option classes:  
-  - LoggingOptions  
-  - TimeoutOptions  
-  - ResilienceOptions  
-- Added AddXBehavior extension methods for cleaner Dependency Injection (DI) pipeline behavior registration.  
-- Updated existing implementations to use this new structure, improving readability and flexibility.  
-
-Additional Improvements:
-- Command Exemptions: Commands can now be exempted from multiple pipelines, offering more execution control.  
-- General Code Cleanup: Improved readability, maintainability, and performance.  
-
-📂 Breaking Changes?  
-No major breaking changes—this version remains backward compatible while introducing a more modular and optimized architecture.  
-
-⏭️ What’s Next?  
-- Further enhancements to pipeline behaviors and command execution.  
-- Additional performance and memory efficiency improvements.  </PackageReleaseNotes>
-        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
+            ⏭️ What’s Next?
+            - The generators are still quite new and may require further refinements.
+            - Additional performance and memory efficiency improvements related to BackgroundTaskQueue in asynchronous applications.
+        </PackageReleaseNotes>
     </PropertyGroup>
 
+    <!-- Package Assets -->
     <ItemGroup>
         <None Include="..\CQRSharp_Icon.png">
-            <Pack>True</Pack>
+            <Pack>true</Pack>
             <PackagePath>\</PackagePath>
         </None>
         <None Include="..\LICENSE">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
+          <Pack>true</Pack>
+          <PackagePath>\</PackagePath>
+          <Link>LICENSE</Link>
         </None>
         <None Include="..\README.md">
-            <Pack>True</Pack>
+            <Pack>true</Pack>
             <PackagePath>\</PackagePath>
         </None>
     </ItemGroup>
-
+    
+    <!-- Package Dependencies -->
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.2" />
         <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="build\CQRSharp.DependencyCheck.targets" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+
+    <!-- Project References -->
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj" />
     </ItemGroup>
 
 </Project>

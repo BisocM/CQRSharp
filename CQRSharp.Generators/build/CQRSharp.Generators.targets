@@ -1,15 +1,13 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <!--
       Creates a linker XML file using the consumer's assembly name.
+      
+      The generated linker file instructs the linker to preserve the following types,
+      as defined in SourceGeneratorConstants (from CQRSharp.Shared.Constants):
+        - GeneratedHandlerRegistry (SourceGeneratorConstants.HandlerRegistryClassName)
+        - GeneratedPipelineRegistry (SourceGeneratorConstants.PipelineRegistryClassName)
     -->
-    <Target Name="GenerateCQRSharpLinkerFile" BeforeTargets="LinkTrim">
-        <!--
-          Write a linker file in the intermediate output directory.
-          The file is named using the consumer's AssemblyName.
-          The generated linker file instructs the linker to preserve the following types:
-            - CQRSharp.Generated.GeneratedHandlerRegistry
-            - CQRSharp.Generated.PipelineBuilders
-        -->
+    <Target Name="GenerateCQRSharpLinkerFile" BeforeTargets="PrepareForILLink">
         <WriteLinesToFile
                 File="$(IntermediateOutputPath)$(AssemblyName).CQRSharp.Generated.linker.xml"
                 Lines="
@@ -20,8 +18,6 @@
   &lt;/assembly&gt;
 &lt;/linker&gt;"
                 Overwrite="true" />
-
-        <!-- Include the generated linker file as a TrimmerRootDescriptor so the linker picks it up -->
         <ItemGroup>
             <TrimmerRootDescriptor Include="$(IntermediateOutputPath)$(AssemblyName).CQRSharp.Generated.linker.xml" />
         </ItemGroup>

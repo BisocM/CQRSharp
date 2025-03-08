@@ -1,4 +1,5 @@
-﻿using CQRSharp.Sample.Management.Menu;
+﻿using System;
+using CQRSharp.Sample.Management.Menu;
 
 namespace CQRSharp.Sample.Attributes.Menu;
 

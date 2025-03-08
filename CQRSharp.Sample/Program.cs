@@ -1,5 +1,5 @@
-﻿using System.Reflection;
-using CQRSharp.Core.Dispatch;
+﻿using System;
+using System.Threading.Tasks;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Options.Enums;
@@ -28,7 +28,7 @@ public class Program
                     //Synchronous run mode so we can observe results directly
                     options.RunMode = RunMode.Sync;
 
-                }, Assembly.GetExecutingAssembly())
+                })
                 .AddRateLimiting(options =>
                 {
                     options.MaxTokens = 5;

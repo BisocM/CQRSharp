@@ -1,4 +1,5 @@
-﻿using CQRSharp.Core.Factories;
+﻿using System;
+using CQRSharp.Core.Factories;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;
 using CQRSharp.Sample.Context;

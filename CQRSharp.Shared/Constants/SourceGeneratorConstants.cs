@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Extensions;
+﻿namespace CQRSharp.Shared.Constants;
 
 /// <summary>
 /// Contains constant values used by the source generation process within the CQRSharp framework.
@@ -20,6 +20,8 @@ public static class SourceGeneratorConstants
     /// </summary>
     public const string HandlerRegistryClassName = "GeneratedHandlerRegistry";
 
+    public const string HandleRegistrationMethodName = "RegisterHandlers";
+    
     /// <summary>
     /// Represents the constant property name used to reference the generated mapping of handler registrations.
     /// This property serves as a key for accessing a static dictionary structure that maps handler metadata,

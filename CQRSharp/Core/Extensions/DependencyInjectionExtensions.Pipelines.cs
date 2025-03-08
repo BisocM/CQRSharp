@@ -1,10 +1,9 @@
-﻿using System.Collections.Concurrent;
-using System.Reflection;
-using CQRSharp.Core.Caching.Pipelines;
+﻿using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Shared.Constants;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -111,7 +110,7 @@ namespace CQRSharp.Core.Extensions
         /// Registers the pipeline registry using AoT-generated pipeline builders.
         /// Looks for a generated type in the known namespace and uses it if available.
         /// </summary>
-        private static IReadOnlyDictionary<Type, PipelineBuilderDelegate> AddPipelineRegistryUsingGeneratedPipelines(this IServiceCollection services, params Assembly[] assemblies)
+        private static IReadOnlyDictionary<Type, PipelineBuilderDelegate> AddPipelineRegistryUsingGeneratedPipelines(this IServiceCollection services)
         {
             try
             {
@@ -120,25 +119,17 @@ namespace CQRSharp.Core.Extensions
                     .FirstOrDefault(t => t != null);
 
                 if (generatedType == null)
-                {
                     throw new InvalidOperationException("Generated pipeline builders type not found. Ensure the AoT generator has run.");
-                }
 
-                var mapProperty = generatedType.GetProperty(SourceGeneratorConstants.PipelineMapPropertyName, BindingFlags.Public | BindingFlags.Static);
+                var mapProperty = generatedType.GetProperty(SourceGeneratorConstants.PipelineMapPropertyName);
                 if (mapProperty == null)
-                {
                     throw new InvalidOperationException($"Generated {SourceGeneratorConstants.PipelineMapPropertyName} property not found on the generated pipeline builders type.");
-                }
 
                 if (mapProperty.GetValue(null) is not IReadOnlyDictionary<Type, PipelineBuilderDelegate> pipelineMap)
-                {
                     throw new InvalidOperationException("Generated PipelineMap property is null or of an unexpected type.");
-                }
 
                 if (pipelineMap.Count == 0)
-                {
                     throw new InvalidOperationException("No pipeline builders were found in the generated registry.");
-                }
 
                 services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(pipelineMap));
                 Logger.LogInformation("Pipeline registry registered using AoT-generated pipeline builders.");
@@ -146,113 +137,9 @@ namespace CQRSharp.Core.Extensions
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Failed to register AoT-generated pipeline builders. Falling back to reflection-based pipeline composition.");
-                return services.AddPipelineRegistryUsingReflection(assemblies);
+                Logger.LogCritical(ex, "Failed to register AoT-generated pipeline builders. Please ensure that the compile-time code generator has run.");
+                throw;
             }
-        }
-
-        /// <summary>
-        /// Registers the pipeline registry using reflection-based pipeline composition.
-        /// This fallback is used when AoT-generated code is not available.
-        /// </summary>
-        private static IReadOnlyDictionary<Type, PipelineBuilderDelegate> AddPipelineRegistryUsingReflection(this IServiceCollection services, params Assembly[] assemblies)
-        {
-            var pipelineMap = BuildPipelineMapReflection(assemblies, Logger);
-            if (pipelineMap.Count == 0)
-            {
-                throw new InvalidOperationException("No pipeline builders were discovered via reflection-based pipeline composition.");
-            }
-
-            services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(pipelineMap));
-            Logger.LogInformation("Pipeline registry registered using reflection-based composition.");
-            return pipelineMap;
-        }
-
-        /// <summary>
-        /// Builds a pipeline map via reflection by scanning the provided assemblies for IRequest types.
-        /// For each found request type, a PipelineBuilderDelegate is created to chain registered IPipelineBehavior.
-        /// </summary>
-        private static ConcurrentDictionary<Type, PipelineBuilderDelegate> BuildPipelineMapReflection(Assembly[] assemblies, ILogger logger)
-        {
-            var pipelineMap = new ConcurrentDictionary<Type, PipelineBuilderDelegate>();
-
-            // Get all types that implement IRequest.
-            var allRequestTypes = assemblies.SelectMany(a => a.GetTypes())
-                .Where(t => typeof(Interfaces.Markers.Request.IRequest).IsAssignableFrom(t));
-
-            foreach (var requestType in allRequestTypes)
-            {
-                Type resultType = GetResultTypeForRequestType(requestType);
-
-                PipelineBuilderDelegate builder = (svc, req, finalHandler, ct) =>
-                {
-                    var behaviorInterfaceType = typeof(IPipelineBehavior<,>).MakeGenericType(requestType, resultType);
-                    var behaviors = svc.GetServices(behaviorInterfaceType).Cast<object>().ToArray();
-
-                    // Final delegate simply calls the provided finalHandler.
-                    Func<object, CancellationToken, Task<object>> pipeline = async (_, token) => await finalHandler(token);
-
-                    // Chain each behavior in reverse order.
-                    foreach (var behavior in behaviors.Reverse())
-                    {
-                        var next = pipeline;
-                        pipeline = (r, token) =>
-                        {
-                            var closedInterface = behavior.GetType().GetInterfaces()
-                                .FirstOrDefault(i => i.IsGenericType &&
-                                                     i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>) &&
-                                                     i.GenericTypeArguments[0] == requestType &&
-                                                     i.GenericTypeArguments[1] == resultType);
-                            if (closedInterface == null)
-                            {
-                                logger.LogError("Pipeline behavior interface not found for behavior {BehaviorType} and request {RequestType}.",
-                                    behavior.GetType().FullName, requestType.FullName);
-                                throw new InvalidOperationException("Pipeline behavior interface not found.");
-                            }
-
-                            var handleMethod = closedInterface.GetMethod("Handle");
-                            if (handleMethod == null)
-                            {
-                                logger.LogError("Handle method not found on pipeline behavior {BehaviorType}.", behavior.GetType().FullName);
-                                throw new InvalidOperationException("Handle method not found on pipeline behavior.");
-                            }
-
-                            logger.LogDebug("Invoking Handle method on pipeline behavior {BehaviorType} for request {RequestType}.",
-                                behavior.GetType().FullName, requestType.FullName);
-
-                            var invocationResult = handleMethod.Invoke(behavior, [
-                                r,
-                                new Func<CancellationToken, Task<object>>(t => next(r, t)),
-                                token
-                            ]);
-
-                            if (invocationResult == null)
-                            {
-                                logger.LogError("Handle method for pipeline behavior {BehaviorType} returned null.",
-                                    behavior.GetType().FullName);
-                                throw new InvalidOperationException("Pipeline behavior returned null result.");
-                            }
-
-                            if (invocationResult is Task<object> task)
-                            {
-                                return task;
-                            }
-                            else
-                            {
-                                logger.LogError("Handle method for pipeline behavior {BehaviorType} did not return Task<object>.",
-                                    behavior.GetType().FullName);
-                                throw new InvalidOperationException("Pipeline behavior did not return a valid Task<object>.");
-                            }
-                        };
-                    }
-
-                    return pipeline(req, ct);
-                };
-
-                pipelineMap[requestType] = builder;
-            }
-
-            return pipelineMap;
         }
     }
 }
