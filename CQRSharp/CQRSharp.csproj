@@ -8,6 +8,7 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EnableAotAnalyzer>true</EnableAotAnalyzer>
     </PropertyGroup>
 
     <!-- NuGet Package Metadata -->

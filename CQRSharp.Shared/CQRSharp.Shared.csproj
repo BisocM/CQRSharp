@@ -1,10 +1,54 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+    <!-- Build Configuration -->
     <PropertyGroup>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
         <TargetFrameworks>net8.0;net9.0;netstandard2.0</TargetFrameworks>
         <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EnableAotAnalyzer>true</EnableAotAnalyzer>
     </PropertyGroup>
+
+    <!-- NuGet Package Metadata -->
+    <PropertyGroup>
+        <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Shared Library).</Title>
+        <Authors>$(AssemblyName)</Authors>
+        <Company>BisocM</Company>
+        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
+        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageTags>CQRS</PackageTags>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <Version>2.2.2</Version>
+        <Description>Contains shared abstractions and common types for CQRSharp. This library underpins the rest of the CQRSharp framework.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageReleaseNotes>
+            🚀 Release Notes for 2.2.2
+
+            This release introduces compile-time Roslyn Generators to replace reflection where possible, improving performance and providing native AoT compatibility. All pipelines and registry mappings are now generated at build time.
+
+            No major breaking changes; the switch to generators remains backward compatible while giving a more optimized architecture.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <!-- Package Assets -->
+    <ItemGroup>
+        <None Include="..\CQRSharp_Icon.png">
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+        <None Include="..\LICENSE">
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+            <Link>LICENSE</Link>
+        </None>
+        <None Include="..\README.md">
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+    </ItemGroup>
 
 </Project>
