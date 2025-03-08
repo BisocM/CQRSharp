@@ -1,6 +1,6 @@
 ﻿using System.Collections.Concurrent;
 
-namespace CQRSharp.Core.Caching;
+namespace CQRSharp.Core.Caching.Requests;
 
 /// <summary>
 ///     HandlerRegistry is responsible for maintaining the mapping between request types and their corresponding handler

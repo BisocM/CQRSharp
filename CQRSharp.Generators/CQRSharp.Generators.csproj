@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Build Configuration -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>default</LangVersion>
+        <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
+        <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <PackageReleaseNotes>Hotfix</PackageReleaseNotes>
+        <RunAnalyzers>false</RunAnalyzers>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <NoPackageAnalysis>true</NoPackageAnalysis>
+    </PropertyGroup>
+
+    <!-- NuGet Package Metadata -->
+    <PropertyGroup>
+        <PackageId>CQRSharp.Generators</PackageId>
+        <Version>2.2.2</Version>
+        <Title>CQRSharp Source Generators</Title>
+        <Authors>BisocM</Authors>
+        <Description>A set of Roslyn source code generators that allow Native AoT compatibility for the CQRSharp Library.</Description>
+        <PackageProjectUrl>cqrsharp.bisocm.org</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+        <PackageTags>Roslyn;Analyzer</PackageTags>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    </PropertyGroup>
+
+    <!-- Package Dependencies -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" />
+    </ItemGroup>
+
+    <!-- Include the linker file -->
+    <ItemGroup>
+        <None Include="build\CQRSharp.Generators.targets" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+
+    <!-- Project References -->
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+
+    <!-- Package Assets -->
+    <ItemGroup>
+        <None Include="..\CQRSharp_Icon.png">
+            <Pack>True</Pack>
+            <PackagePath>\</PackagePath>
+        </None>
+        <None Include="..\LICENSE">
+          <Pack>true</Pack>
+          <PackagePath>\</PackagePath>
+          <Link>LICENSE</Link>
+        </None>
+    </ItemGroup>
+</Project>

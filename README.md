@@ -11,21 +11,6 @@ For more information, please check out the [wiki](https://github.com/BisocM/CQRS
 
 ---
 
-## Planned Features
-
-- **Additional order control for the pre- and post-execution attributes** via parametrization or other.
-- **Enhanced Validation Integration**: Seamless integration with popular validation libraries like FluentValidation.
-- **Performance Improvements**: Optimize the dispatcher and attribute invocation for better performance.
-- **Event Publishing**: Event publishing mechanisms via RabbitMQ or Kafka for domain event handling.
-- **Transactional Behavior**: To support atomicity during command execution.
-- **Caching**: Command idempotency, distributed caching systems & basic in-memory caching.
-- **Bulkhead Isolation**
-- **Dead Letter Queue**
-- **Tenant-Aware Commands**
-- **Compensatory Mechanisms + Saga Support**: Implement compensatory mechanisms for long-running commands.
-
----
-
 ## Contributing
 
 Contributions are welcome! Please open issues and pull requests for bug fixes, enhancements, or new features.

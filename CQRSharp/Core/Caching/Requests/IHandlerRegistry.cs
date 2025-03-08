@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Caching;
+﻿namespace CQRSharp.Core.Caching.Requests;
 
 /// <summary>
 ///     Defines a registry for managing handler and command type associations.

@@ -1,6 +1,9 @@
 ﻿using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Caching;
+using CQRSharp.Core.Caching.Pipelines;
+using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
+using CQRSharp.Core.Invokers;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
@@ -140,62 +143,54 @@ public sealed class Dispatcher(
         object handler,
         IServiceProvider services)
     {
+        //Retrieve the pipeline registry that was registered in DI.
+        var pipelineRegistry = services.GetRequiredService<IPipelineRegistry>();
         var requestType = request.GetType();
-        var resultType = typeof(TResult);
 
-        //Retrieve all pipeline behaviors registered in the container.
-        var behaviors = services
-            .GetServices(
-                typeof(IPipelineBehavior<,>).MakeGenericType(requestType,
-                    resultType)) //Populate the generic type arguments in the pipeline behavior.
-            .Cast<dynamic>()
-            .ToList();
-
-        //The final handler delegate.
-        Func<object, CancellationToken, Task<TResult>> handlerDelegate = async (req, ct) =>
+        //Try to get a precompiled pipeline builder for the request type.
+        if (!pipelineRegistry.PipelineMap.TryGetValue(requestType, out var builder))
         {
-            //Determine whether the request is a command or a query.
-            if (typeof(TResult) != typeof(CommandResult))
-                return await HandleQuery<TResult>(req, handler, ct);
-
-            await HandleCommand(req, handler, ct);
-            return (TResult)(object)CommandResult.FromSuccess();
-        };
-
-        //Check if the request is exempt from any behaviors.
-        var registry = services.GetRequiredService<IHandlerRegistry>();
-        var metadata = registry.GetMetadata(requestType);
-        var exemptionAttributes = metadata?.PipelineExemptions;
-
-        //Wrap the handler with the pipeline behaviors.
-        foreach (var behavior in behaviors)
-        {
-            Type behaviorType = behavior.GetType();
-
-            //If there are multiple pipeline exemptions, skip if *any* match
-            var isExempt = false;
-            if (exemptionAttributes is { Length: > 0 } && behaviorType.IsGenericType)
+            //Fallback: If no precompiled builder exists, invoke the handler directly.
+            return (req, ct) =>
             {
-                var genericDef = behaviorType.GetGenericTypeDefinition();
-                isExempt = exemptionAttributes.Any(e => e.ExemptedPipeline == genericDef);
-            }
+                if (typeof(TResult) != typeof(CommandResult))
+                {
+                    //For queries
+                    return HandleQuery<TResult>(req, handler, ct);
+                }
 
-            if (isExempt)
-                continue;
-
-            var next = handlerDelegate;
-            handlerDelegate = (req, ct) =>
-            {
-                //Invoke the behavior's Handle method.
-                return behavior.Handle(
-                    (dynamic)req,
-                    (Func<CancellationToken, Task<TResult>>)(cancellationToken => next(req, cancellationToken)),
-                    ct
-                );
+                //For commands
+                return HandleCommand(req, handler, ct)
+                    .ContinueWith(t => (TResult)(object)CommandResult.FromSuccess(), ct);
             };
         }
 
-        return handlerDelegate;
+        //Construct a final handler delegate that calls the actual handler.
+        //The PipelineBuilderDelegate signature is:
+        //   Task<object> PipelineBuilderDelegate(IServiceProvider, object request,
+        //                                         Func<CancellationToken, Task<object>> finalHandler,
+        //                                         CancellationToken)
+        //so we need to create a finalHandler that uses our existing handler invokers.
+        Func<CancellationToken, Task<object>> finalHandlerWrapper = ct =>
+        {
+            if (typeof(TResult) != typeof(CommandResult))
+            {
+                return HandleQuery<TResult>(request, handler, ct)
+                    .ContinueWith(t => (object)t.Result, ct);
+            }
+            else
+            {
+                return HandleCommand(request, handler, ct)
+                    .ContinueWith(object (t) => CommandResult.FromSuccess(), ct);
+            }
+        };
+
+        //Now return a delegate that uses the precompiled pipeline builder.
+        return (req, ct) =>
+        {
+            return builder(services, req, finalHandlerWrapper, ct)
+                .ContinueWith(t => (TResult)t.Result, ct);
+        };
     }
 
     /// <summary>
@@ -268,22 +263,8 @@ public sealed class Dispatcher(
     /// <param name="command">The command to handle.</param>
     /// <param name="handler">The handler instance.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task HandleCommand(object command, object handler, CancellationToken cancellationToken)
-    {
-        //Get the 'Handle' method from the handler.
-        var method = handler.GetType().GetMethod("Handle")
-                     ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
-
-        //Invoke the 'Handle' method with the command and cancellation token.
-        var result = method.Invoke(handler, [command, cancellationToken]);
-
-        if (result is Task task)
-            //Await the task if the result is a Task.
-            await task;
-        else
-            //Throw an exception if the handler did not return a Task.
-            throw new InvalidOperationException("Handler did not return a Task.");
-    }
+    private static async Task HandleCommand(object command, object handler, CancellationToken cancellationToken) 
+        => await CommandHandlerInvoker.Handle(command, handler, cancellationToken);
 
     /// <summary>
     ///     Handles the query by invoking its corresponding handler and returns the result.
@@ -292,20 +273,8 @@ public sealed class Dispatcher(
     /// <param name="query">The query to handle.</param>
     /// <param name="handler">The handler instance responsible for processing the query.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task<TResult> HandleQuery<TResult>(object query, object handler,
-        CancellationToken cancellationToken)
-    {
-        var method = handler.GetType().GetMethod("Handle")
-                     ?? throw new InvalidOperationException("Handler does not have a 'Handle' method.");
-
-        var result = method.Invoke(handler, [query, cancellationToken]);
-
-        if (result is Task<TResult> task)
-            return await task;
-
-        throw new InvalidOperationException($"Handler did not return a Task<{typeof(TResult).Name}>.");
-    }
-
+    private static async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken) 
+        => await QueryHandlerInvoker.Handle<TResult>(query, handler, cancellationToken);
 
     /// <summary>
     ///     Retrieves the appropriate handler for the given command type.

@@ -5,20 +5,20 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Sample</RootNamespace>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <PublishAot>true</PublishAot>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0"/>
+        <PackageReference Include="CQRSharp.Generators" Version="2.2.1.5" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Kafka\CQRSharp.Kafka.csproj"/>
         <ProjectReference Include="..\CQRSharp\CQRSharp.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
-      <Folder Include="Management\" />
+        <!-- <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/> -->
     </ItemGroup>
 
 </Project>

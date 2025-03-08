@@ -16,7 +16,7 @@
 ///         scenarios.
 ///     </para>
 /// </remarks>
-public readonly struct CommandResult
+public class CommandResult
 {
     /// <summary>
     ///     Gets a value indicating whether the command succeeded.

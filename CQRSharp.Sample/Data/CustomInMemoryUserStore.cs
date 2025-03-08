@@ -1,4 +1,8 @@
-﻿namespace CQRSharp.Sample.Data;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace CQRSharp.Sample.Data;
 
 /// <summary>
 /// Represents a custom in-memory store for managing user data.
