@@ -22,16 +22,19 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.2</Version>
+        <Version>2.2.3</Version>
         <Description>Contains shared abstractions and common types for CQRSharp. This library underpins the rest of the CQRSharp framework.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>
-            🚀 Release Notes for 2.2.2
+            🚀 Release Notes for 2.2.1
 
-            This release introduces compile-time Roslyn Generators to replace reflection where possible, improving performance and providing native AoT compatibility. All pipelines and registry mappings are now generated at build time.
+            🔧 Roslyn Generators
 
-            No major breaking changes; the switch to generators remains backward compatible while giving a more optimized architecture.
-        </PackageReleaseNotes>
+		Each request not contains more information regarding compile-time execution - including RequestMetadata. Now, you can retrieve more runtime-specific information that will allow for more fine-grained control over program execution, if desired.
+		Each request completion notification now also contains data about the context of the executed request and its metadata.
+
+            📂 Breaking Changes?
+		Removed ExecutionLoggingBehavior due to AoT incompatibility and redundancy. In future versions, all behaviors will be moved to a separate package.</PackageReleaseNotes>
     </PropertyGroup>
 
     <!-- Package Assets -->

@@ -1,34 +1,58 @@
 ﻿using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Notifications;
+using CQRSharp.Interfaces.Markers.Request;
 
-namespace CQRSharp.Core.Notifications.Types;
-
-/// <summary>
-///     This notification contains information about the completed command and its result.
-///     It is used to signal that a command has finished executing and to provide the command's outcome by the dispatcher,
-///     but directly before any post-execution attribute methods are executed, before the execution of
-///     pre-handling attributes.
-/// </summary>
-/// <param name="command">The command that was executed.</param>
-/// <param name="result">The result of the command execution.</param>
-public sealed class CommandCompletedNotification(ICommand command, CommandResult result) : INotification
+namespace CQRSharp.Core.Notifications.Types
 {
     /// <summary>
-    ///     Gets the name of the command that was executed.
+    ///     This notification contains information about the completed command and its result.
+    ///     It is used to signal that a command has finished executing and to provide the command's outcome by the dispatcher,
+    ///     but directly before any post-execution attribute methods are executed.
     /// </summary>
-    /// <remarks>
-    ///     This property provides the type name of the command,
-    ///     which serves as the identifier of the executed command.
-    /// </remarks>
-    public string CommandName { get; } = command.GetType().Name;
+    public sealed class CommandCompletedNotification : INotification
+    {
+        /// <summary>
+        ///     Initializes a new instance of the <see cref="CommandCompletedNotification" /> class.
+        /// </summary>
+        /// <param name="command">
+        ///     The command that was executed. Typically implements <see cref="ICommand" />, and may also
+        ///     be a <see cref="RequestBase" /> containing a context.
+        /// </param>
+        /// <param name="result">
+        ///     The outcome of the command execution, represented by a <see cref="CommandResult" /> indicating success or failure.
+        /// </param>
+        public CommandCompletedNotification(ICommand command, CommandResult result)
+        {
+            Command = command;
+            CommandName = command.GetType().Name;
+            Result = result;
+        }
 
-    /// <summary>
-    ///     Gets the result of the command execution.
-    /// </summary>
-    /// <remarks>
-    ///     This property provides the outcome of the command that was executed, indicating whether it was successful or
-    ///     failed.
-    /// </remarks>
-    public CommandResult Result { get; } = result;
+        /// <summary>
+        ///     Gets the command that was executed.
+        /// </summary>
+        /// <remarks>
+        ///     The <see cref="Command" /> property provides direct access to the command object
+        ///     which can be useful for logging or additional introspection.
+        /// </remarks>
+        public ICommand Command { get; }
+
+        /// <summary>
+        ///     Gets the name of the command that was executed.
+        /// </summary>
+        /// <remarks>
+        ///     This property provides the type name of the command,
+        ///     which serves as the identifier of the executed command.
+        /// </remarks>
+        public string CommandName { get; }
+
+        /// <summary>
+        ///     Gets the result of the command execution.
+        /// </summary>
+        /// <remarks>
+        ///     This property provides the outcome of the command that was executed, indicating whether it was successful or failed.
+        /// </remarks>
+        public CommandResult Result { get; }
+    }
 }

@@ -2,12 +2,12 @@
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Core.Dispatch;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
+using CQRSharp.Core.Requests;
 using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;

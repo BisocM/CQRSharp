@@ -1,4 +1,5 @@
-﻿using CQRSharp.Interfaces.Context;
+﻿using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Interfaces.Markers.Request;
 
@@ -11,4 +12,9 @@ public interface IRequest
     ///     A context object that stores request-level metadata like RequestId and UserId.
     /// </summary>
     public IRequestContext? Context { get; set; }
+
+    /// <summary>
+    /// Metadata related to the request. Contains runtime-specific data.
+    /// </summary>
+    public RequestMetadata? Metadata { get; set; }
 }

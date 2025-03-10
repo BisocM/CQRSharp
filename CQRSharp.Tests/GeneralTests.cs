@@ -2,8 +2,6 @@ using System.Collections.Concurrent;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
-using CQRSharp.Helpers;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;
 using CQRSharp.Interfaces.Notifications;
@@ -15,27 +13,6 @@ namespace CQRSharp.Tests
 {
     public class GeneralTests
     {
-        /***********************************************************************
-         *  1) CommandSanitizer Tests
-         ***********************************************************************/
-        [Fact]
-        public void Sanitize_ReturnsEmptyStringIfExecutionContextLoggingDisabled()
-        {
-            //Arrange
-            var request = new MockRequest { };
-            var options = new LoggingOptions()
-            {
-                EnableExecutionContextLogging = false,
-                EnableSensitiveDataLogging = false
-            };
-
-            //Act
-            var result = CommandSanitizer.Sanitize(request, options);
-
-            //Assert
-            result.Should().BeEmpty("logging is disabled entirely, so no serialization should occur.");
-        }
-
         /***********************************************************************
          *  2) BackgroundTaskQueue Tests
          ***********************************************************************/
@@ -163,6 +140,7 @@ namespace CQRSharp.Tests
         private class MockRequest : IRequest
         {
             public IRequestContext? Context { get; set; }
+            public RequestMetadata? Metadata { get; set; }
 
             //Could have other members or methods as needed
         }
@@ -170,11 +148,13 @@ namespace CQRSharp.Tests
         private class UnregisteredRequest : IRequest
         {
             public IRequestContext? Context { get; set; }
+            public RequestMetadata? Metadata { get; set; }
         }
 
         private class RegisteredRequest : IRequest
         {
             public IRequestContext? Context { get; set; }
+            public RequestMetadata? Metadata { get; set; }
         }
 
         //Dummy "handler" type

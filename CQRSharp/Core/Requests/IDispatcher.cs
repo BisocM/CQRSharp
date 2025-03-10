@@ -3,7 +3,7 @@ using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 
-namespace CQRSharp.Core.Dispatch;
+namespace CQRSharp.Core.Requests;
 
 /// <summary>
 ///     Defines a dispatcher interface for sending commands to their respective handlers.

@@ -1,4 +1,5 @@
-﻿using CQRSharp.Interfaces.Context;
+﻿using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Interfaces.Markers.Request;
 
@@ -9,4 +10,7 @@ public abstract class RequestBase : IRequest
 {
     /// <inheritdoc />
     public IRequestContext? Context { get; set; }
+
+    /// <inheritdoc />
+    public RequestMetadata? Metadata { get; set; }
 }

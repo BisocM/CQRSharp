@@ -2,9 +2,9 @@
 using Confluent.Kafka;
 using CQRSharp.Core.Caching;
 using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Core.Requests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using CQRSharp.Core.Dispatch;
 using CQRSharp.Interfaces.Markers.Command;
 using Microsoft.Extensions.Logging;
 

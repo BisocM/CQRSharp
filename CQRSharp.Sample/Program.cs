@@ -43,14 +43,6 @@ public class Program
                 {
                     o.MaxRetries = 1;
                 })
-                .AddExecutionLoggingBehavior(o =>
-                {
-                    //Enable execution context logging
-                    o.EnableExecutionContextLogging = true;
-
-                    //Disable sensitive data logging to show the redaction
-                    o.EnableSensitiveDataLogging = false;
-                })
                 .AddTransient<IRequestContextFactory, CustomRequestContextFactory>(); //Register our context factory here! AFTER CQRSharp is configured.
                 
                 //Register the MenuManager & the CancellationManager

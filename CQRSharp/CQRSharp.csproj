@@ -22,28 +22,19 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.2</Version>
+        <Version>2.2.3</Version>
         <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>
             🚀 Release Notes for 2.2.1
 
             🔧 Roslyn Generators
-            Inclusion of Roslyn compile-time generators - goodbye reflection!
 
-            The library has now been fully updated to leverage compile-time generators over reflection in all its running processes. This will not only allow the library to be fully compatible with native AoT, but also improve its performance in high-throughput applications.
-
-            Now, instead of dynamically generating pipelines, they are generated at compile time, outputting a map of all pipelines with relevant method calls into a predetermined registry - `PipelineRegsitry`. Similarly, the `HandlerRegistry` that previously mapped commands to handler methods at runtime is now generated at compile time.
-
-            Keeping all data cached in registries does increase the application's trace, but it greatly contributes to reducing the overhead caused by reflection.
+		Each request not contains more information regarding compile-time execution - including RequestMetadata. Now, you can retrieve more runtime-specific information that will allow for more fine-grained control over program execution, if desired.
+		Each request completion notification now also contains data about the context of the executed request and its metadata.
 
             📂 Breaking Changes?
-            No major breaking changes—this version remains backward compatible while introducing a more modular and optimized architecture.
-
-            ⏭️ What’s Next?
-            - The generators are still quite new and may require further refinements.
-            - Additional performance and memory efficiency improvements related to BackgroundTaskQueue in asynchronous applications.
-        </PackageReleaseNotes>
+		Removed ExecutionLoggingBehavior due to AoT incompatibility and redundancy. In future versions, all behaviors will be moved to a separate package.</PackageReleaseNotes>
     </PropertyGroup>
 
     <!-- Package Assets -->

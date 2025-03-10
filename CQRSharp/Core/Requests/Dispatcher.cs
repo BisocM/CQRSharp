@@ -1,5 +1,4 @@
 ﻿using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.Caching;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
@@ -8,14 +7,13 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipelines;
 using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Core.Dispatch;
+namespace CQRSharp.Core.Requests;
 
 /// <summary>
 ///     Dispatcher responsible for sending commands to their respective handlers and managing their execution.
@@ -307,5 +305,10 @@ public sealed class Dispatcher(
         //Try to resolve a custom factory
         var contextFactory = serviceProvider.GetRequiredService<IRequestContextFactory>();
         requestBase.Context = contextFactory.CreateContext(requestBase);
+        
+        //Populate the request with its respective metadata.
+        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var metadata = registry.GetMetadata(requestBase.GetType());
+        requestBase.Metadata = metadata;
     }
 }

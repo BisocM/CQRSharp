@@ -11,33 +11,12 @@ namespace CQRSharp.Core.Extensions
 {
     public static partial class DependencyInjectionExtensions
     {
-        // A static logger for configuration-time logging.
+        //A static logger for configuration-time logging.
         private static readonly ILogger Logger = LoggerFactory.Create(builder =>
         {
             builder.AddConsole();
             builder.SetMinimumLevel(LogLevel.Information);
         }).CreateLogger("DependencyInjectionExtensions");
-
-        /// <summary>
-        /// Registers the execution logging pipeline behavior in the service collection.
-        /// </summary>
-        public static IServiceCollection AddExecutionLoggingBehavior(
-            this IServiceCollection services,
-            Action<LoggingOptions> configureOptions)
-        {
-            if (configureOptions == null)
-                throw new ArgumentNullException(nameof(configureOptions), "Logging configuration must be provided.");
-
-            var options = new LoggingOptions();
-            configureOptions(options);
-
-            services.AddSingleton(options);
-            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExecutionLoggingBehavior<,>));
-
-            Logger.LogInformation("ExecutionLoggingBehavior has been registered.");
-
-            return services;
-        }
 
         /// <summary>
         /// Registers the resilience pipeline behavior in the service collection.
