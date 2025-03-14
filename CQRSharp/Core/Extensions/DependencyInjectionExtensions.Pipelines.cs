@@ -86,7 +86,7 @@ namespace CQRSharp.Core.Extensions
         }
 
         /// <summary>
-        /// Registers the pipeline registry using AoT-generated pipeline builders.
+        /// Registers the pipeline registry using generated pipeline builders.
         /// Looks for a generated type in the known namespace and uses it if available.
         /// </summary>
         private static IReadOnlyDictionary<Type, PipelineBuilderDelegate> AddPipelineRegistryUsingGeneratedPipelines(this IServiceCollection services)
@@ -98,7 +98,7 @@ namespace CQRSharp.Core.Extensions
                     .FirstOrDefault(t => t != null);
 
                 if (generatedType == null)
-                    throw new InvalidOperationException("Generated pipeline builders type not found. Ensure the AoT generator has run.");
+                    throw new InvalidOperationException("Generated pipeline builders type not found. Please ensure that you have CQRSharp.Generators installed.");
 
                 var mapProperty = generatedType.GetProperty(SourceGeneratorConstants.PipelineMapPropertyName);
                 if (mapProperty == null)
@@ -111,12 +111,12 @@ namespace CQRSharp.Core.Extensions
                     throw new InvalidOperationException("No pipeline builders were found in the generated registry.");
 
                 services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(pipelineMap));
-                Logger.LogInformation("Pipeline registry registered using AoT-generated pipeline builders.");
+                Logger.LogInformation("Pipeline registry registered using generated pipeline builders.");
                 return pipelineMap;
             }
             catch (Exception ex)
             {
-                Logger.LogCritical(ex, "Failed to register AoT-generated pipeline builders. Please ensure that the compile-time code generator has run.");
+                Logger.LogCritical(ex, "Failed to register generated pipeline builders. Please ensure that the compile-time code generator has run and you have CQRSharp.Generators installed.");
                 throw;
             }
         }

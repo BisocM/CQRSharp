@@ -9,15 +9,13 @@
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IsRoslynComponent>true</IsRoslynComponent>
         <PackageReleaseNotes>
-            🚀 Release Notes for 2.2.1
+            🚀 Release Notes for 2.2.3.1
 
             🔧 Roslyn Generators
-
-		Each request not contains more information regarding compile-time execution - including RequestMetadata. Now, you can retrieve more runtime-specific information that will allow for more fine-grained control over program execution, if desired.
-		Each request completion notification now also contains data about the context of the executed request and its metadata.
+		Implemented a hotfix for Roslyn generators that would not allow them to adequately register command return types.
 
             📂 Breaking Changes?
-		Removed ExecutionLoggingBehavior due to AoT incompatibility and redundancy. In future versions, all behaviors will be moved to a separate package.</PackageReleaseNotes>
+		No breaking changes.</PackageReleaseNotes>
         <RunAnalyzers>false</RunAnalyzers>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -27,7 +25,7 @@
     <!-- NuGet Package Metadata -->
     <PropertyGroup>
         <PackageId>CQRSharp.Generators</PackageId>
-        <Version>2.2.3</Version>
+        <Version>2.2.3.1</Version>
         <Title>CQRSharp Source Generators</Title>
         <Authors>BisocM</Authors>
         <Description>A set of Roslyn source code generators that allow Native AoT compatibility for the CQRSharp Library.</Description>
