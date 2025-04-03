@@ -30,6 +30,9 @@ namespace CQRSharp.Core.Caching.Requests;
 /// <param name="ResultType">
 ///     The type of the result expected from the request, if applicable. NULL for commands.
 /// </param>
+/// /// <param name="ContextType">
+///     The type of the context of the request.
+/// </param>
 public sealed record RequestMetadata(
     Type RequestType,
     Type? HandlerType,

@@ -96,7 +96,7 @@ namespace CQRSharp.Tests
         {
             //Arrange
             var handlerDict = new ConcurrentDictionary<Type, RequestMetadata>();
-            var registry = new HandlerRegistry(handlerDict);
+            var registry = new RequestRegistry(handlerDict);
 
             //Act
             var result = registry.GetHandlerType(typeof(UnregisteredRequest));
@@ -124,7 +124,7 @@ namespace CQRSharp.Tests
             );
 
             handlerDict.TryAdd(typeof(RegisteredRequest), testMetadata);
-            var registry = new HandlerRegistry(handlerDict);
+            var registry = new RequestRegistry(handlerDict);
 
             //Act
             var result = registry.GetHandlerType(typeof(RegisteredRequest));

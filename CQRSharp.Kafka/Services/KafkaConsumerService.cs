@@ -15,18 +15,18 @@ namespace CQRSharp.Kafka.Services
         private readonly IConsumer<string, string> _consumer;
         private readonly IServiceProvider _serviceProvider;
         private readonly KafkaOptions _options;
-        private readonly IHandlerRegistry _handlerRegistry;
+        private readonly IRequestRegistry _requestRegistry;
         private readonly ILogger<KafkaCommandConsumerService> _logger;
 
         public KafkaCommandConsumerService(
             KafkaOptions options,
             IServiceProvider serviceProvider,
-            IHandlerRegistry handlerRegistry,
+            IRequestRegistry requestRegistry,
             ILogger<KafkaCommandConsumerService> logger)
         {
             _options = options;
             _serviceProvider = serviceProvider;
-            _handlerRegistry = handlerRegistry;
+            _requestRegistry = requestRegistry;
             _logger = logger;
 
             var config = new ConsumerConfig
@@ -84,6 +84,6 @@ namespace CQRSharp.Kafka.Services
 
         //Use the handler registry to find the command type by name
         private Type? GetCommandTypeByName(string commandName) =>
-            _handlerRegistry.GetCommandTypeByName(commandName);
+            _requestRegistry.GetCommandTypeByName(commandName);
     }
 }

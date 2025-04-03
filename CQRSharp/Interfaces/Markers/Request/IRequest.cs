@@ -8,13 +8,6 @@ namespace CQRSharp.Interfaces.Markers.Request;
 /// </summary>
 public interface IRequest
 {
-    /// <summary>
-    ///     A context object that stores request-level metadata like RequestId and UserId.
-    /// </summary>
     public IRequestContext? Context { get; set; }
-
-    /// <summary>
-    /// Metadata related to the request. Contains runtime-specific data.
-    /// </summary>
     public RequestMetadata? Metadata { get; set; }
 }

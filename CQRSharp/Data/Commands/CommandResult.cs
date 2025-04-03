@@ -10,11 +10,6 @@
 ///         the representation of the outcome, providing a stable interface for middleware or
 ///         other handlers to inspect.
 ///     </para>
-///     <para>
-///         This is a <see langword="readonly" /> struct, which helps ensure immutability
-///         and guard against unintended modifications or copying behaviors in more complex
-///         scenarios.
-///     </para>
 /// </remarks>
 public class CommandResult
 {

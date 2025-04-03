@@ -37,7 +37,7 @@ public class Program
                 })
                 .AddTimeoutBehavior(o =>
                 {
-                    o.Timeout = TimeSpan.FromSeconds(10);
+                    o.Timeout = TimeSpan.FromMilliseconds(10000);
                 })
                 .AddResilienceBehavior(o =>
                 {

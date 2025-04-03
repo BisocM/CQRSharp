@@ -22,20 +22,20 @@ namespace CQRSharp.Core.Requests;
 public sealed class Dispatcher(
     IServiceProvider serviceProvider,
     IBackgroundTaskQueue backgroundTaskQueue,
-    IHandlerRegistry handlerRegistry,
+    IRequestRegistry requestRegistry,
     NotificationDispatcher eventManager,
     DispatcherOptions options) : IDispatcher
 {
     /// <inheritdoc />
     public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
-    {
+    { 
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
-
+        
         //Create the command context for this particular request.
-        if (command is RequestBase requestBase)
+        if (command is IRequest requestBase)
             InitializeRequestContext(requestBase);
-
+        
         //Get the type of the command.
         var requestType = command.GetType();
 
@@ -85,7 +85,7 @@ public sealed class Dispatcher(
         ArgumentNullException.ThrowIfNull(query);
 
         //Assign a unique identifier
-        if (query is RequestBase requestBase)
+        if (query is IRequest requestBase)
             InitializeRequestContext(requestBase);
 
         //Get the type of the request.
@@ -144,7 +144,7 @@ public sealed class Dispatcher(
         //Retrieve the pipeline registry that was registered in DI.
         var pipelineRegistry = services.GetRequiredService<IPipelineRegistry>();
         var requestType = request.GetType();
-
+        
         //Try to get a precompiled pipeline builder for the request type.
         if (!pipelineRegistry.PipelineMap.TryGetValue(requestType, out var builder))
         {
@@ -159,7 +159,7 @@ public sealed class Dispatcher(
 
                 //For commands
                 return HandleCommand(req, handler, ct)
-                    .ContinueWith(t => (TResult)(object)CommandResult.FromSuccess(), ct);
+                    .ContinueWith(_ => (TResult)(object)CommandResult.FromSuccess(), ct);
             };
         }
 
@@ -179,7 +179,7 @@ public sealed class Dispatcher(
             else
             {
                 return HandleCommand(request, handler, ct)
-                    .ContinueWith(object (t) => CommandResult.FromSuccess(), ct);
+                    .ContinueWith(object (_) => CommandResult.FromSuccess(), ct);
             }
         };
 
@@ -201,7 +201,7 @@ public sealed class Dispatcher(
         CancellationToken cancellationToken)
     {
         //Retrieve the relevant command metadata from the registry
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
         var metadata = registry.GetMetadata(request.GetType());
         if (metadata == null)
             throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
@@ -233,7 +233,7 @@ public sealed class Dispatcher(
         CancellationToken cancellationToken)
     {
         //Retrieve the relevant command metadata from the registry
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
         var metadata = registry.GetMetadata(request.GetType());
         if (metadata == null)
             throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
@@ -282,7 +282,7 @@ public sealed class Dispatcher(
     /// <returns>The handler instance.</returns>
     private object GetHandler(Type requestType, IServiceProvider scopedProvider)
     {
-        var handlerType = handlerRegistry.GetHandlerType(requestType)
+        var handlerType = requestRegistry.GetHandlerType(requestType)
                           ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
 
         var handler = scopedProvider.GetRequiredService(handlerType)
@@ -296,7 +296,7 @@ public sealed class Dispatcher(
     ///     Method used to generate execution context for any request type.
     /// </summary>
     /// <param name="requestBase">The request object.</param>
-    private void InitializeRequestContext(RequestBase requestBase)
+    private void InitializeRequestContext(IRequest requestBase)
     {
         //If the user already provided a context, don't overwrite it.
         if (requestBase.Context != null)
@@ -307,7 +307,7 @@ public sealed class Dispatcher(
         requestBase.Context = contextFactory.CreateContext(requestBase);
         
         //Populate the request with its respective metadata.
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
         var metadata = registry.GetMetadata(requestBase.GetType());
         requestBase.Metadata = metadata;
     }

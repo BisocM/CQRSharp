@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;
 using FluentAssertions;
@@ -11,16 +12,16 @@ namespace CQRSharp.Tests
 {
     public class RateLimiterTests
     {
-        private readonly Mock<ILogger<RateLimitingBehavior<RequestBase, object>>> _behaviorLoggerMock;
+        private readonly Mock<ILogger<RateLimitingBehavior<RequestBase<RateLimitedContext>, object>>> _behaviorLoggerMock;
         private readonly Mock<ILogger<RateLimiter>> _rateLimiterLoggerMock;
         private readonly RateLimiterOptions _rateLimiterOptions;
         private RateLimiter _rateLimiter;
-        private RateLimitingBehavior<RequestBase, object> _rateLimitingBehavior;
+        private RateLimitingBehavior<RequestBase<RateLimitedContext>, object> _rateLimitingBehavior;
 
         public RateLimiterTests()
         {
             //Initialize mocks
-            _behaviorLoggerMock = new Mock<ILogger<RateLimitingBehavior<RequestBase, object>>>();
+            _behaviorLoggerMock = new Mock<ILogger<RateLimitingBehavior<RequestBase<RateLimitedContext>, object>>>();
             _rateLimiterLoggerMock = new Mock<ILogger<RateLimiter>>();
 
             //Configure RateLimiterOptions with defaults
@@ -35,7 +36,7 @@ namespace CQRSharp.Tests
             _rateLimiter = new RateLimiter(_rateLimiterOptions, _rateLimiterLoggerMock.Object);
 
             //Instantiate RateLimitingBehavior with mocks
-            _rateLimitingBehavior = new RateLimitingBehavior<RequestBase, object>(
+            _rateLimitingBehavior = new RateLimitingBehavior<RequestBase<RateLimitedContext>, object>(
                 _behaviorLoggerMock.Object,
                 _rateLimiter);
         }
@@ -48,7 +49,7 @@ namespace CQRSharp.Tests
             var request = new TestCommand1
             {
                 //This is crucial for passing the user ID to RateLimitingBehavior
-                Context = new RequestContextBase("requestId1", userId)
+                Context = new RateLimitedContext("requestId1", userId),
             };
             
             //Act & Assert (no exception means success)
@@ -63,7 +64,7 @@ namespace CQRSharp.Tests
             var userId = "user2";
             var request = new TestCommand1
             {
-                Context = new RequestContextBase("requestId2", userId)
+                Context = new RateLimitedContext("requestId2", userId),
             };
 
             //Act: Consume all tokens within rate limit
@@ -84,7 +85,7 @@ namespace CQRSharp.Tests
             var userId = "user3";
             var request = new TestCommand1
             {
-                Context = new RequestContextBase("requestId3", userId)
+                Context = new RateLimitedContext("requestId3", userId),
             };
 
             //Consume all tokens
@@ -109,11 +110,11 @@ namespace CQRSharp.Tests
             var userId = "user4";
             var request1 = new TestCommand1
             {
-                Context = new RequestContextBase("requestId4A", userId)
+                Context = new RateLimitedContext("requestId4A", userId),
             };
             var request2 = new TestCommand2
             {
-                Context = new RequestContextBase("requestId4B", userId)
+                Context = new RateLimitedContext("requestId4B", userId),
             };
 
             //Act: Consume all tokens for request1
@@ -139,18 +140,18 @@ namespace CQRSharp.Tests
             //Arrange
             _rateLimiterOptions.Scope = RateLimitScope.Global;
             _rateLimiter = new RateLimiter(_rateLimiterOptions, _rateLimiterLoggerMock.Object);
-            _rateLimitingBehavior = new RateLimitingBehavior<RequestBase, object>(
+            _rateLimitingBehavior = new RateLimitingBehavior<RequestBase<RateLimitedContext>, object>(
                 _behaviorLoggerMock.Object,
                 _rateLimiter);
 
             var userId = "user5";
             var request1 = new TestCommand1
             {
-                Context = new RequestContextBase("requestId5A", userId)
+                Context = new RateLimitedContext("requestId5A", userId)
             };
             var request2 = new TestCommand2
             {
-                Context = new RequestContextBase("requestId5B", userId)
+                Context = new RateLimitedContext("requestId5B", userId)
             };
 
             //Act: Consume all tokens using request1
@@ -184,7 +185,7 @@ namespace CQRSharp.Tests
             {
                 var localRequest = new TestCommand1
                 {
-                    Context = new RequestContextBase($"request_{userId}_{callIndex}", userId)
+                    Context = new RateLimitedContext($"request_{userId}_{callIndex}", userId)
                 };
 
                 try
@@ -213,7 +214,7 @@ namespace CQRSharp.Tests
             var request = new TestCommand1
             {
                 //The big difference: If there's no user ID in the context, it will fail.
-                Context = new RequestContextBase("requestNullUser", null)
+                Context = new RateLimitedContext("requestNullUser", null)
             };
 
             //Act & Assert
@@ -228,7 +229,7 @@ namespace CQRSharp.Tests
             var userId = "user9";
             var request = new TestCommand1
             {
-                Context = new RequestContextBase("requestId9", userId)
+                Context = new RateLimitedContext("requestId9", userId)
             };
 
             //Attempt twice the max tokens concurrently
@@ -278,7 +279,7 @@ namespace CQRSharp.Tests
         }
 
         //Simple test command classes inheriting RequestBase
-        public class TestCommand1 : RequestBase { }
-        public class TestCommand2 : RequestBase { }
+        public class TestCommand1 : RequestBase<RateLimitedContext> { }
+        public class TestCommand2 : RequestBase<RateLimitedContext> { }
     }
 }

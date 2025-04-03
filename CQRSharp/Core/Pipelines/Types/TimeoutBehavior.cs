@@ -6,7 +6,7 @@ namespace CQRSharp.Core.Pipelines.Types;
 
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
-    TimeoutOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
+    TimeoutOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
 {
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,

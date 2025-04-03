@@ -9,19 +9,8 @@ namespace CQRSharp.Interfaces.Markers.Query;
 /// </summary>
 /// <typeparam name="TResult">The return type of the query.</typeparam>
 /// <typeparam name="TContext">A user-defined context type implementing <see cref="IRequestContext" />.</typeparam>
-public abstract class QueryBase<TResult, TContext>
-    : RequestBase, IQuery<TResult>
-    where TContext : IRequestContext
-{
-    /// <summary>
-    ///     Strongly typed context property, set by the dispatcher or context factory.
-    /// </summary>
-    public new TContext? Context
-    {
-        get => (TContext?)base.Context;
-        set => base.Context = value;
-    }
-}
+public abstract class QueryBase<TResult, TContext> : RequestBase<TContext>, IQuery<TResult>
+    where TContext : IRequestContext;
 
 /// <summary>
 ///     Non-generic QueryBase for those who do not need custom context.

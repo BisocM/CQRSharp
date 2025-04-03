@@ -7,7 +7,7 @@ namespace CQRSharp.Core.Caching.Requests;
 ///     types.
 ///     This allows for dynamic retrieval of handler types based on the request type received.
 /// </summary>
-public sealed class HandlerRegistry(ConcurrentDictionary<Type, RequestMetadata> handlerMappings) : IHandlerRegistry
+public sealed class RequestRegistry(ConcurrentDictionary<Type, RequestMetadata> handlerMappings) : IRequestRegistry
 {
     /// <inheritdoc />
     public Type? GetHandlerType(Type requestType)

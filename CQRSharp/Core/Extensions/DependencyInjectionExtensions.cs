@@ -54,7 +54,7 @@ namespace CQRSharp.Core.Extensions
 
             //Automatically register handlers and pipeline behaviors.
             var handlerMappings = RegisterAndBuildMetadata(services);
-            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMappings));
+            services.AddSingleton<IRequestRegistry>(new RequestRegistry(handlerMappings));
 
             // Automatically register pipelines.
             var pipelineMappings = services.AddPipelineRegistryUsingGeneratedPipelines();

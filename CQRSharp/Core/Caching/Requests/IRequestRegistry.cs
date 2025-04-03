@@ -3,7 +3,7 @@
 /// <summary>
 ///     Defines a registry for managing handler and command type associations.
 /// </summary>
-public interface IHandlerRegistry
+public interface IRequestRegistry
 {
     /// <summary>
     ///     Retrieves the handler type associated with the specified request type.

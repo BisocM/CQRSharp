@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Pipelines.Attributes;
+using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
@@ -8,13 +9,13 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 public sealed class RateLimitingBehavior<TRequest, TResult>(
     ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
     RateLimiter rateLimiter)
-    : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase
+    : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase<IRateLimitedContext>
 {
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
         //Ensure the request can be cast to RequestBase for identifier extraction
-        if (request is not RequestBase baseRequest)
+        if (request is not RequestBase<IRateLimitedContext> baseRequest)
         {
             logger.LogError("Rate limiting failed: request must inherit from RequestBase to support rate limiting.");
             throw new InvalidOperationException("Request must inherit from RequestBase to support rate limiting.");
@@ -31,7 +32,7 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
             baseRequest.Context?.RequestId);
 
         //Apply rate limiting based on the user identifier
-        var isAllowed = rateLimiter.AllowRequest(request.Context.UserId, baseRequest.GetType().Name);
+        var isAllowed = rateLimiter.AllowRequest((string)request.Context.UserId, baseRequest.GetType().Name);
         if (!isAllowed)
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
