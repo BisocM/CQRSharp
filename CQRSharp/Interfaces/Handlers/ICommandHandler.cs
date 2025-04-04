@@ -1,6 +1,7 @@
 ﻿using CQRSharp.Data.Commands;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Command;
+using CQRSharp.Shared.Attributes;
 
 namespace CQRSharp.Interfaces.Handlers;
 
@@ -9,6 +10,7 @@ namespace CQRSharp.Interfaces.Handlers;
 /// </summary>
 /// <typeparam name="TCommand">The type of the command.</typeparam>
 /// <typeparam name="TContext">The type of the context object carried by the command.</typeparam>
+[HandlerType(HandlerKind.Command)]
 public interface ICommandHandler<in TCommand, TContext>
     where TCommand : ICommand where TContext : IRequestContext
 {
@@ -27,4 +29,5 @@ public interface ICommandHandler<in TCommand, TContext>
 ///     Interface for handling commands that do not return a result.
 /// </summary>
 /// <typeparam name="TCommand">The type of the command.</typeparam>
+[HandlerType(HandlerKind.Command)]
 public interface ICommandHandler<in TCommand> : ICommandHandler<TCommand, RequestContextBase> where TCommand : ICommand;

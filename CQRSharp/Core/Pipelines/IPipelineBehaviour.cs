@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Attributes;
 
 namespace CQRSharp.Core.Pipelines;
 
@@ -7,6 +8,7 @@ namespace CQRSharp.Core.Pipelines;
 /// </summary>
 /// <typeparam name="TRequest">The type of the command.</typeparam>
 /// <typeparam name="TResult">The type of the result returned by the command.</typeparam>
+[HandlerType(HandlerKind.PipelineBehavior)]
 public interface IPipelineBehavior<in TRequest, TResult> where TRequest : IRequest
 {
     /// <summary>

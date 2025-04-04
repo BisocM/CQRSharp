@@ -1,9 +1,12 @@
-﻿namespace CQRSharp.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Attributes;
+
+namespace CQRSharp.Interfaces.Notifications;
 
 /// <summary>
 ///     Interface for handling notifications.
 /// </summary>
 /// <typeparam name="TNotification">The type of the notification.</typeparam>
+[HandlerType(HandlerKind.Notification)]
 public interface INotificationHandler<in TNotification> where TNotification : INotification
 {
     /// <summary>
