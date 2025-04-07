@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Data.Requests;
 using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Interfaces.Markers.Request;

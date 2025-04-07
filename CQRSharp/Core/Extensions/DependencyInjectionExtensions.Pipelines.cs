@@ -3,6 +3,7 @@ using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Core.SourceGeneration;
 using CQRSharp.Shared.Constants;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -83,42 +84,6 @@ namespace CQRSharp.Core.Extensions
             Logger.LogInformation("RateLimitingBehavior has been registered.");
 
             return services;
-        }
-
-        /// <summary>
-        /// Registers the pipeline registry using generated pipeline builders.
-        /// Looks for a generated type in the known namespace and uses it if available.
-        /// </summary>
-        private static IReadOnlyDictionary<Type, PipelineBuilderDelegate> AddPipelineRegistryUsingGeneratedPipelines(this IServiceCollection services)
-        {
-            try
-            {
-                var generatedType = AppDomain.CurrentDomain.GetAssemblies()
-                    .Select(a => a.GetType($"{SourceGeneratorConstants.GeneratedNamespace}.{SourceGeneratorConstants.PipelineRegistryClassName}"))
-                    .FirstOrDefault(t => t != null);
-
-                if (generatedType == null)
-                    throw new InvalidOperationException("Generated pipeline builders type not found. Please ensure that you have CQRSharp.Generators installed.");
-
-                var mapProperty = generatedType.GetProperty(SourceGeneratorConstants.PipelineMapPropertyName);
-                if (mapProperty == null)
-                    throw new InvalidOperationException($"Generated {SourceGeneratorConstants.PipelineMapPropertyName} property not found on the generated pipeline builders type.");
-
-                if (mapProperty.GetValue(null) is not IReadOnlyDictionary<Type, PipelineBuilderDelegate> pipelineMap)
-                    throw new InvalidOperationException("Generated PipelineMap property is null or of an unexpected type.");
-
-                if (pipelineMap.Count == 0)
-                    throw new InvalidOperationException("No pipeline builders were found in the generated registry.");
-
-                services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(pipelineMap));
-                Logger.LogInformation("Pipeline registry registered using generated pipeline builders.");
-                return pipelineMap;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogCritical(ex, "Failed to register generated pipeline builders. Please ensure that the compile-time code generator has run and you have CQRSharp.Generators installed.");
-                throw;
-            }
         }
     }
 }

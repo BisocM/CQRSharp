@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
 
-namespace CQRSharp.Core.Caching.Requests;
+namespace CQRSharp.Data.Requests;
 
 /// <summary>
 ///     Represents metadata for a specific request, including its associations with
@@ -29,9 +29,6 @@ namespace CQRSharp.Core.Caching.Requests;
 /// </param>
 /// <param name="ResultType">
 ///     The type of the result expected from the request, if applicable. NULL for commands.
-/// </param>
-/// /// <param name="ContextType">
-///     The type of the context of the request.
 /// </param>
 public sealed record RequestMetadata(
     Type RequestType,

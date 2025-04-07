@@ -22,17 +22,26 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.3.1</Version>
+        <Version>2.2.4</Version>
         <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>
-            🚀 Release Notes for 2.2.3.1
+            🚀 Release Notes for 2.2.4
 
-            🔧 Roslyn Generators
-		Implemented a hotfix for Roslyn generators that would not allow them to adequately register command return types.
-
+            🔧 Changes
+            - Replaced string-based detection of handlers and requests with a new attribute-driven approach.
+            - Improved diagnostic messages (e.g., warnings if a required attribute is missing or if no handlers are found).
+            - Added new file CQRSharp.Shared.Attributes.RegistrationMarkers.cs providing HandlerTypeAttribute and RequestMarkerAttribute.
+            - Improved the source code generators drastically - complete Native AoT support for all functionality.
+            - Complete elimination of reflection in the codebase contributing to AoT support and better performance on runtime.
+            - All registries that are responsible for mapping out various ConccurentDictionary instances on compile-time now share a very recognizable, and simple pattern, involving IDataRegistrar, Registrar and their respective interfaces and implementations. The code now utilizes ModuleInitializer to run code that binds the Registrar instances to the generated code on runtime.
+            - Modified all source generator code that involves itself with registering various classes with the DI container to use a unified registrar system. This ensures minimal hard-coding.
+            - The library now has complete support for custom context types implementations in IRequestContextFactory - earlier, this was locked to a single context type, forcing users to write their own workarounds for creation of context instances.
+            
             📂 Breaking Changes?
-		No breaking changes.</PackageReleaseNotes>
+            - The CQRSharp.Kafka project has been fully removed. No built-in Kafka publishing or consumer services remain.
+            - Minor API shift in RateLimiter tests and usage from RateLimitedContext to IRateLimitedContext. Now all contexts that want to utilize the rate limiter will need to inherit from the IRateLimitedContext, to implement the required parameters for the rate limiter to execute its logic.
+        </PackageReleaseNotes>
     </PropertyGroup>
 
     <!-- Package Assets -->

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Data.Requests;
 using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Request;
 using CQRSharp.Interfaces.Notifications;
@@ -99,7 +100,7 @@ namespace CQRSharp.Tests
             var registry = new RequestRegistry(handlerDict);
 
             //Act
-            var result = registry.GetHandlerType(typeof(UnregisteredRequest));
+            var result = registry.TryGetHandlerType(typeof(UnregisteredRequest));
 
             //Assert
             result.Should().BeNull("no metadata was added for UnregisteredRequest");
@@ -127,7 +128,7 @@ namespace CQRSharp.Tests
             var registry = new RequestRegistry(handlerDict);
 
             //Act
-            var result = registry.GetHandlerType(typeof(RegisteredRequest));
+            var result = registry.TryGetHandlerType(typeof(RegisteredRequest));
 
             //Assert
             result.Should().Be<RegisteredRequestHandler>("the registry should return the handler type specified in the metadata");

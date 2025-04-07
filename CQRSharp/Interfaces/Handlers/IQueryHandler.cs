@@ -1,6 +1,7 @@
 ﻿using CQRSharp.Interfaces.Context;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Shared.Attributes;
+using CQRSharp.Shared.Attributes.Requests;
 
 namespace CQRSharp.Interfaces.Handlers;
 

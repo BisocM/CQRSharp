@@ -10,15 +10,16 @@
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <PublishAot>true</PublishAot>
         <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+        <RunAnalyzers>true</RunAnalyzers>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="CQRSharp.Generators" Version="2.2.1.5" />
+        <PackageReference Include="CQRSharp.Generators" Version="2.2.3.3" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp\CQRSharp.csproj"/>
+        <ProjectReference Include="..\CQRSharp\CQRSharp.csproj"/>        
         <!-- <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/> -->
     </ItemGroup>
 
