@@ -1,4 +1,5 @@
-﻿using CQRSharp.Interfaces.Markers.Query;
+﻿using CQRSharp.Interfaces.Context;
+using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
@@ -9,6 +10,7 @@ namespace CQRSharp.Core.Notifications.Types;
 ///     right before the execution of the query is initiated, before pre-handle attributes.
 /// </summary>
 /// <typeparam name="TResult">The type of the result expected from the query.</typeparam>
+/// <typeparam name="TContext">The type of the context object of the query.</typeparam>
 public sealed class QueryInitiatedNotification<TResult> : INotification
 {
     /// <summary>

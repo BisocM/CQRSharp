@@ -7,14 +7,8 @@
 public interface IRequestContext
 {
     /// <summary>
-    ///     The unique identifier for this request.
-    ///     Typically set by the dispatcher upon receiving the request.
+    ///     The timestamp indicating when the context or request was created.
+    ///     Value is equal to the current UTC time upon initialization.
     /// </summary>
-    string? RequestId { get; }
-
-    /// <summary>
-    ///     The identifier for the user making the request, if available.
-    ///     Typically set by a pipeline behavior using IUserIdentificationFactory.
-    /// </summary>
-    string? UserId { get; }
+    DateTime CreatedAt { get; }
 }

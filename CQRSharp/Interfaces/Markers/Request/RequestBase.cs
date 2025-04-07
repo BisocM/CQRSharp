@@ -1,16 +1,31 @@
 ﻿using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Data.Requests;
 using CQRSharp.Interfaces.Context;
 
 namespace CQRSharp.Interfaces.Markers.Request;
 
 /// <summary>
-///     Base class for all requests.
+///     Represents a fundamental base class for handling requests.
 /// </summary>
-public abstract class RequestBase : IRequest
+public abstract class RequestBase<TContext> : IRequest where TContext : IRequestContext
 {
-    /// <inheritdoc />
-    public IRequestContext? Context { get; set; }
+    /// <summary>
+    ///     A context object that stores request-level metadata like RequestId and UserId.
+    /// </summary>
+    public TContext? Context { get; set; }
+    
+    IRequestContext? IRequest.Context
+    {
+        get => Context;
+        set
+        {
+            if (value != null) Context = (TContext)value;
+            else throw new ArgumentNullException(nameof(value), "Context cannot be null.");
+        }
+    }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Metadata related to the request. Contains runtime-specific data.
+    /// </summary>
     public RequestMetadata? Metadata { get; set; }
 }

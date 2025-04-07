@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using CQRSharp.Core.Requests;
+using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Management.Menu;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

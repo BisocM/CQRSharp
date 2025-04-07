@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Attributes.Markers;
 
-namespace CQRSharp.Core.Caching.Requests;
+namespace CQRSharp.Data.Requests;
 
 /// <summary>
 ///     Represents metadata for a specific request, including its associations with

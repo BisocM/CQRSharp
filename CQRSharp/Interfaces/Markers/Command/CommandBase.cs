@@ -7,19 +7,8 @@ namespace CQRSharp.Interfaces.Markers.Command;
 /// <summary>
 ///     Base class for commands that can optionally specify a custom TContext.
 /// </summary>
-public abstract class CommandBase<TContext> : RequestBase, ICommand
-    where TContext : IRequestContext
-{
-    /// <summary>
-    ///     A strongly typed context property. In the library’s runtime usage,
-    ///     this will be assigned automatically by the dispatcher or context factory.
-    /// </summary>
-    public new TContext Context
-    {
-        get => (TContext)base.Context!;
-        set => base.Context = value;
-    }
-}
+public abstract class CommandBase<TContext> : RequestBase<TContext>, ICommand
+    where TContext : IRequestContext;
 
 /// <summary>
 ///     Non-generic CommandBase for those who do not need custom context.

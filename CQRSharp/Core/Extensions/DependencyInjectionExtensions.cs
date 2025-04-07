@@ -1,14 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
-using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.Core.Pipelines.Attributes.Markers;
 using CQRSharp.Core.Requests;
 using CQRSharp.Data.Commands;
+using CQRSharp.Data.Requests;
 using CQRSharp.Interfaces.Markers.Command;
 using CQRSharp.Interfaces.Markers.Query;
 using CQRSharp.Shared.Constants;
@@ -52,13 +50,23 @@ namespace CQRSharp.Core.Extensions
                 loggingBuilder.SetMinimumLevel(LogLevel.Information);
             });
 
-            //Automatically register handlers and pipeline behaviors.
-            var handlerMappings = RegisterAndBuildMetadata(services);
-            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMappings));
-
-            // Automatically register pipelines.
-            var pipelineMappings = services.AddPipelineRegistryUsingGeneratedPipelines();
-            services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(pipelineMappings));
+            //Register handlers from the generated file.
+            int serviceCount = services.Count;
+            AddGeneratedHandlers(services);
+            int registeredHandlers = services.Count - serviceCount;
+            Logger.LogInformation($"Successfully registered {registeredHandlers} request handlers.");
+            
+            //Register the pipeline registry
+            AddGeneratedPipelineRegistry(services);
+            Logger.LogInformation("Successfully registered the pipeline registry.");
+            
+            //Register the request data registry
+            AddGeneratedRequestRegistry(services);
+            Logger.LogInformation("Successfully registered the request data registry.");
+            
+            //Register the handler registry
+            AddGeneratedHandlerRegistry(services);
+            Logger.LogInformation("Successfully registered the handler registry.");
 
             Logger.LogInformation("CQRS service registration completed.");
             return services;
@@ -143,10 +151,10 @@ namespace CQRSharp.Core.Extensions
             return new RequestMetadata(
                 requestType,
                 null,
-                Array.Empty<IPreHandlerAttribute>(),
-                Array.Empty<IPostHandlerAttribute>(),
-                Array.Empty<PipelineExemptionAttribute>(),
-                Array.Empty<PropertySensitivity>(),
+                [],
+                [],
+                [],
+                [],
                 null
             );
         }

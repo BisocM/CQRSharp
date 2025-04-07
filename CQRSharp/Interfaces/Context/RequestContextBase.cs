@@ -11,4 +11,6 @@ public class RequestContextBase(string? requestId, string? userId) : IRequestCon
 
     /// <inheritdoc />
     public string? UserId { get; } = userId;
+    
+    public DateTime CreatedAt { get; } = DateTime.UtcNow;
 }

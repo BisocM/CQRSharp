@@ -1,23 +1,17 @@
-﻿namespace CQRSharp.Core.Caching.Pipelines
-{
-    /// <summary>
-    /// Delegate that builds the execution pipeline for a given request.
-    /// It takes an IServiceProvider, the request as an object, a final‐handler delegate,
-    /// and a cancellation token, returning a Task that yields an object result.
-    /// </summary>
-    public delegate Task<object> PipelineBuilderDelegate(
-        IServiceProvider services,
-        object request,
-        Func<CancellationToken, Task<object>> finalHandler,
-        CancellationToken cancellationToken);
+﻿using System.Collections.Concurrent;
 
-    /// <summary>
-    /// Default implementation of <see cref="IPipelineRegistry"/> that wraps a dictionary mapping request types to delegates.
-    /// </summary>
-    public class PipelineRegistry(IReadOnlyDictionary<Type, PipelineBuilderDelegate> pipelineMap)
-        : IPipelineRegistry
+namespace CQRSharp.Core.Caching.Pipelines;
+
+/// <summary>
+/// Represents a registry for managing and retrieving pipeline builder delegates
+/// mapped to specific request types. The creation of the concurrent dictionary happens in the source code generation part of the library.
+/// </summary>
+public class PipelineRegistry(ConcurrentDictionary<Type, PipelineBuilderDelegate> pipelineMappings) : IPipelineRegistry
+{
+    /// <inheritdoc />
+    public PipelineBuilderDelegate? GetPipelineBuilder(Type requestType)
     {
-        /// <inheritdoc />
-        public IReadOnlyDictionary<Type, PipelineBuilderDelegate> PipelineMap { get; } = pipelineMap;
+        pipelineMappings.TryGetValue(requestType, out var pipelineBuilder);
+        return pipelineBuilder;
     }
 }

@@ -5,5 +5,5 @@ using CQRSharp.Sample.Management.Menu;
 
 namespace CQRSharp.Sample.Commands.Types;
 
-[MenuOrientation(MenuState.PrimaryMenu, 2)]
+[MenuOrientation(MenuState.SecondaryMenu, 2)]
 public class DeleteUserCommand : CommandBase<SampleRequestContext> { }

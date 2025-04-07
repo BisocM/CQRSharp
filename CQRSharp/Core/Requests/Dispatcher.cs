@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
@@ -22,20 +23,21 @@ namespace CQRSharp.Core.Requests;
 public sealed class Dispatcher(
     IServiceProvider serviceProvider,
     IBackgroundTaskQueue backgroundTaskQueue,
+    IRequestRegistry requestRegistry,
     IHandlerRegistry handlerRegistry,
     NotificationDispatcher eventManager,
     DispatcherOptions options) : IDispatcher
 {
     /// <inheritdoc />
     public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
-    {
+    { 
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
-
+        
         //Create the command context for this particular request.
-        if (command is RequestBase requestBase)
+        if (command is IRequest requestBase)
             InitializeRequestContext(requestBase);
-
+        
         //Get the type of the command.
         var requestType = command.GetType();
 
@@ -85,7 +87,7 @@ public sealed class Dispatcher(
         ArgumentNullException.ThrowIfNull(query);
 
         //Assign a unique identifier
-        if (query is RequestBase requestBase)
+        if (query is IRequest requestBase)
             InitializeRequestContext(requestBase);
 
         //Get the type of the request.
@@ -144,9 +146,10 @@ public sealed class Dispatcher(
         //Retrieve the pipeline registry that was registered in DI.
         var pipelineRegistry = services.GetRequiredService<IPipelineRegistry>();
         var requestType = request.GetType();
-
+        
         //Try to get a precompiled pipeline builder for the request type.
-        if (!pipelineRegistry.PipelineMap.TryGetValue(requestType, out var builder))
+        var pipelineBuilder = pipelineRegistry.GetPipelineBuilder(requestType);
+        if (pipelineBuilder is null)
         {
             //Fallback: If no precompiled builder exists, invoke the handler directly.
             return (req, ct) =>
@@ -159,7 +162,7 @@ public sealed class Dispatcher(
 
                 //For commands
                 return HandleCommand(req, handler, ct)
-                    .ContinueWith(t => (TResult)(object)CommandResult.FromSuccess(), ct);
+                    .ContinueWith(_ => (TResult)(object)CommandResult.FromSuccess(), ct);
             };
         }
 
@@ -179,14 +182,14 @@ public sealed class Dispatcher(
             else
             {
                 return HandleCommand(request, handler, ct)
-                    .ContinueWith(object (t) => CommandResult.FromSuccess(), ct);
+                    .ContinueWith(object (_) => CommandResult.FromSuccess(), ct);
             }
         };
-
+        
         //Now return a delegate that uses the precompiled pipeline builder.
         return (req, ct) =>
         {
-            return builder(services, req, finalHandlerWrapper, ct)
+            return pipelineBuilder.Invoke(services, req, finalHandlerWrapper, ct)
                 .ContinueWith(t => (TResult)t.Result, ct);
         };
     }
@@ -201,9 +204,9 @@ public sealed class Dispatcher(
         CancellationToken cancellationToken)
     {
         //Retrieve the relevant command metadata from the registry
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
-        var metadata = registry.GetMetadata(request.GetType());
-        if (metadata == null)
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
+        var success = registry.TryGetRequestMetadata(request.GetType(), out var metadata);
+        if (metadata == null || !success)
             throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
 
         //Retrieve the attribute list
@@ -233,9 +236,9 @@ public sealed class Dispatcher(
         CancellationToken cancellationToken)
     {
         //Retrieve the relevant command metadata from the registry
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
-        var metadata = registry.GetMetadata(request.GetType());
-        if (metadata == null)
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
+        var success = registry.TryGetRequestMetadata(request.GetType(), out var metadata);
+        if (metadata == null || !success)
             throw new InvalidOperationException($"No metadata found for command '{request.GetType().Name}'.");
 
         //Retrieve the attribute list
@@ -261,8 +264,14 @@ public sealed class Dispatcher(
     /// <param name="command">The command to handle.</param>
     /// <param name="handler">The handler instance.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task HandleCommand(object command, object handler, CancellationToken cancellationToken) 
-        => await CommandHandlerInvoker.Handle(command, handler, cancellationToken);
+    private async Task HandleCommand(object command, object handler, CancellationToken cancellationToken)
+    {
+        handlerRegistry.TryGetHandlerDelegate(command.GetType(), out var handlerDelegate);
+        if (handlerDelegate is null)
+            throw new InvalidOperationException($"No handler found for command '{command.GetType().Name}'.");
+        
+        await handlerDelegate(handler, command, cancellationToken);
+    }
 
     /// <summary>
     ///     Handles the query by invoking its corresponding handler and returns the result.
@@ -271,8 +280,16 @@ public sealed class Dispatcher(
     /// <param name="query">The query to handle.</param>
     /// <param name="handler">The handler instance responsible for processing the query.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private static async Task<TResult> HandleQuery<TResult>(object query, object handler, CancellationToken cancellationToken) 
-        => await QueryHandlerInvoker.Handle<TResult>(query, handler, cancellationToken);
+    private async Task<TResult> HandleQuery<TResult>(object query, object handler,
+        CancellationToken cancellationToken)
+    {
+        handlerRegistry.TryGetHandlerDelegate(query.GetType(), out var handlerDelegate);
+        if (handlerDelegate is null)
+            throw new InvalidOperationException($"No handler found for command '{query.GetType().Name}'.");
+        
+        var queryResult = await handlerDelegate(handler, query, cancellationToken);
+        return (TResult)queryResult;
+    }
 
     /// <summary>
     ///     Retrieves the appropriate handler for the given command type.
@@ -282,7 +299,7 @@ public sealed class Dispatcher(
     /// <returns>The handler instance.</returns>
     private object GetHandler(Type requestType, IServiceProvider scopedProvider)
     {
-        var handlerType = handlerRegistry.GetHandlerType(requestType)
+        var handlerType = requestRegistry.TryGetHandlerType(requestType)
                           ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
 
         var handler = scopedProvider.GetRequiredService(handlerType)
@@ -296,7 +313,7 @@ public sealed class Dispatcher(
     ///     Method used to generate execution context for any request type.
     /// </summary>
     /// <param name="requestBase">The request object.</param>
-    private void InitializeRequestContext(RequestBase requestBase)
+    private void InitializeRequestContext(IRequest requestBase)
     {
         //If the user already provided a context, don't overwrite it.
         if (requestBase.Context != null)
@@ -307,8 +324,11 @@ public sealed class Dispatcher(
         requestBase.Context = contextFactory.CreateContext(requestBase);
         
         //Populate the request with its respective metadata.
-        var registry = serviceProvider.GetRequiredService<IHandlerRegistry>();
-        var metadata = registry.GetMetadata(requestBase.GetType());
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
+        var success = registry.TryGetRequestMetadata(requestBase.GetType(), out var metadata);
+        if (!success)
+            throw new InvalidOperationException($"No metadata found for request '{requestBase.GetType().Name}'.");
+        
         requestBase.Metadata = metadata;
     }
 }
