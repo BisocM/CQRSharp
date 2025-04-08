@@ -17,7 +17,7 @@ public sealed class CommandInitiatedNotification : INotification
     /// <param name="command">
     ///     The command for which the notification is raised. This typically implements
     ///     <see cref="ICommand" /> and may also be a <see cref="RequestBase{TContext}" />, which has a
-    ///     <see cref="RequestBase.Context" /> property.
+    ///     <see cref="RequestBase{TContext}.Context"/>
     /// </param>
     public CommandInitiatedNotification(ICommand command)
     {

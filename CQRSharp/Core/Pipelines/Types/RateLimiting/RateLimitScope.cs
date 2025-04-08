@@ -1,5 +1,8 @@
 ﻿namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 
+/// <summary>
+/// Specifies the scope for rate limiting, determining how rate limits are applied.
+/// </summary>
 public enum RateLimitScope
 {
     /// <summary>

@@ -11,7 +11,7 @@
 ///         other handlers to inspect.
 ///     </para>
 /// </remarks>
-public class CommandResult
+public record CommandResult
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="CommandResult" /> struct.

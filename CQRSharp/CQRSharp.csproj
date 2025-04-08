@@ -9,6 +9,7 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <EnableAotAnalyzer>true</EnableAotAnalyzer>
+        <RunAOTCompilation>true</RunAOTCompilation>
     </PropertyGroup>
 
     <!-- NuGet Package Metadata -->

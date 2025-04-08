@@ -23,7 +23,7 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 public sealed class RateLimitingBehavior<TRequest, TResult>(
     ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
     RateLimiter rateLimiter)
-    : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase<IRateLimitedContext>
+    : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
 {
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
@@ -36,27 +36,27 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
             throw new InvalidOperationException("Request must inherit from RequestBase to support rate limiting.");
         }
 
-        if (request.Context?.UserId == null)
+        if (baseRequest.Context?.UserId == null)
         {
             logger.LogWarning("User identifier could not be determined for request {RequestId}.",
                 baseRequest.Context?.RequestId);
             throw new InvalidOperationException("User identifier could not be determined for rate limiting.");
         }
 
-        logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.", request.Context.UserId,
+        logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.", baseRequest.Context.UserId,
             baseRequest.Context?.RequestId);
 
         //Apply rate limiting based on the user identifier
-        var isAllowed = rateLimiter.AllowRequest((string)request.Context.UserId, baseRequest.GetType().Name);
+        var isAllowed = rateLimiter.AllowRequest((string)baseRequest.Context.UserId, baseRequest.GetType().Name);
         if (!isAllowed)
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
-                request.Context.UserId, baseRequest.Context?.RequestId, baseRequest.GetType().Name);
-            throw new RateLimitExceededException(request, "Rate limit exceeded for user.");
+                baseRequest.Context.UserId, baseRequest.Context?.RequestId, baseRequest.GetType().Name);
+            throw new RateLimitExceededException(baseRequest, "Rate limit exceeded for user.");
         }
 
         logger.LogInformation("Request {RequestId} for user {Identifier} passed rate limiting check.",
-            baseRequest.Context?.RequestId, request.Context.UserId);
+            baseRequest.Context?.RequestId, baseRequest.Context?.UserId);
 
         return await next(cancellationToken);
     }

@@ -43,11 +43,26 @@ public sealed class Dispatcher(
         //Synchronous execution - await the pipeline.
         if (options.RunMode != RunMode.Async)
             return await PipelineTask(cancellationToken);
+        
+        //Asynchronous mode: wrap the full pipeline in a TaskCompletionSource. This will allow the user to receive a callback
+        //in-line, without having to listen to the completion notification.
+        var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        //Asynchronous execution - fire and forget.
-        //Since this is fire and forget, return success, as the result will not be awaited.
-        backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
-        return CommandResult.FromSuccess(); //Always return success in cases where the asynchronous execution is used.
+        await backgroundTaskQueue.QueueBackgroundWorkItemAsync(async ct =>
+        {
+            try
+            {
+                var result = await PipelineTask(ct);
+                tcs.SetResult(result);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }, cancellationToken);
+
+        //Return the task that completes once the entire pipeline has finished.
+        return await tcs.Task;
 
         //Define the pipeline task.
         async Task<CommandResult> PipelineTask(CancellationToken ct)
@@ -96,10 +111,22 @@ public sealed class Dispatcher(
         if (options.RunMode != RunMode.Async)
             return await PipelineTask(cancellationToken);
 
-        //Asynchronous execution - fire and forget.
-        //Since this is fire and forget, return default, as the result will not be awaited.
-        backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
-        return default;
+        //Asynchronous mode: use TaskCompletionSource to wrap the full pipeline.
+        var tcs = new TaskCompletionSource<TResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await backgroundTaskQueue.QueueBackgroundWorkItemAsync(async ct =>
+        {
+            try
+            {
+                var result = await PipelineTask(ct);
+                tcs.SetResult(result);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        }, cancellationToken);
+
+        return await tcs.Task;
 
         async Task<TResult> PipelineTask(CancellationToken ct)
         {
