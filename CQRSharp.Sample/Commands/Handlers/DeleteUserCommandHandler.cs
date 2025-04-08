@@ -1,11 +1,7 @@
-﻿using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Sample.Commands.Types;
+﻿using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Data;
+using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
+using CQRSharp.Shared.Core.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Sample.Commands.Handlers;
@@ -24,17 +20,17 @@ public class DeleteUserCommandHandler(IServiceProvider services) : ICommandHandl
             var user = userList[index];
             Console.WriteLine($"[{index + 1}] {user.Name} || {user.UserGuid}");
         }
-        
+
         //Can't be bothered to add data type validation here. It's a demo after all.
         Console.WriteLine("Select the user that you want to delete.");
-        int.TryParse(Console.ReadLine(), out int input);
-        
+        int.TryParse(Console.ReadLine(), out var input);
+
         //Find the user via indexing
         var selectedUser = userList.ElementAt(input - 1);
-        
+
         //Delete the user
         userStore.DeleteUser(selectedUser);
-        
+
         return CommandResult.FromSuccess();
     }
 }

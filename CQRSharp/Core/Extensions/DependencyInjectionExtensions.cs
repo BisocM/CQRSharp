@@ -1,186 +1,72 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Requests;
-using CQRSharp.Data.Commands;
-using CQRSharp.Data.Requests;
-using CQRSharp.Interfaces.Markers.Command;
-using CQRSharp.Interfaces.Markers.Query;
-using CQRSharp.Shared.Constants;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Core.Data.Models.Commands;
+using CQRSharp.Shared.Core.Data.Models.Requests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Core.Extensions
+namespace CQRSharp.Core.Extensions;
+
+/// <summary>
+///     Provides extension methods for configuring and integrating CQRS functionality
+///     with Microsoft.Extensions.DependencyInjection.
+/// </summary>
+public static partial class DependencyInjectionExtensions
 {
     /// <summary>
-    /// Provides extension methods for configuring and integrating CQRS functionality
-    /// with Microsoft.Extensions.DependencyInjection.
+    ///     Adds the dispatcher and command handlers to the service collection.
+    ///     Responsible for automatic registration of all ICommand, IQuery{TResult},
+    ///     INotification, and IPipelineBehavior{TRequest, TResult} implementations.
     /// </summary>
-    public static partial class DependencyInjectionExtensions
+    public static IServiceCollection AddCqrs(this IServiceCollection services,
+        Action<DispatcherOptions>? configureOptions)
     {
-        /// <summary>
-        /// Adds the dispatcher and command handlers to the service collection.
-        /// Responsible for automatic registration of all ICommand, IQuery{TResult},
-        /// INotification, and IPipelineBehavior{TRequest, TResult} implementations.
-        /// </summary>
-        public static IServiceCollection AddCqrs(this IServiceCollection services,
-            Action<DispatcherOptions>? configureOptions)
+        Logger.LogInformation("Starting CQRS service registration.");
+
+        //Create and register DispatcherOptions.
+        var options = new DispatcherOptions();
+        configureOptions?.Invoke(options);
+        services.AddSingleton(options);
+
+        //Register default components.
+        services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
+        services.AddSingleton<IDispatcher, Dispatcher>();
+        services.AddSingleton<NotificationDispatcher>();
+        services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+        services.AddHostedService<BackgroundTaskService>();
+
+        //Configure logging.
+        services.AddLogging(loggingBuilder =>
         {
-            Logger.LogInformation("Starting CQRS service registration.");
+            loggingBuilder.AddConsole();
+            loggingBuilder.SetMinimumLevel(LogLevel.Information);
+        });
 
-            //Create and register DispatcherOptions.
-            var options = new DispatcherOptions();
-            configureOptions?.Invoke(options);
-            services.AddSingleton(options);
+        //Register handlers from the generated file.
+        var serviceCount = services.Count;
+        AddGeneratedHandlers(services);
+        var registeredHandlers = services.Count - serviceCount;
+        Logger.LogInformation($"Successfully registered {registeredHandlers} request handlers.");
 
-            //Register default components.
-            services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
-            services.AddSingleton<IDispatcher, Dispatcher>();
-            services.AddSingleton<NotificationDispatcher>();
-            services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
-            services.AddHostedService<BackgroundTaskService>();
+        //Register the pipeline registry
+        AddGeneratedPipelineRegistry(services);
+        Logger.LogInformation("Successfully registered the pipeline registry.");
 
-            //Configure logging.
-            services.AddLogging(loggingBuilder =>
-            {
-                loggingBuilder.AddConsole();
-                loggingBuilder.SetMinimumLevel(LogLevel.Information);
-            });
+        //Register the request data registry
+        AddGeneratedRequestRegistry(services);
+        Logger.LogInformation("Successfully registered the request data registry.");
 
-            //Register handlers from the generated file.
-            int serviceCount = services.Count;
-            AddGeneratedHandlers(services);
-            int registeredHandlers = services.Count - serviceCount;
-            Logger.LogInformation($"Successfully registered {registeredHandlers} request handlers.");
-            
-            //Register the pipeline registry
-            AddGeneratedPipelineRegistry(services);
-            Logger.LogInformation("Successfully registered the pipeline registry.");
-            
-            //Register the request data registry
-            AddGeneratedRequestRegistry(services);
-            Logger.LogInformation("Successfully registered the request data registry.");
-            
-            //Register the handler registry
-            AddGeneratedHandlerRegistry(services);
-            Logger.LogInformation("Successfully registered the handler registry.");
+        //Register the handler registry
+        AddGeneratedHandlerRegistry(services);
+        Logger.LogInformation("Successfully registered the handler registry.");
 
-            Logger.LogInformation("CQRS service registration completed.");
-            return services;
-        }
-
-        /// <summary>
-        /// Builds and registers the metadata for requests and handlers using either the generated registry or reflection-based registration.
-        /// </summary>
-        private static ConcurrentDictionary<Type, RequestMetadata> RegisterAndBuildMetadata(
-            IServiceCollection services)
-        {
-            Logger.LogInformation("Registering and building metadata for requests and handlers.");
-
-            //Look for the analyzer-generated registry type.
-            var generatedRegistryType = AppDomain.CurrentDomain.GetAssemblies()
-                .Select(a => a.GetType($"{SourceGeneratorConstants.GeneratedNamespace}.{SourceGeneratorConstants.HandlerRegistryClassName}"))
-                .FirstOrDefault(t => t != null);
-
-            if (generatedRegistryType != null)
-            {
-                Logger.LogInformation("Found generated registry: {RegistryType}", generatedRegistryType.FullName);
-
-                //Invoke its static registration method.
-                var registerMethod = generatedRegistryType.GetMethod(SourceGeneratorConstants.HandleRegistrationMethodName);
-                if (registerMethod == null)
-                {
-                    Logger.LogError("Generated registry found but its RegisterHandlers method is missing.");
-                    throw new InvalidOperationException("Generated registry found but its RegisterHandlers method is missing.");
-                }
-                registerMethod.Invoke(null, [services]);
-
-                //First try to retrieve the generated MetadataMap property.
-                var metadataProperty = generatedRegistryType.GetProperty(SourceGeneratorConstants.MetadataMapPropertyName);
-                if (metadataProperty != null &&
-                    metadataProperty.GetValue(null) is IReadOnlyDictionary<Type, RequestMetadata> { Count: > 0 } generatedMetadata)
-                {
-                    Logger.LogInformation("Using MetadataMap generated by the Roslyn compiler.");
-                    return new ConcurrentDictionary<Type, RequestMetadata>(generatedMetadata);
-                }
-
-                //Otherwise, fallback to using the RegistrationMap property.
-                var mappingProperty = generatedRegistryType.GetProperty(SourceGeneratorConstants.RegistrationMapPropertyName);
-                if (mappingProperty == null)
-                {
-                    Logger.LogError("Registration mapping property not found in generated registry.");
-                    throw new InvalidOperationException("Registration mapping property not found in generated registry.");
-                }
-
-                if (mappingProperty.GetValue(null) is not IReadOnlyDictionary<Type, (Type HandlerInterface, string RegistrationKind)> mapping)
-                {
-                    Logger.LogError("Registration mapping property on generated registry is null.");
-                    throw new InvalidOperationException("Registration mapping property on generated registry is null.");
-                }
-
-                //Build a minimal RequestMetadata dictionary from the generated mapping.
-                var dict = new ConcurrentDictionary<Type, RequestMetadata>();
-                foreach (var (requestType, value) in mapping)
-                {
-                    var handlerInterface = value.HandlerInterface;
-                    Logger.LogInformation("Mapping found: {RequestType} -> {HandlerInterface}", requestType.FullName, handlerInterface.FullName);
-                    var metadata = BuildEmptyMetadata(requestType) with { HandlerType = handlerInterface };
-                    dict[requestType] = metadata;
-                }
-                return dict;
-            }
-
-            //Fallback: Reflection-based registration.
-            if (!System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
-                Logger.LogWarning("Generated registry not found in the build. Please ensure that CQRSharp.Generators is installed.");
-
-            Logger.LogCritical("Generated registry not found. Please ensure that the compile-time code generator has run.");
-            throw new InvalidOperationException("Generated registry not found. Please ensure that the compile-time code generator has run.");
-        }
-
-        #region Helpers
-
-        /// <summary>
-        /// Creates and returns an empty instance of <see cref="RequestMetadata"/> for the given request type.
-        /// </summary>
-        private static RequestMetadata BuildEmptyMetadata(Type requestType)
-        {
-            return new RequestMetadata(
-                requestType,
-                null,
-                [],
-                [],
-                [],
-                [],
-                null
-            );
-        }
-
-        /// <summary>
-        /// Determines the result type for a given request type.
-        /// Checks if the request type implements IQuery{TResult} or ICommand, and returns the corresponding result type.
-        /// </summary>
-        private static Type GetResultTypeForRequestType(Type requestType)
-        {
-            var iQuery = requestType.GetInterfaces().FirstOrDefault(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IQuery<>));
-
-            if (iQuery != null)
-            {
-                var tResult = iQuery.GetGenericArguments()[0];
-                return tResult;
-            }
-
-            if (typeof(ICommand).IsAssignableFrom(requestType))
-                return typeof(CommandResult);
-
-            throw new InvalidOperationException(
-                $"Request type '{requestType.FullName}' implements IRequest but is neither ICommand nor IQuery<T>.");
-        }
-
-        #endregion
+        Logger.LogInformation("CQRS service registration completed.");
+        return services;
     }
 }

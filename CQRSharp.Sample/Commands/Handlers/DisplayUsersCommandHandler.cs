@@ -1,10 +1,7 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Sample.Commands.Types;
+﻿using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Data;
+using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
+using CQRSharp.Shared.Core.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Sample.Commands.Handlers;
@@ -19,10 +16,10 @@ public class DisplayUsersCommandHandler(IServiceProvider services) : ICommandHan
         //Get the all the users from the user store.
         var userStore = services.GetRequiredService<CustomInMemoryUserStore>();
         var userList = userStore.GetUsers();
-        
+
         foreach (var user in userList)
             Console.WriteLine(user.Name);
-        
+
         return CommandResult.FromSuccess();
     }
 }

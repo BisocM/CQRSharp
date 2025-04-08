@@ -2,7 +2,7 @@
 
     <!-- Build Configuration -->
     <PropertyGroup>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
@@ -37,7 +37,7 @@
             - All registries that are responsible for mapping out various ConccurentDictionary instances on compile-time now share a very recognizable, and simple pattern, involving IDataRegistrar, Registrar and their respective interfaces and implementations. The code now utilizes ModuleInitializer to run code that binds the Registrar instances to the generated code on runtime.
             - Modified all source generator code that involves itself with registering various classes with the DI container to use a unified registrar system. This ensures minimal hard-coding.
             - The library now has complete support for custom context types implementations in IRequestContextFactory - earlier, this was locked to a single context type, forcing users to write their own workarounds for creation of context instances.
-            
+
             📂 Breaking Changes?
             - The CQRSharp.Kafka project has been fully removed. No built-in Kafka publishing or consumer services remain.
             - Minor API shift in RateLimiter tests and usage from RateLimitedContext to IRateLimitedContext. Now all contexts that want to utilize the rate limiter will need to inherit from the IRateLimitedContext, to implement the required parameters for the rate limiter to execute its logic.
@@ -51,32 +51,32 @@
             <PackagePath>\</PackagePath>
         </None>
         <None Include="..\LICENSE">
-          <Pack>true</Pack>
-          <PackagePath>\</PackagePath>
-          <Link>LICENSE</Link>
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+            <Link>LICENSE</Link>
         </None>
         <None Include="..\README.md">
             <Pack>true</Pack>
             <PackagePath>\</PackagePath>
         </None>
     </ItemGroup>
-    
+
     <!-- Package Dependencies -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2"/>
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="build\CQRSharp.DependencyCheck.targets" Pack="true" PackagePath="build\" />
+        <None Include="build\CQRSharp.DependencyCheck.targets" Pack="true" PackagePath="build\"/>
     </ItemGroup>
 
     <!-- Project References -->
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj" />
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
     </ItemGroup>
 
 </Project>

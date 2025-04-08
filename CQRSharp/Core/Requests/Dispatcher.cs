@@ -3,15 +3,14 @@ using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
-using CQRSharp.Core.Invokers;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Markers.Command;
-using CQRSharp.Interfaces.Markers.Query;
-using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Core.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Requests;
@@ -30,14 +29,14 @@ public sealed class Dispatcher(
 {
     /// <inheritdoc />
     public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
-    { 
+    {
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
-        
+
         //Create the command context for this particular request.
         if (command is IRequest requestBase)
             InitializeRequestContext(requestBase);
-        
+
         //Get the type of the command.
         var requestType = command.GetType();
 
@@ -46,9 +45,9 @@ public sealed class Dispatcher(
             return await PipelineTask(cancellationToken);
 
         //Asynchronous execution - fire and forget.
-        //Since this is fire and forget, return default, as the result will not be awaited.
+        //Since this is fire and forget, return success, as the result will not be awaited.
         backgroundTaskQueue.QueueBackgroundWorkItem(async ct => await PipelineTask(ct));
-        return default;
+        return CommandResult.FromSuccess(); //Always return success in cases where the asynchronous execution is used.
 
         //Define the pipeline task.
         async Task<CommandResult> PipelineTask(CancellationToken ct)
@@ -146,25 +145,21 @@ public sealed class Dispatcher(
         //Retrieve the pipeline registry that was registered in DI.
         var pipelineRegistry = services.GetRequiredService<IPipelineRegistry>();
         var requestType = request.GetType();
-        
+
         //Try to get a precompiled pipeline builder for the request type.
         var pipelineBuilder = pipelineRegistry.GetPipelineBuilder(requestType);
         if (pipelineBuilder is null)
-        {
             //Fallback: If no precompiled builder exists, invoke the handler directly.
             return (req, ct) =>
             {
                 if (typeof(TResult) != typeof(CommandResult))
-                {
                     //For queries
                     return HandleQuery<TResult>(req, handler, ct);
-                }
 
                 //For commands
                 return HandleCommand(req, handler, ct)
                     .ContinueWith(_ => (TResult)(object)CommandResult.FromSuccess(), ct);
             };
-        }
 
         //Construct a final handler delegate that calls the actual handler.
         //The PipelineBuilderDelegate signature is:
@@ -175,17 +170,13 @@ public sealed class Dispatcher(
         Func<CancellationToken, Task<object>> finalHandlerWrapper = ct =>
         {
             if (typeof(TResult) != typeof(CommandResult))
-            {
                 return HandleQuery<TResult>(request, handler, ct)
                     .ContinueWith(t => (object)t.Result, ct);
-            }
-            else
-            {
-                return HandleCommand(request, handler, ct)
-                    .ContinueWith(object (_) => CommandResult.FromSuccess(), ct);
-            }
+
+            return HandleCommand(request, handler, ct)
+                .ContinueWith(object (_) => CommandResult.FromSuccess(), ct);
         };
-        
+
         //Now return a delegate that uses the precompiled pipeline builder.
         return (req, ct) =>
         {
@@ -269,7 +260,7 @@ public sealed class Dispatcher(
         handlerRegistry.TryGetHandlerDelegate(command.GetType(), out var handlerDelegate);
         if (handlerDelegate is null)
             throw new InvalidOperationException($"No handler found for command '{command.GetType().Name}'.");
-        
+
         await handlerDelegate(handler, command, cancellationToken);
     }
 
@@ -286,7 +277,7 @@ public sealed class Dispatcher(
         handlerRegistry.TryGetHandlerDelegate(query.GetType(), out var handlerDelegate);
         if (handlerDelegate is null)
             throw new InvalidOperationException($"No handler found for command '{query.GetType().Name}'.");
-        
+
         var queryResult = await handlerDelegate(handler, query, cancellationToken);
         return (TResult)queryResult;
     }
@@ -322,13 +313,13 @@ public sealed class Dispatcher(
         //Try to resolve a custom factory
         var contextFactory = serviceProvider.GetRequiredService<IRequestContextFactory>();
         requestBase.Context = contextFactory.CreateContext(requestBase);
-        
+
         //Populate the request with its respective metadata.
         var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
         var success = registry.TryGetRequestMetadata(requestBase.GetType(), out var metadata);
         if (!success)
             throw new InvalidOperationException($"No metadata found for request '{requestBase.GetType().Name}'.");
-        
+
         requestBase.Metadata = metadata;
     }
 }

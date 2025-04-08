@@ -1,16 +1,15 @@
-﻿namespace CQRSharp.Core.Options
+﻿namespace CQRSharp.Core.Options;
+
+/// <summary>
+///     Configuration options for the timeout behavior.
+/// </summary>
+public sealed class TimeoutOptions
 {
     /// <summary>
-    /// Configuration options for the timeout behavior.
+    ///     The timeout for a command execution.
     /// </summary>
-    public sealed class TimeoutOptions
-    {
-        /// <summary>
-        ///     The timeout for a command execution.
-        /// </summary>
-        /// <remarks>
-        ///     The default value is <c>30 seconds</c>.
-        /// </remarks>
-        public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
-    }
+    /// <remarks>
+    ///     The default value is <c>30 seconds</c>.
+    /// </remarks>
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 }

@@ -1,5 +1,5 @@
 ﻿using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
-using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 

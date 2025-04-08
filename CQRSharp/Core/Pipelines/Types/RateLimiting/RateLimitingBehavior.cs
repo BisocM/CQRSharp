@@ -1,16 +1,31 @@
 ﻿using CQRSharp.Core.Pipelines.Attributes;
 using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
-using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 
+/// <summary>
+/// Represents a pipeline behavior that enforces rate limiting based on request metadata and request context information.
+/// </summary>
+/// <typeparam name="TRequest">The type of request being processed, which must inherit from RequestBase implementing IRateLimitedContext.</typeparam>
+/// <typeparam name="TResult">The type of result returned after request processing.</typeparam>
+/// <remarks>
+/// This behavior utilizes the provided <see cref="RateLimiter"/> to enforce rate limiting rules based on user identifiers.
+/// It extracts the user identifier from the associated <see cref="IRateLimitedContext"/> of the request and checks whether
+/// the request is allowed to proceed.
+/// </remarks>
+/// <example>
+/// This behavior should be integrated into a pipeline as part of processing requests.
+/// </example>
+/// <seealso cref="IPipelineBehavior{TRequest, TResult}"/>
 [PipelinePriority(int.MinValue)]
 public sealed class RateLimitingBehavior<TRequest, TResult>(
     ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
     RateLimiter rateLimiter)
     : IPipelineBehavior<TRequest, TResult> where TRequest : RequestBase<IRateLimitedContext>
 {
+    /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {

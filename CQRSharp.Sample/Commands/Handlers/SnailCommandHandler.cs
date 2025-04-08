@@ -1,10 +1,7 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Sample.Commands.Types;
+﻿using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Management.Menu;
+using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
+using CQRSharp.Shared.Core.Data.Models.Commands;
 
 namespace CQRSharp.Sample.Commands.Handlers;
 
@@ -22,7 +19,7 @@ public class SnailCommandHandler : ICommandHandler<SnailCommand>
                                \  \__/\   /\ @_/  /
                                 \____\____\______/
                             ");
-        
+
         //Modify the state so that we return back to the primary menu.
         command.Context.NextState = MenuState.PrimaryMenu;
         return CommandResult.FromSuccess();

@@ -1,29 +1,27 @@
-﻿using CQRSharp.Core.Pipelines.Attributes.Markers;
-using CQRSharp.Core.Pipelines.Types;
+﻿using CQRSharp.Shared.Core.Data.Attributes.Pipelines;
 
-namespace CQRSharp.Core.Options
+namespace CQRSharp.Core.Options;
+
+/// <summary>
+///     Configuration options for the execution logging behavior.
+/// </summary>
+public sealed class LoggingOptions
 {
     /// <summary>
-    /// Configuration options for the execution logging behavior.
+    ///     Determines whether properties marked with the <see cref="SensitiveDataAttribute" />
+    ///     should be logged in the command context.
     /// </summary>
-    public sealed class LoggingOptions
-    {
-        /// <summary>
-        ///     Determines whether properties marked with the <see cref="SensitiveDataAttribute" />
-        ///     should be logged in the command context.
-        /// </summary>
-        /// <remarks>
-        ///     The default value is <c>false</c>.
-        /// </remarks>
-        public bool EnableSensitiveDataLogging { get; set; } = false;
+    /// <remarks>
+    ///     The default value is <c>false</c>.
+    /// </remarks>
+    public bool EnableSensitiveDataLogging { get; set; } = false;
 
-        /// <summary>
-        ///     Determines whether the execution context should be logged. Requires the implementation of the
-        ///     <see cref="ExecutionLoggingBehavior{TRequest,TResult}" /> pipeline behavior.
-        /// </summary>
-        /// <remarks>
-        ///     The default value is <c>false</c>.
-        /// </remarks>
-        public bool EnableExecutionContextLogging { get; set; } = false;
-    }
+    /// <summary>
+    ///     Determines whether the execution context should be logged. Requires the implementation of the execution
+    ///     logging behaviour.
+    /// </summary>
+    /// <remarks>
+    ///     The default value is <c>false</c>.
+    /// </remarks>
+    public bool EnableExecutionContextLogging { get; set; } = false;
 }

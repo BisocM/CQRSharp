@@ -1,9 +1,4 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Core.Requests;
-using CQRSharp.Sample.Commands.Types;
-using CQRSharp.Sample.Management.Menu;
+﻿using CQRSharp.Sample.Management.Menu;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -24,7 +19,7 @@ public class SampleHostedService(IServiceProvider services, ILogger<SampleHosted
         //The only responsibility of this hosted service is to run startup operations and then display our menu.
         //The menu is a separate class that is not part of the CQRSharp library.
         var menuManager = services.GetRequiredService<MenuManager>();
-        
+
         //Display the menu.
         await menuManager.ShowMenuAsync(MenuState.PrimaryMenu);
     }

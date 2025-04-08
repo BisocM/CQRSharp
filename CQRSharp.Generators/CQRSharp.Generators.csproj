@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <!-- Target and Language Settings -->
-        <TargetFramework>netstandard2.0</TargetFramework>
+        <TargetFramework>netstandard2.1</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
 
@@ -10,6 +10,7 @@
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <RootNamespace>CQRSharp.Generators</RootNamespace>
         <PackageId>CQRSharp.Generators</PackageId>
+        <EnforceExtendedAnalyzers>true</EnforceExtendedAnalyzers>
 
         <!-- Packaging Settings -->
         <IsPackable>true</IsPackable>
@@ -54,32 +55,32 @@
             - Minor API shift in RateLimiter tests and usage from RateLimitedContext to IRateLimitedContext. Now all contexts that want to utilize the rate limiter will need to inherit from the IRateLimitedContext, to implement the required parameters for the rate limiter to execute its logic.
         </PackageReleaseNotes>
     </PropertyGroup>
-    
+
     <ItemGroup>
         <!-- Analyzer Package References -->
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0"/>
     </ItemGroup>
 
     <ItemGroup>
         <!-- Project Reference to the Shared Library -->
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj" />
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-      <None Include="..\CQRSharp_Icon.png">
-        <Pack>true</Pack>
-        <PackagePath>\</PackagePath>
-        <Link>CQRSharp_Icon.png</Link>
-      </None>
-      <None Include="..\LICENSE">
-        <Pack>true</Pack>
-        <PackagePath>\</PackagePath>
-        <Link>LICENSE</Link>
-      </None>
+        <None Include="..\CQRSharp_Icon.png">
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+            <Link>CQRSharp_Icon.png</Link>
+        </None>
+        <None Include="..\LICENSE">
+            <Pack>true</Pack>
+            <PackagePath>\</PackagePath>
+            <Link>LICENSE</Link>
+        </None>
     </ItemGroup>
 
     <!-- Custom target to supply analyzer dependencies -->
@@ -90,14 +91,14 @@
                     Include="$(OutputPath)\$(AssemblyName).dll"
                     Pack="true"
                     PackagePath="analyzers/dotnet/cs"
-                    Visible="false" />
+                    Visible="false"/>
 
             <!-- This explicitly packs the Shared DLL -->
             <None
                     Include="..\CQRSharp.Shared\bin\$(Configuration)\$(TargetFramework)\CQRSharp.Shared.dll"
                     Pack="true"
                     PackagePath="analyzers/dotnet/cs"
-                    Visible="false" />
+                    Visible="false"/>
         </ItemGroup>
     </Target>
 </Project>

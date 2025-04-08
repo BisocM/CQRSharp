@@ -1,6 +1,5 @@
-﻿using CQRSharp.Interfaces.Context;
-using CQRSharp.Interfaces.Markers.Query;
-using CQRSharp.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Core.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 
@@ -14,9 +13,9 @@ namespace CQRSharp.Core.Notifications.Types;
 public sealed class QueryInitiatedNotification<TResult> : INotification
 {
     /// <summary>
-    /// Represents a notification that is published when a query is initiated.
-    /// This notification is triggered by the Dispatcher automatically before the execution of the query begins
-    /// and prior to processing any pre-handle attributes.
+    ///     Represents a notification that is published when a query is initiated.
+    ///     This notification is triggered by the Dispatcher automatically before the execution of the query begins
+    ///     and prior to processing any pre-handle attributes.
     /// </summary>
     /// <typeparam name="TResult">The type of the result expected from the query.</typeparam>
     public QueryInitiatedNotification(IQuery<TResult> query)

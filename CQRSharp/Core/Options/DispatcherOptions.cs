@@ -1,6 +1,4 @@
 ﻿using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipelines.Attributes.Markers;
-using CQRSharp.Core.Pipelines.Types;
 
 namespace CQRSharp.Core.Options;
 
@@ -18,7 +16,7 @@ public sealed class DispatcherOptions
     ///     executed in the order they are received.
     /// </summary>
     /// <remarks>
-    ///     The default value is <see cref="RunMode.Sync" />.
+    ///     The default value is <see cref="Enums.RunMode.Sync" />.
     /// </remarks>
     public RunMode RunMode { get; set; } = RunMode.Sync;
 }
