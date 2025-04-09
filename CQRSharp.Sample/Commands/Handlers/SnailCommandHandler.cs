@@ -1,11 +1,12 @@
 ﻿using CQRSharp.Sample.Commands.Types;
+using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Menu;
 using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
 using CQRSharp.Shared.Core.Data.Models.Commands;
 
 namespace CQRSharp.Sample.Commands.Handlers;
 
-public class SnailCommandHandler : ICommandHandler<SnailCommand>
+public class SnailCommandHandler : ICommandHandler<SnailCommand, SampleRequestContext>
 {
     public async Task<CommandResult> Handle(SnailCommand command, CancellationToken cancellationToken)
     {

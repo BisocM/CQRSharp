@@ -12,6 +12,7 @@ using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
 using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
 using CQRSharp.Shared.Core.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Requests;
 
@@ -24,8 +25,8 @@ public sealed class Dispatcher(
     IBackgroundTaskQueue backgroundTaskQueue,
     IRequestRegistry requestRegistry,
     IHandlerRegistry handlerRegistry,
-    NotificationDispatcher eventManager,
-    DispatcherOptions options) : IDispatcher
+    INotificationDispatcher notificationDispatcher,
+    IOptions<DispatcherOptions> options) : IDispatcher
 {
     /// <inheritdoc />
     public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
@@ -41,7 +42,7 @@ public sealed class Dispatcher(
         var requestType = command.GetType();
 
         //Synchronous execution - await the pipeline.
-        if (options.RunMode != RunMode.Async)
+        if (options.Value.RunMode != RunMode.Async)
             return await PipelineTask(cancellationToken);
         
         //Asynchronous mode: wrap the full pipeline in a TaskCompletionSource. This will allow the user to receive a callback
@@ -71,7 +72,7 @@ public sealed class Dispatcher(
             var scopedProvider = scope.ServiceProvider;
 
             //Send off the notification for command initiation before the attributes are handled.
-            await eventManager.Publish(new CommandInitiatedNotification(command), ct);
+            await notificationDispatcher.Publish(new CommandInitiatedNotification(command), ct);
 
             //Invoke pre-handle attributes.
             await InvokePreHandleAttributes(command, scopedProvider, ct);
@@ -84,7 +85,7 @@ public sealed class Dispatcher(
             var result = await pipeline(command, ct);
 
             //Send off the notification about command completion before the post-completion attributes are handled.
-            await eventManager.Publish(new CommandCompletedNotification(command, result), ct);
+            await notificationDispatcher.Publish(new CommandCompletedNotification(command, result), ct);
 
             //Invoke post-handle attributes.
             await InvokePostHandleAttributes(command, scopedProvider, ct);
@@ -108,7 +109,7 @@ public sealed class Dispatcher(
         var requestType = query.GetType();
 
         //Synchronous execution - await the pipeline.
-        if (options.RunMode != RunMode.Async)
+        if (options.Value.RunMode != RunMode.Async)
             return await PipelineTask(cancellationToken);
 
         //Asynchronous mode: use TaskCompletionSource to wrap the full pipeline.
@@ -134,7 +135,7 @@ public sealed class Dispatcher(
             var scopedProvider = scope.ServiceProvider;
 
             //Send off the notification for query initiation before the attributes are handled.
-            await eventManager.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+            await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(query), ct);
 
             //Invoke pre-handle attributes.
             await InvokePreHandleAttributes(query, scopedProvider, ct);
@@ -150,7 +151,7 @@ public sealed class Dispatcher(
             await InvokePostHandleAttributes(query, scopedProvider, ct);
 
             //Publish the event.
-            await eventManager.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
+            await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
 
             return result;
         }

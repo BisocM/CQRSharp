@@ -1,9 +1,6 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
 using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
-using CQRSharp.Shared.Core.Data.Interfaces.Context;
 using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;

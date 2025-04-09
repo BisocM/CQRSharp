@@ -1,13 +1,8 @@
-﻿using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-using CQRSharp.Core.BackgroundTasks;
+﻿using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Requests;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
-using CQRSharp.Shared.Core.Data.Models.Commands;
-using CQRSharp.Shared.Core.Data.Models.Requests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -28,18 +23,17 @@ public static partial class DependencyInjectionExtensions
         Action<DispatcherOptions>? configureOptions)
     {
         Logger.LogInformation("Starting CQRS service registration.");
-
-        //Create and register DispatcherOptions.
-        var options = new DispatcherOptions();
-        configureOptions?.Invoke(options);
-        services.AddSingleton(options);
+        services.Configure<DispatcherOptions>(options =>
+        {
+            //Apply the delegate if it is provided.
+            configureOptions?.Invoke(options);
+        });
 
         //Register default components.
-        services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
         services.AddSingleton<IDispatcher, Dispatcher>();
-        services.AddSingleton<NotificationDispatcher>();
+        services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
+        services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
         services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
-        services.AddHostedService<BackgroundTaskService>();
 
         //Configure logging.
         services.AddLogging(loggingBuilder =>
