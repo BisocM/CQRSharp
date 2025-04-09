@@ -2,6 +2,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -182,11 +183,11 @@ public sealed class HandlerRegistryGenerator : IIncrementalGenerator
             sb.AppendLine();
             sb.AppendLine($"            //Registration for {reg.RequestType}");
             if (reg.IsQuery)
-            {
+            { //TODO: Do NOT hardcode this is bad
                 sb.AppendLine($"            _handlerMap.TryAdd(typeof({reg.RequestType}), (handler, request, ct) =>");
                 sb.AppendLine("            {");
                 sb.AppendLine(
-                    $"                return ((global::CQRSharp.Interfaces.Handlers.IQueryHandler<{reg.RequestType}, {reg.ResultType}>)handler)");
+                    $"                return ((global::CQRSharp.Shared.Core.Data.Interfaces.Handlers.IQueryHandler<{reg.RequestType}, {reg.ResultType}>)handler)");
                 sb.AppendLine($"                    .Handle(({reg.RequestType})request, ct)");
                 sb.AppendLine("                    .ContinueWith(t => (object)t.Result, ct);");
                 sb.AppendLine("            });");
@@ -196,7 +197,7 @@ public sealed class HandlerRegistryGenerator : IIncrementalGenerator
                 sb.AppendLine($"            _handlerMap.TryAdd(typeof({reg.RequestType}), (handler, request, ct) =>");
                 sb.AppendLine("            {");
                 sb.AppendLine(
-                    $"                return ((global::CQRSharp.Interfaces.Handlers.ICommandHandler<{reg.RequestType}>)handler)");
+                    $"                return ((global::CQRSharp.Shared.Core.Data.Interfaces.Handlers.ICommandHandler<{reg.RequestType}>)handler)");
                 sb.AppendLine($"                    .Handle(({reg.RequestType})request, ct)");
                 sb.AppendLine("                    .ContinueWith(t => (object)t.Result, ct);");
                 sb.AppendLine("            });");

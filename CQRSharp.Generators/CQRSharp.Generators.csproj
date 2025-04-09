@@ -16,7 +16,6 @@
         <IsPackable>true</IsPackable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <IncludeBuildOutput>false</IncludeBuildOutput>
-        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
 
@@ -67,7 +66,7 @@
 
     <ItemGroup>
         <!-- Project Reference to the Shared Library -->
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"  />
     </ItemGroup>
 
     <ItemGroup>

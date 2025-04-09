@@ -2,6 +2,7 @@
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Data;
 using CQRSharp.Sample.Factories;
 using CQRSharp.Sample.Management.Cancellation;
@@ -36,7 +37,7 @@ public class Program
                     })
                     .AddTimeoutBehavior(o => { o.Timeout = TimeSpan.FromMilliseconds(10000); })
                     .AddResilienceBehavior(o => { o.MaxRetries = 1; })
-                    .AddTransient<IRequestContextFactory,
+                    .AddTransient<IRequestContextFactory<SampleRequestContext>,
                         CustomRequestContextFactory>(); //Register our context factory here! AFTER CQRSharp is configured.
 
                 //Register the MenuManager & the CancellationManager

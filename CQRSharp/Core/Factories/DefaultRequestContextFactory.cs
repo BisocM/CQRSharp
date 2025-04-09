@@ -11,9 +11,9 @@ namespace CQRSharp.Core.Factories;
 public class DefaultRequestContextFactory : IRequestContextFactory
 {
     /// <inheritdoc />
-    public IRequestContext CreateContext(IRequest request)
+    public RequestContextBase CreateContext(IRequest request)
     {
-        //Return a default RequestContextBase. This should have CreatedAt.
+        //Return a default instance of RequestContextBase
         return new RequestContextBase();
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using CQRSharp.Shared.Attributes.Requests;
+using CQRSharp.Shared.Core.Data.Models.Commands;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -138,9 +139,7 @@ public sealed class PipelineRegistryGenerator : IIncrementalGenerator
         //Check for ICommand implementation.
         var iCommand = requestSymbol.AllInterfaces
             .FirstOrDefault(i => i.Name == "ICommand");
-        if (iCommand != null) return "global::CQRSharp.Data.Commands.CommandResult";
-
-        return "global::System.Object";
+        return iCommand != null ? typeof(CommandResult).FullName! : typeof(object).FullName!;
     }
 
     /// <summary>
@@ -295,12 +294,12 @@ public sealed class PipelineRegistryGenerator : IIncrementalGenerator
         );
 
         /// <summary>
-        ///     Emitted when any unhandled exception occurs within the PipelineBuilderGenerator.
+        ///     Emitted when any unhandled exception occurs within the PipelineRegistryGenerator.
         /// </summary>
         public static readonly DiagnosticDescriptor PipelineBuilderException = new(
             "CQRPIP999",
             "Pipeline Builder Generator Exception",
-            "Unhandled exception in PipelineBuilderGenerator: {0}",
+            "Unhandled exception in PipelineRegistryGenerator: {0}",
             "CQRSharp.Generators",
             DiagnosticSeverity.Error,
             true

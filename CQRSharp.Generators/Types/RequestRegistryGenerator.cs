@@ -70,7 +70,6 @@ public sealed class RequestRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.SourceGeneration;");
         sb.AppendLine("using CQRSharp.Shared.Attributes.Requests;");
-        sb.AppendLine("using CQRSharp.Data.Requests;");
         sb.AppendLine("using System.Runtime.CompilerServices;");
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
