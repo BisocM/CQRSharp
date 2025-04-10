@@ -1,5 +1,5 @@
-﻿using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
-using CQRSharp.Shared.Core.Data.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 

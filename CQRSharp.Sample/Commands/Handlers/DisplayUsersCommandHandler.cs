@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Data;
-using CQRSharp.Shared.Core.Data.Interfaces.Handlers;
-using CQRSharp.Shared.Core.Data.Models.Commands;
+using CQRSharp.Shared.Data.Interfaces.Handlers;
+using CQRSharp.Shared.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Sample.Commands.Handlers;

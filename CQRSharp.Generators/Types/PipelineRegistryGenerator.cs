@@ -2,8 +2,8 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Shared.Attributes.Requests;
-using CQRSharp.Shared.Core.Data.Models.Commands;
+using CQRSharp.Shared.Data.Attributes.Requests;
+using CQRSharp.Shared.Data.Models.Commands;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;

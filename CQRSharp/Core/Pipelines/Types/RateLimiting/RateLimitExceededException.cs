@@ -1,9 +1,9 @@
 ﻿using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
 
 /// <inheritdoc />
-public sealed class RateLimitExceededException(RequestBase<IRateLimitedContext> request, string message) : Exception(
-    $"Request {request.Context?.RequestId} from user {request.Context?.UserId} triggered a rate limit exception. " +
+public sealed class RateLimitExceededException(IRateLimitedContext requestContext, string message) : Exception(
+    $"Request {requestContext.RequestId} from user {requestContext.UserId} triggered a rate limit exception. " +
     message);

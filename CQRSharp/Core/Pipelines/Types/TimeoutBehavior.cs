@@ -1,14 +1,14 @@
 ﻿using CQRSharp.Core.Options;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines.Types;
 
 /// <summary>
-/// Represents a behavior that enforces a timeout on the execution of a pipeline request.
-/// Implements <see cref="IPipelineBehavior{TRequest,TResult}"/>.
+///     Represents a behavior that enforces a timeout on the execution of a pipeline request.
+///     Implements <see cref="IPipelineBehavior{TRequest,TResult}" />.
 /// </summary>
-/// <typeparam name="TRequest">The type of the request being handled, must implement <see cref="IRequest"/>.</typeparam>
+/// <typeparam name="TRequest">The type of the request being handled, must implement <see cref="IRequest" />.</typeparam>
 /// <typeparam name="TResult">The type of the result produced by the handler pipeline.</typeparam>
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,

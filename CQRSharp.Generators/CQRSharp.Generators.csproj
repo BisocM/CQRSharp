@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <!-- Target and Language Settings -->
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
 
@@ -14,10 +14,12 @@
 
         <!-- Packaging Settings -->
         <IsPackable>true</IsPackable>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageOutputPath>..\NuGetPackages</PackageOutputPath>
 
         <!-- Ensure analyzer dependencies are available -->
         <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
@@ -26,7 +28,7 @@
     <!-- NuGet Package Metadata -->
     <PropertyGroup>
         <PackageId>CQRSharp.Generators</PackageId>
-        <Version>2.2.4</Version>
+        <Version>2.2.5</Version>
         <Title>CQRSharp Source Generators</Title>
         <Authors>BisocM</Authors>
         <Description>A set of Roslyn source code generators that allow Native AoT compatibility for the CQRSharp Library.</Description>
@@ -62,11 +64,15 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0"/>
+        <PackageReference Include="Microsoft.Net.Compilers.Toolset" Version="4.13.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
     </ItemGroup>
 
     <ItemGroup>
         <!-- Project Reference to the Shared Library -->
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"  />
+        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

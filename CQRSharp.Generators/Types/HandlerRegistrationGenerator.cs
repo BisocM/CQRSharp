@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using CQRSharp.Shared.Data.Attributes.Requests;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -44,7 +45,7 @@ public class HandlerRegistrationGenerator : IIncrementalGenerator
 
                 //Look up the HandlerType attribute by its fully qualified metadata name.
                 var handlerTypeAttributeSymbol =
-                    compilation.GetTypeByMetadataName("CQRSharp.Shared.Attributes.Requests.HandlerTypeAttribute");
+                    compilation.GetTypeByMetadataName(typeof(HandlerTypeAttribute).FullName!);
                 if (handlerTypeAttributeSymbol == null)
                 {
                     spc.ReportDiagnostic(Diagnostic.Create(SMissingAttributeDescriptor, Location.None));
@@ -158,7 +159,7 @@ public class HandlerRegistrationGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor SMissingAttributeDescriptor = new(
         "CQRHND002",
         "Missing HandlerType Attribute",
-        "The attribute 'CQRSharp.Shared.Attributes.Requests.HandlerTypeAttribute' was not found. Ensure that it is defined and referenced.",
+        $"The attribute {typeof(HandlerTypeAttribute).FullName} was not found. Ensure that it is defined and referenced.",
         "CQRSharp.Generators",
         DiagnosticSeverity.Error,
         true);

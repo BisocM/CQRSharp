@@ -1,4 +1,5 @@
 ﻿using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
@@ -7,10 +8,11 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Query;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
-using CQRSharp.Shared.Core.Data.Models.Commands;
+using CQRSharp.Shared.Data.Interfaces.Context;
+using CQRSharp.Shared.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -44,7 +46,7 @@ public sealed class Dispatcher(
         //Synchronous execution - await the pipeline.
         if (options.Value.RunMode != RunMode.Async)
             return await PipelineTask(cancellationToken);
-        
+
         //Asynchronous mode: wrap the full pipeline in a TaskCompletionSource. This will allow the user to receive a callback
         //in-line, without having to listen to the completion notification.
         var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -328,26 +330,40 @@ public sealed class Dispatcher(
         return handler;
     }
 
-    /// <summary>
-    ///     Method used to generate execution context for any request type.
-    /// </summary>
-    /// <param name="requestBase">The request object.</param>
     private void InitializeRequestContext(IRequest requestBase)
     {
-        //If the user already provided a context, don't overwrite it.
+        //Retrieve metadata for the request
+        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
+        if (!registry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata?.ContextType == null)
+        {
+            //Fallback to a default context type if metadata or its ContextType is missing
+            metadata = metadata ?? throw new InvalidOperationException($"No metadata found for request '{requestBase.GetType().Name}'.");
+        }
+        //Populate the request with its respective metadata BEFORE setting the context. The user may have opted to NOT use the built-in IRequestContextFactory.
+        //In that case, we can still safely override any Metadata that the user (for ANY reason) may have populated, since the logic for its population remains static,
+        //while context creation defined by the user may be completely different.
+        requestBase.Metadata = metadata;
+        
+        //Avoid overwriting an existing context
         if (requestBase.Context != null)
             return;
+    
+        //Retrieve the context type from metadata (or default to a known type)
+        var contextType = metadata.ContextType ?? typeof(RequestContextBase);
 
-        //Try to resolve a custom factory
-        var contextFactory = serviceProvider.GetRequiredService<IRequestContextFactory>();
+        //Get the factory registry
+        var factoryRegistry = serviceProvider.GetRequiredService<IContextFactoryRegistry>();
+
+        //Get the appropriate factory via the registry using the context type as key.
+        var factoryObj = factoryRegistry.TryGetFactory(contextType, serviceProvider);
+        if (factoryObj is not IInternalRequestContextFactory contextFactory)
+        {
+            throw new InvalidOperationException(
+                $"No registered factory found for context type '{contextType.FullName}'. " +
+                "Ensure that you have implemented and registered an IRequestContextFactory for this type.");
+        }
+    
+        // Create the request context using the resolved factory
         requestBase.Context = contextFactory.CreateContext(requestBase);
-
-        //Populate the request with its respective metadata.
-        var registry = serviceProvider.GetRequiredService<IRequestRegistry>();
-        var success = registry.TryGetRequestMetadata(requestBase.GetType(), out var metadata);
-        if (!success)
-            throw new InvalidOperationException($"No metadata found for request '{requestBase.GetType().Name}'.");
-
-        requestBase.Metadata = metadata;
     }
 }

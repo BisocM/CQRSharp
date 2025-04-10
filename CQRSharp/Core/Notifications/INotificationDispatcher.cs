@@ -1,4 +1,4 @@
-﻿using CQRSharp.Shared.Core.Data.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications;
 

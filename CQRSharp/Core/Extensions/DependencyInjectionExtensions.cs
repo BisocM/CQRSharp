@@ -60,6 +60,9 @@ public static partial class DependencyInjectionExtensions
         AddGeneratedHandlerRegistry(services);
         Logger.LogInformation("Successfully registered the handler registry.");
 
+        AddGeneratedFactories(services);
+        Logger.LogInformation("Successfully registered the context factory registry.");
+        
         Logger.LogInformation("CQRS service registration completed.");
         return services;
     }

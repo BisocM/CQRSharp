@@ -1,7 +1,7 @@
-﻿using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
-using CQRSharp.Shared.Core.Data.Interfaces.Notifications;
-using CQRSharp.Shared.Core.Data.Models.Commands;
+﻿using CQRSharp.Shared.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Notifications;
+using CQRSharp.Shared.Data.Models.Commands;
 
 namespace CQRSharp.Core.Notifications.Types;
 

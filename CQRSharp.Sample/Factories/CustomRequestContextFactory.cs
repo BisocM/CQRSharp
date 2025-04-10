@@ -1,12 +1,12 @@
 ﻿using CQRSharp.Core.Factories;
 using CQRSharp.Sample.Context;
-using CQRSharp.Shared.Core.Data.Interfaces.Context;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Sample.Factories;
 
 //This class is REQUIRED for the automatic population of all the contexts for all commands.
-public class CustomRequestContextFactory(IServiceProvider serviceProvider) : IRequestContextFactory<SampleRequestContext>
+public class CustomRequestContextFactory(IServiceProvider serviceProvider)
+    : IRequestContextFactory<SampleRequestContext>
 {
     public SampleRequestContext CreateContext(IRequest request)
     {

@@ -4,7 +4,7 @@ using CQRSharp.Core.Requests;
 using CQRSharp.Sample.Attributes.Menu;
 using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Cancellation;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Command;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

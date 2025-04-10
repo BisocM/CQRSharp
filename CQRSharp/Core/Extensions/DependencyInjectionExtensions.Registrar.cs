@@ -47,4 +47,14 @@ public static partial class DependencyInjectionExtensions
     {
         Registrar.PipelineRegistryRegistrar?.RegisterData(services);
     }
+
+    /// <summary>
+    ///     Registers the context factory registry using generated context factories.
+    ///     Looks for a generated type in the known namespace and uses it if available.
+    /// </summary>
+    /// <param name="services">The service collection to which the handler registries will be registered.</param>
+    private static void AddGeneratedFactories(this IServiceCollection services)
+    {
+        Registrar.ContextFactoryRegistryRegistrar?.RegisterData(services);
+    }
 }

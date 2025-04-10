@@ -1,4 +1,4 @@
-﻿using CQRSharp.Shared.Core.Data.Attributes.Pipelines;
+﻿using CQRSharp.Shared.Data.Attributes.Pipelines;
 
 namespace CQRSharp.Core.Options;
 

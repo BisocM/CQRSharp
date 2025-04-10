@@ -1,5 +1,5 @@
-﻿using CQRSharp.Shared.Core.Data.Interfaces.Context;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+﻿using CQRSharp.Shared.Data.Interfaces.Context;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Factories;
 
@@ -8,7 +8,8 @@ namespace CQRSharp.Core.Factories;
 ///     Ensure that you register a transient service implementing this interface AFTER the main CQRS registration.
 /// </summary>
 /// <remarks>
-///     This is a default implementation that is only used for generating context instances for <see cref="RequestContextBase"/>.
+///     This is a default implementation that is only used for generating context instances for
+///     <see cref="RequestContextBase" />.
 /// </remarks>
 public interface IRequestContextFactory : IRequestContextFactory<RequestContextBase>;
 
@@ -18,10 +19,10 @@ public interface IRequestContextFactory : IRequestContextFactory<RequestContextB
 ///     Provides a mechanism to generate <typeparamref name="TContext" /> objects to be associated with requests.
 ///     Implementations of this interface should be registered as transient services.
 /// </summary>
-public interface IRequestContextFactory<out TContext> where TContext : IRequestContext
+public interface IRequestContextFactory<out TContext> : IInternalRequestContextFactory where TContext : IRequestContext
 {
     /// <summary>
-    ///     Creates an instance of <typeparamref name="TContext"/> based on the provided <see cref="IRequest" />.
+    ///     Creates an instance of <typeparamref name="TContext" /> based on the provided <see cref="IRequest" />.
     ///     This method is responsible for generating a contextual environment for the given request,
     ///     encapsulating details such as the request identifier and user-specific information.
     /// </summary>
@@ -30,8 +31,23 @@ public interface IRequestContextFactory<out TContext> where TContext : IRequestC
     ///     information that informs the creation of the contextual environment.
     /// </param>
     /// <returns>
-    ///     Returns an instance of <typeparamref name="TContext"/> that contains contextual information
+    ///     Returns an instance of <typeparamref name="TContext" /> that contains contextual information
     ///     relevant to the provided request.
     /// </returns>
     new TContext CreateContext(IRequest request);
+    
+    IRequestContext IInternalRequestContextFactory.CreateContext(IRequest request) => CreateContext(request);
+}
+
+/// <summary>
+/// An internal request context factory.
+/// </summary>
+public interface IInternalRequestContextFactory
+{
+    /// <summary>
+    /// Creates an instance of IRequestContext for the given request.
+    /// </summary>
+    /// <param name="request">The request that requires a context.</param>
+    /// <returns>The created IRequestContext instance.</returns>
+    IRequestContext CreateContext(IRequest request);
 }

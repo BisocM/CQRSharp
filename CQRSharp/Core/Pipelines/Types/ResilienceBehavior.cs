@@ -1,13 +1,13 @@
 ﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines.Types;
 
 /// <summary>
-/// Represents a pipeline behavior that introduces resilience features into the request handling.
-/// The behavior implements retry logic based on the configured maximum retry attempts.
+///     Represents a pipeline behavior that introduces resilience features into the request handling.
+///     The behavior implements retry logic based on the configured maximum retry attempts.
 /// </summary>
 /// <typeparam name="TRequest">The type of the request.</typeparam>
 /// <typeparam name="TResult">The type of the result returned after processing the request.</typeparam>

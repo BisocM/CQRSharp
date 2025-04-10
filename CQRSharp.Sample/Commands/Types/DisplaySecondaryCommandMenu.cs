@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Sample.Attributes.Menu;
 using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Menu;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Command;
 
 namespace CQRSharp.Sample.Commands.Types;
 

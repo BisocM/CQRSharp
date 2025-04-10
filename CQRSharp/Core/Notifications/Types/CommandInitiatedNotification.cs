@@ -1,6 +1,6 @@
-﻿using CQRSharp.Shared.Core.Data.Interfaces.Markers.Command;
-using CQRSharp.Shared.Core.Data.Interfaces.Markers.Request;
-using CQRSharp.Shared.Core.Data.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 
@@ -17,7 +17,7 @@ public sealed class CommandInitiatedNotification : INotification
     /// <param name="command">
     ///     The command for which the notification is raised. This typically implements
     ///     <see cref="ICommand" /> and may also be a <see cref="RequestBase{TContext}" />, which has a
-    ///     <see cref="RequestBase{TContext}.Context"/>
+    ///     <see cref="RequestBase{TContext}.Context" />
     /// </param>
     public CommandInitiatedNotification(ICommand command)
     {
