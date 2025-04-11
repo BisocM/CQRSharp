@@ -12,6 +12,10 @@
 [AttributeUsage(AttributeTargets.Interface)]
 public sealed class HandlerTypeAttribute(HandlerKind kind) : Attribute
 {
+    /// <summary>
+    /// Gets the category of the handler interface as defined by the <see cref="HandlerKind"/> enumeration.
+    /// This property specifies whether the handler is a Command, Query, Notification, PipelineBehavior, or another kind.
+    /// </summary>
     public HandlerKind Kind { get; } = kind;
 }
 

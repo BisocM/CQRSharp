@@ -24,27 +24,21 @@
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
-        <PackageTags>CQRS</PackageTags>
+        <PackageTags>CQRS;Native AoT</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <Version>2.2.5</Version>
-        <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Description>
+        <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications, with complete Native AoT support.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>
-            🚀 Release Notes for 2.2.4
+            🚀 Release Notes for 2.2.5
 
             🔧 Changes
-            - Replaced string-based detection of handlers and requests with a new attribute-driven approach.
-            - Improved diagnostic messages (e.g., warnings if a required attribute is missing or if no handlers are found).
-            - Added new file CQRSharp.Shared.Attributes.RegistrationMarkers.cs providing HandlerTypeAttribute and RequestMarkerAttribute.
-            - Improved the source code generators drastically - complete Native AoT support for all functionality.
-            - Complete elimination of reflection in the codebase contributing to AoT support and better performance on runtime.
-            - All registries that are responsible for mapping out various ConccurentDictionary instances on compile-time now share a very recognizable, and simple pattern, involving IDataRegistrar, Registrar and their respective interfaces and implementations. The code now utilizes ModuleInitializer to run code that binds the Registrar instances to the generated code on runtime.
-            - Modified all source generator code that involves itself with registering various classes with the DI container to use a unified registrar system. This ensures minimal hard-coding.
-            - The library now has complete support for custom context types implementations in IRequestContextFactory - earlier, this was locked to a single context type, forcing users to write their own workarounds for creation of context instances.
+            - Added multi-context support per application. Now, you can register multiple IRequestContextFactory that can handle any given context generation, with automatic mapping by the Dispatcher!
+            - Additional configurability for the BackgroundTaskQueue. You can now add callback handling if the system is overloaded, configure the system limits, and so on!
+            - Additional bottleneck optimizations for BackgroundTaskQueue.
 
             📂 Breaking Changes?
-            - The CQRSharp.Kafka project has been fully removed. No built-in Kafka publishing or consumer services remain.
-            - Minor API shift in RateLimiter tests and usage from RateLimitedContext to IRateLimitedContext. Now all contexts that want to utilize the rate limiter will need to inherit from the IRateLimitedContext, to implement the required parameters for the rate limiter to execute its logic.
+            - Complete restructure of CQRSharp.Shared - if any types/interfaces/classes were used directly, this will break.
         </PackageReleaseNotes>
     </PropertyGroup>
 
@@ -74,13 +68,10 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2"/>
     </ItemGroup>
 
-    <ItemGroup>
-        <None Include="build\CQRSharp.DependencyCheck.targets" Pack="true" PackagePath="build\"/>
-    </ItemGroup>
-
     <!-- Project References -->
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj"/>
     </ItemGroup>
 
     <Target Name="CleanPackages" BeforeTargets="Pack">

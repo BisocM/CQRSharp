@@ -5,9 +5,9 @@
 [![Qodana](https://github.com/BisocM/CQRSharp/actions/workflows/qodana_code_quality.yml/badge.svg)](https://github.com/BisocM/CQRSharp/actions/workflows/qodana_code_quality.yml)
 
 A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET
-applications.
+applications, with complete Native AoT support.
 
-For more information, please check out the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
+For more information, please advise the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
 
 ---
 

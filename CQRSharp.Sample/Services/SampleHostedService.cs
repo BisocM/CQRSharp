@@ -1,4 +1,6 @@
-﻿using CQRSharp.Sample.Management.Menu;
+﻿using CQRSharp.Core.Requests;
+using CQRSharp.Sample.Commands.Types;
+using CQRSharp.Sample.Management.Menu;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,6 +18,13 @@ public class SampleHostedService(IServiceProvider services, ILogger<SampleHosted
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // AoT Debugging - publish the app, then run this. This is because MenuManager does not support AOT.
+        SnailCommand command = new();
+        await Task.Delay(1000);
+        var dispatcher = services.GetRequiredService<IDispatcher>();
+        await dispatcher.ExecuteCommand(command, stoppingToken);
+        Console.Read();
+        
         //The only responsibility of this hosted service is to run startup operations and then display our menu.
         //The menu is a separate class that is not part of the CQRSharp library.
         var menuManager = services.GetRequiredService<MenuManager>();

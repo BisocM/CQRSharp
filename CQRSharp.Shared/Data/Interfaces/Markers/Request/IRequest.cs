@@ -10,6 +10,16 @@ namespace CQRSharp.Shared.Data.Interfaces.Markers.Request;
 [RequestMarker(RequestKind.Unknown)]
 public interface IRequest
 {
+    /// <summary>
+    /// Gets or sets the context associated with the request.
+    /// The context typically provides additional information required to process the request.
+    /// </summary>
     public IRequestContext? Context { get; set; }
+
+    /// <summary>
+    /// Gets or sets the metadata associated with the request.
+    /// The metadata encapsulates information such as request type, handler type,
+    /// and pipeline behaviors, providing critical structural details for processing the request.
+    /// </summary>
     public RequestMetadata? Metadata { get; set; }
 }

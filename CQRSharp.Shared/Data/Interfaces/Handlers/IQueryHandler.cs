@@ -16,14 +16,11 @@ public interface IQueryHandler<in TQuery, TResult, TContext>
     where TContext : IRequestContext
 {
     /// <summary>
-    ///     Processes a query and returns a result of type <typeparamref name="TResult" />.
+    /// Processes a given query and returns the result asynchronously.
     /// </summary>
-    /// <typeparam name="TQuery">The type of the query being handled.</typeparam>
-    /// <typeparam name="TResult">The type of the result returned by the query.</typeparam>
-    /// <typeparam name="TContext">The type of the context associated with the query.</typeparam>
-    /// <param name="query">The query to be processed.</param>
-    /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
-    /// <returns>A task representing the result of processing the query.</returns>
+    /// <param name="query">The query object containing the data to be processed.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A task representing the asynchronous operation, containing the result of type <typeparamref name="TResult"/>.</returns>
     Task<TResult> Handle(TQuery query, CancellationToken cancellationToken);
 }
 

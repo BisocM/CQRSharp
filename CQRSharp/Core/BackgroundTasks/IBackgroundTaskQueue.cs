@@ -1,5 +1,9 @@
 ﻿namespace CQRSharp.Core.BackgroundTasks;
 
+/// <summary>
+/// Defines a contract for a background task queue that allows queuing of asynchronous work items
+/// and retrieving them for execution.
+/// </summary>
 public interface IBackgroundTaskQueue
 {
     /// <summary>

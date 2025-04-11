@@ -12,6 +12,11 @@
 [AttributeUsage(AttributeTargets.Interface)]
 public sealed class RequestMarkerAttribute(RequestKind kind) : Attribute
 {
+    /// <summary>
+    /// Gets the kind of the request associated with the attribute.
+    /// This represents the specific type of request (e.g., Command, Query, Notification)
+    /// that the attributed interface is marking.
+    /// </summary>
     public RequestKind Kind { get; } = kind;
 }
 

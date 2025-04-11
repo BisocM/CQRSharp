@@ -11,8 +11,7 @@ public abstract class CommandBase<TContext> : RequestBase<TContext>, ICommand
 
 /// <summary>
 ///     Non-generic CommandBase for those who do not need custom context.
-///     In this case, the Dispatcher resolves the command context via the in-built
-///     <see cref="DefaultRequestContextFactory" />.
+///     In this case, the Dispatcher resolves the command context via the in-built DefaultRequestContextFactory.
 /// </summary>
 public abstract class CommandBase : CommandBase<RequestContextBase>
 {

@@ -1,6 +1,7 @@
 ﻿using CQRSharp.Core.Options;
 using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Pipelines.Types;
 
@@ -12,7 +13,7 @@ namespace CQRSharp.Core.Pipelines.Types;
 /// <typeparam name="TResult">The type of the result produced by the handler pipeline.</typeparam>
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
-    TimeoutOptions options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+    IOptions<TimeoutOptions> options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
 {
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
@@ -22,13 +23,13 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
         //Check that the executable is not null
         ArgumentNullException.ThrowIfNull(request);
 
-        using var timeoutCancellationTokenSource = new CancellationTokenSource(options.Timeout);
+        using var timeoutCancellationTokenSource = new CancellationTokenSource(options.Value.Timeout);
         var combinedCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             timeoutCancellationTokenSource.Token).Token;
 
         logger.LogInformation("Timeout for {ReqName} set for {TimeoutMilliseconds}ms", request.GetType().Name,
-            options.Timeout.TotalMilliseconds);
+            options.Value.Timeout.TotalMilliseconds);
 
         try
         {

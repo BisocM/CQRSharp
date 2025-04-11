@@ -9,13 +9,6 @@ namespace CQRSharp.Core.Extensions;
 
 public static partial class DependencyInjectionExtensions
 {
-    //A static logger for configuration-time logging.
-    private static readonly ILogger Logger = LoggerFactory.Create(builder =>
-    {
-        builder.AddConsole();
-        builder.SetMinimumLevel(LogLevel.Information);
-    }).CreateLogger("DependencyInjectionExtensions");
-
     /// <summary>
     ///     Registers the resilience pipeline behavior in the service collection.
     /// </summary>
@@ -25,11 +18,13 @@ public static partial class DependencyInjectionExtensions
     {
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Resilience configuration must be provided.");
+        
+        services.Configure<ResilienceOptions>(options =>
+        {
+            //Apply the delegate if it is provided.
+            configureOptions?.Invoke(options);
+        });
 
-        var options = new ResilienceOptions();
-        configureOptions(options);
-
-        services.AddSingleton(options);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
 
         Logger.LogInformation("ResilienceBehavior has been registered.");
@@ -47,10 +42,12 @@ public static partial class DependencyInjectionExtensions
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Timeout configuration must be provided.");
 
-        var options = new TimeoutOptions();
-        configureOptions(options);
-
-        services.AddSingleton(options);
+        services.Configure<TimeoutOptions>(options =>
+        {
+            //Apply the delegate if it is provided.
+            configureOptions?.Invoke(options);
+        });
+        
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
 
         Logger.LogInformation("TimeoutBehavior has been registered.");
@@ -67,15 +64,17 @@ public static partial class DependencyInjectionExtensions
     {
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
-
-        var config = new RateLimiterOptions();
-        configureOptions(config);
-
-        if (config.MaxTokens <= 0 || config.ReplenishRatePerSecond <= 0)
-            throw new ArgumentException(
-                "Rate limiting configuration is invalid. MaxTokens and ReplenishRatePerSecond must be greater than zero.");
-
-        services.AddSingleton(config);
+        
+        services.Configure<RateLimiterOptions>(options =>
+        {
+            if (options.MaxTokens <= 0 || options.ReplenishRatePerSecond <= 0)
+                throw new ArgumentException(
+                    $"Rate limiting configuration is invalid. {nameof(options.MaxTokens)} and {nameof(options.ReplenishRatePerSecond)} must be greater than zero.");
+            
+            //Apply the delegate if it is provided.
+            configureOptions?.Invoke(options);
+        });
+        
         services.AddSingleton<RateLimiter>();
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>));
 

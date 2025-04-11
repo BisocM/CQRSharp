@@ -14,6 +14,13 @@ namespace CQRSharp.Core.Extensions;
 /// </summary>
 public static partial class DependencyInjectionExtensions
 {
+    //A static logger for configuration-time logging.
+    private static readonly ILogger Logger = LoggerFactory.Create(builder =>
+    {
+        builder.AddConsole();
+        builder.SetMinimumLevel(LogLevel.Information);
+    }).CreateLogger("DependencyInjectionExtensions");
+    
     /// <summary>
     ///     Adds the dispatcher and command handlers to the service collection.
     ///     Responsible for automatic registration of all ICommand, IQuery{TResult},
