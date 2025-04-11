@@ -1,15 +1,23 @@
 ﻿using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
-using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Pipelines.Types;
 
+/// <summary>
+///     Represents a pipeline behavior that introduces resilience features into the request handling.
+///     The behavior implements retry logic based on the configured maximum retry attempts.
+/// </summary>
+/// <typeparam name="TRequest">The type of the request.</typeparam>
+/// <typeparam name="TResult">The type of the result returned after processing the request.</typeparam>
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-    ResilienceOptions options) : IPipelineBehavior<TRequest, TResult>
+    IOptions<ResilienceOptions> options) : IPipelineBehavior<TRequest, TResult>
     where TRequest : IRequest
 {
+    /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
@@ -29,12 +37,12 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                     typeof(TRequest).Name);
                 throw;
             }
-            catch (Exception ex) when (retries < options.MaxRetries)
+            catch (Exception ex) when (retries < options.Value.MaxRetries)
             {
                 //For other exceptions, if we still have retries left, log and retry.
                 retries++;
                 logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}",
-                    typeof(TRequest).Name, retries, options.MaxRetries);
+                    typeof(TRequest).Name, retries, options.Value.MaxRetries);
 
                 //TODO: Says this is "optional", never implements the option to DispatcherOptions. Based?
                 //Add a delay before retrying. This is optional and can be configured in DispatcherOptions.

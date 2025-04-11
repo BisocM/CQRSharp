@@ -1,14 +1,18 @@
-﻿using CQRSharp.Interfaces.Context;
+﻿using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Sample.Management.Menu;
+using CQRSharp.Shared.Data.Interfaces.Context;
 
-namespace CQRSharp.Sample.Context
+namespace CQRSharp.Sample.Context;
+
+public class SampleRequestContext(object requestId, object userId, DateTime createdAt)
+    : IRateLimitedContext
 {
-    public class SampleRequestContext(string requestId, string userId)
-        : RequestContextBase(requestId, userId)
-    {
-        /// <summary>
-        /// The desired menu state after the completion of the command. Remains null if no menu state needed.
-        /// </summary>
-        public MenuState? NextState { get; set; }
-    }
+    /// <summary>
+    ///     The desired menu state after the completion of the command. Remains null if no menu state needed.
+    /// </summary>
+    public MenuState? NextState { get; set; }
+
+    public object RequestId { get; set; } = requestId;
+    public object UserId { get; set; } = userId;
+    public DateTime CreatedAt { get; } = createdAt;
 }

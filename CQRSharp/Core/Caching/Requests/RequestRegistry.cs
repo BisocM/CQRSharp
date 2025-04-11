@@ -1,5 +1,5 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.Data.Requests;
+using CQRSharp.Shared.Data.Models.Requests;
 
 namespace CQRSharp.Core.Caching.Requests;
 
@@ -19,6 +19,8 @@ public sealed class RequestRegistry(ConcurrentDictionary<Type, RequestMetadata> 
     }
 
     /// <inheritdoc />
-    public bool TryGetRequestMetadata(Type requestType, out RequestMetadata? metadata) =>
-        handlerMappings.TryGetValue(requestType, out metadata);
+    public bool TryGetRequestMetadata(Type requestType, out RequestMetadata? metadata)
+    {
+        return handlerMappings.TryGetValue(requestType, out metadata);
+    }
 }

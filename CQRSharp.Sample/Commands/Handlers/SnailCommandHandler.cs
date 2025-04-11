@@ -1,14 +1,12 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Handlers;
-using CQRSharp.Sample.Commands.Types;
+﻿using CQRSharp.Sample.Commands.Types;
+using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Menu;
+using CQRSharp.Shared.Data.Interfaces.Handlers;
+using CQRSharp.Shared.Data.Models.Commands;
 
 namespace CQRSharp.Sample.Commands.Handlers;
 
-public class SnailCommandHandler : ICommandHandler<SnailCommand>
+public class SnailCommandHandler : ICommandHandler<SnailCommand, SampleRequestContext>
 {
     public async Task<CommandResult> Handle(SnailCommand command, CancellationToken cancellationToken)
     {
@@ -22,9 +20,10 @@ public class SnailCommandHandler : ICommandHandler<SnailCommand>
                                \  \__/\   /\ @_/  /
                                 \____\____\______/
                             ");
-        
+
         //Modify the state so that we return back to the primary menu.
         command.Context.NextState = MenuState.PrimaryMenu;
+        Console.WriteLine($"User ID: {command.Context.UserId}");
         return CommandResult.FromSuccess();
     }
 }

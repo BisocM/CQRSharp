@@ -1,5 +1,5 @@
-﻿using CQRSharp.Interfaces.Context;
-using CQRSharp.Interfaces.Markers.Request;
+﻿using CQRSharp.Shared.Data.Interfaces.Context;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Factories;
 
@@ -11,12 +11,9 @@ namespace CQRSharp.Core.Factories;
 public class DefaultRequestContextFactory : IRequestContextFactory
 {
     /// <inheritdoc />
-    public IRequestContext CreateContext(IRequest request)
+    public RequestContextBase CreateContext(IRequest request)
     {
-        //Default values.
-        const string requestId = "Request ID factory not registered.";
-        const string userId = "User ID factory not registered.";
-
-        return new RequestContextBase(requestId, userId);
+        //Return a default instance of RequestContextBase
+        return new RequestContextBase();
     }
 }

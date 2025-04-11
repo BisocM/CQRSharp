@@ -1,5 +1,5 @@
-﻿using CQRSharp.Interfaces.Markers.Request;
-using CQRSharp.Shared.Attributes.Requests;
+﻿using CQRSharp.Shared.Data.Attributes.Requests;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Pipelines;
 

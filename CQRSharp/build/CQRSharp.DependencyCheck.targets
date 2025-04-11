@@ -1,5 +1,0 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-    <Target Name="CheckForCQRSharpGenerators" BeforeTargets="BeforeBuild">
-        <Message Importance="high" Text="You must install the 'CQRSharp.Generators' NuGet package in your project to enable source generation for CQRSharp. CQRSharp does not rely on reflection for request discovery." />
-    </Target>
-</Project>

@@ -1,4 +1,4 @@
-﻿using CQRSharp.Data.Requests;
+﻿using CQRSharp.Shared.Data.Models.Requests;
 
 namespace CQRSharp.Core.Caching.Requests;
 

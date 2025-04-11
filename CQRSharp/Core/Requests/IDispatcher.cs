@@ -1,7 +1,7 @@
 ﻿using CQRSharp.Core.Options.Enums;
-using CQRSharp.Data.Commands;
-using CQRSharp.Interfaces.Markers.Command;
-using CQRSharp.Interfaces.Markers.Query;
+using CQRSharp.Shared.Data.Interfaces.Markers.Command;
+using CQRSharp.Shared.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Data.Models.Commands;
 
 namespace CQRSharp.Core.Requests;
 
@@ -28,7 +28,7 @@ public interface IDispatcher
     /// <remarks>
     ///     Please pay attention to your application's run mode - synchronous or asynchronous.
     ///     If your run mode is <see cref="RunMode.Async" />, the query will be executed asynchronously, meaning that this
-    ///     method will always return a default value.
+    ///     method will always return a <see cref="CommandResult" /> success value.
     ///     In order to retrieve data from asynchronous queries, you must subscribe to the <see cref="IQuery{TResult}" />
     ///     result event.
     /// </remarks>

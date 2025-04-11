@@ -1,5 +1,5 @@
-﻿using CQRSharp.Interfaces.Markers.Query;
-using CQRSharp.Interfaces.Notifications;
+﻿using CQRSharp.Shared.Data.Interfaces.Markers.Query;
+using CQRSharp.Shared.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 
@@ -16,7 +16,7 @@ namespace CQRSharp.Core.Notifications.Types;
 public sealed class QueryCompletedNotification<TResult> : INotification
 {
     /// <summary>
-    /// Represents a notification that indicates the completion of an asynchronously-queued query.
+    ///     Represents a notification that indicates the completion of an asynchronously-queued query.
     /// </summary>
     /// <param name="query"></param>
     /// <param name="result"></param>
@@ -28,7 +28,7 @@ public sealed class QueryCompletedNotification<TResult> : INotification
     }
 
     /// <summary>
-    /// The query instance that has completed.
+    ///     The query instance that has completed.
     /// </summary>
     public IQuery<TResult> Query { get; }
 

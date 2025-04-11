@@ -1,12 +1,10 @@
-﻿using System;
-using System.Threading;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Management.Cancellation;
 
 public sealed class CancellationManager(ILogger<CancellationManager> logger)
 {
-    private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+    private CancellationTokenSource _cancellationTokenSource = new();
 
     public CancellationToken Token => _cancellationTokenSource.Token;
 

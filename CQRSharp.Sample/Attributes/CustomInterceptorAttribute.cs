@@ -1,8 +1,5 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.Interfaces.Markers.Request;
+using CQRSharp.Shared.Data.Attributes.Pipelines;
+using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -14,20 +11,24 @@ public class CustomInterceptorAttribute(int priority) : Attribute, ICommandInter
     public int PreHandlerExecutionPriority => priority;
     public int PostHandlerExecutionPriority => priority;
 
-    public async Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    public async Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider,
+        CancellationToken cancellationToken)
     {
         //Get the logger from the service provider
         var logger = serviceProvider.GetService<ILogger<CustomInterceptorAttribute>>();
-        logger?.LogInformation($"[PRE-HANDLER] Intercepting request of type {request.GetType().Name} with priority {PreHandlerExecutionPriority}");
+        logger?.LogInformation(
+            $"[PRE-HANDLER] Intercepting request of type {request.GetType().Name} with priority {PreHandlerExecutionPriority}");
 
         await Task.CompletedTask; //Simulate async pre-handler operation
     }
 
-    public async Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    public async Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider,
+        CancellationToken cancellationToken)
     {
         //Get the logger from the service provider
         var logger = serviceProvider.GetService<ILogger<CustomInterceptorAttribute>>();
-        logger?.LogInformation($"[POST-HANDLER] Completed handling request of type {request.GetType().Name} with priority {PostHandlerExecutionPriority}");
+        logger?.LogInformation(
+            $"[POST-HANDLER] Completed handling request of type {request.GetType().Name} with priority {PostHandlerExecutionPriority}");
 
         await Task.CompletedTask; //Simulate async post-handler operation
     }

@@ -2,6 +2,9 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using CQRSharp.Shared.Data.Attributes.Pipelines;
+using CQRSharp.Shared.Data.Attributes.Requests;
+using CQRSharp.Shared.Data.Models.Requests;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -9,8 +12,10 @@ using Microsoft.CodeAnalysis.Text;
 namespace CQRSharp.Generators.Types
 {
     /// <summary>
-    /// A source generator that builds a request registry by discovering classes implementing interfaces
-    /// marked with [HandlerType]. It then collects additional metadata (pre/post handlers, pipeline exemptions, etc.).
+    ///     A source generator that builds a request registry by discovering classes implementing interfaces
+    ///     marked with [HandlerType]. It collects additional metadata (pre/post handlers, pipeline exemptions,
+    ///     sensitive properties, and now also the request context type) and generates a registrar that registers
+    ///     the metadata with the DI container.
     /// </summary>
     [Generator]
     public sealed class RequestRegistryGenerator : IIncrementalGenerator
@@ -21,8 +26,8 @@ namespace CQRSharp.Generators.Types
             //STEP 1: Register a syntax provider that finds all class declarations.
             var candidateClassesProvider = context.SyntaxProvider
                 .CreateSyntaxProvider(
-                    predicate: static (node, _) => node is ClassDeclarationSyntax,
-                    transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol
+                    static (node, _) => node is ClassDeclarationSyntax,
+                    static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol
                 )
                 .Where(symbol => symbol is not null);
 
@@ -37,7 +42,8 @@ namespace CQRSharp.Generators.Types
                 try
                 {
                     var generatedSource = GenerateRequestRegistry(spc, compilation, candidateClasses);
-                    spc.AddSource("GeneratedRequestRegistryRegistrar.g.cs", SourceText.From(generatedSource, Encoding.UTF8));
+                    spc.AddSource("GeneratedRequestRegistryRegistrar.g.cs",
+                        SourceText.From(generatedSource, Encoding.UTF8));
                 }
                 catch (Exception ex)
                 {
@@ -51,7 +57,7 @@ namespace CQRSharp.Generators.Types
         }
 
         /// <summary>
-        /// Generates the entire request registry source code after analyzing candidate classes.
+        ///     Generates the entire request registry source code after analyzing candidate classes.
         /// </summary>
         private static string GenerateRequestRegistry(
             SourceProductionContext spc,
@@ -64,10 +70,10 @@ namespace CQRSharp.Generators.Types
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Concurrent;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
-            sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
-            sb.AppendLine("using CQRSharp.Core.SourceGeneration;");
-            sb.AppendLine("using CQRSharp.Shared.Attributes.Requests;");
-            sb.AppendLine("using CQRSharp.Data.Requests;");
+            sb.AppendLine("using CQRSharp.Shared.Data.Attributes.Pipelines;");
+            sb.AppendLine("using CQRSharp.Shared.Data.Models.Requests;");
+            sb.AppendLine("using CQRSharp.Core.SourceGeneration;  //For IDataRegistrar and Registrar.");
+            sb.AppendLine("using CQRSharp.Core.Caching.Requests;  //For IDataRegistrar and Registrar.");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine();
             sb.AppendLine("namespace CQRSharp.Core.Extensions");
@@ -83,15 +89,18 @@ namespace CQRSharp.Generators.Types
             sb.AppendLine("            var handlerMappings = new ConcurrentDictionary<Type, RequestMetadata>();");
             sb.AppendLine();
 
-            const string handlerTypeAttributeFullName = "CQRSharp.Shared.Attributes.Requests.HandlerTypeAttribute";
+            var handlerTypeAttributeFullName = typeof(HandlerTypeAttribute).FullName!;
             var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName(handlerTypeAttributeFullName);
 
             //Additional attribute types (pre/post/pipeline exemption).
-            var preHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Core.Pipelines.Attributes.IPreHandlerAttribute");
-            var postHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Core.Pipelines.Attributes.IPostHandlerAttribute");
-            var pipelineExemptionAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Core.Pipelines.Attributes.Markers.PipelineExemptionAttribute");
+            var preHandlerInterfaceSymbol =
+                compilation.GetTypeByMetadataName(typeof(IPreHandlerAttribute).FullName!);
+            var postHandlerInterfaceSymbol =
+                compilation.GetTypeByMetadataName(typeof(IPostHandlerAttribute).FullName!);
+            var pipelineExemptionAttributeSymbol =
+                compilation.GetTypeByMetadataName(typeof(PipelineExemptionAttribute).FullName!);
 
-            bool anyRegistrationFound = false;
+            var anyRegistrationFound = false;
 
             //STEP 4: Iterate over candidate classes and process each implemented interface with [HandlerType].
             foreach (var candidate in candidateClasses.Distinct())
@@ -99,11 +108,8 @@ namespace CQRSharp.Generators.Types
                 if (candidate == null)
                     continue;
 
-                foreach (var iface in candidate.AllInterfaces)
+                foreach (var iface in candidate.AllInterfaces.Where(iface => IsHandlerInterfaceMarked(iface, handlerTypeAttributeSymbol)))
                 {
-                    if (!IsHandlerInterfaceMarked(iface, handlerTypeAttributeSymbol))
-                        continue;
-
                     if (iface.TypeArguments.Length == 0)
                     {
                         //Emit a diagnostic if the interface is missing type arguments.
@@ -124,17 +130,32 @@ namespace CQRSharp.Generators.Types
                     var registrationKind = ExtractRegistrationKind(iface, handlerTypeAttributeSymbol);
 
                     //Gather pre-handlers, post-handlers, pipeline exemptions from attributes on the request type.
-                    var preHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, preHandlerInterfaceSymbol, "CQRSharp.Core.Pipelines.Attributes.IPreHandlerAttribute");
-                    var postHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, postHandlerInterfaceSymbol, "CQRSharp.Core.Pipelines.Attributes.IPostHandlerAttribute");
-                    var pipelineExemptionsCode = GenerateAttributeArrayCode(requestTypeSymbol, pipelineExemptionAttributeSymbol, "CQRSharp.Core.Pipelines.Attributes.Markers.PipelineExemptionAttribute");
+                    var preHandlersCode = GenerateAttributeArrayCode(
+                        requestTypeSymbol, preHandlerInterfaceSymbol,
+                        typeof(IPreHandlerAttribute).FullName ??
+                        throw new InvalidOperationException("Could not resolve IPreHandlerAttribute type name."));
+                    var postHandlersCode = GenerateAttributeArrayCode(
+                        requestTypeSymbol, postHandlerInterfaceSymbol,
+                        typeof(IPostHandlerAttribute).FullName ??
+                        throw new InvalidOperationException("Could not resolve IPostHandlerAttribute type name."));
+                    var pipelineExemptionsCode = GenerateAttributeArrayCode(
+                        requestTypeSymbol, pipelineExemptionAttributeSymbol,
+                        typeof(PipelineExemptionAttribute).FullName ??
+                        throw new InvalidOperationException("Could not resolve PipelineExemptionAttribute type name."));
 
                     //Identify any sensitive properties on the request type.
                     var sensitivePropertiesCode = GenerateSensitivePropertiesCode(requestTypeSymbol);
 
                     //For demonstration, we treat "Command" kind as returning null, otherwise we default to typeof(object).
-                    string resultTypeCode = registrationKind == "Command" ? "null" : "typeof(object)";
+                    var resultTypeCode = registrationKind == "Command" ? "null" : "typeof(object)";
 
-                    //Append the registration to the mapping.
+                    //Determine the Request Context Type
+                    //Attempt to extract the context type by inspecting the base classes.
+                    var contextTypeSymbol = GetRequestContextType(requestTypeSymbol) 
+                                            ?? compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Interfaces.Context.RequestContextBase");
+                    var contextTypeName = contextTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "object";
+
+                    //Append the registration to the mapping, including the new ContextType value.
                     sb.AppendLine($"            handlerMappings.TryAdd(typeof({requestTypeName}),");
                     sb.AppendLine("                new RequestMetadata(");
                     sb.AppendLine($"                    RequestType: typeof({requestTypeName}),");
@@ -143,7 +164,9 @@ namespace CQRSharp.Generators.Types
                     sb.AppendLine($"                    PostHandlers: {postHandlersCode},");
                     sb.AppendLine($"                    PipelineExemptions: {pipelineExemptionsCode},");
                     sb.AppendLine($"                    SensitiveProperties: {sensitivePropertiesCode},");
-                    sb.AppendLine($"                    ResultType: {resultTypeCode}));");
+                    sb.AppendLine($"                    ResultType: {resultTypeCode},");
+                    sb.AppendLine($"                    ContextType: typeof({contextTypeName})");
+                    sb.AppendLine("                ));");
                     sb.AppendLine();
 
                     anyRegistrationFound = true;
@@ -174,20 +197,43 @@ namespace CQRSharp.Generators.Types
             sb.AppendLine("    }");
             sb.AppendLine("}");
 
-            //If no registrations were found, emit a diagnostic.
             if (!anyRegistrationFound)
-            {
                 spc.ReportDiagnostic(Diagnostic.Create(
                     RequestRegistryDiagnostics.NoRequestMetadataDiscovered,
                     Location.None
                 ));
-            }
 
             return sb.ToString();
         }
 
         /// <summary>
-        /// Checks whether the given interface is marked with the [HandlerType] attribute.
+        /// Attempts to extract the request context type by inspecting the base types of the given request type.
+        /// It looks for the first generic base matching RequestBase&lt;TContext&gt; and returns the TContext.
+        /// </summary>
+        /// <param name="requestTypeSymbol">The request type symbol to examine.</param>
+        /// <returns>The extracted context type symbol if found; otherwise, null.</returns>
+        private static ITypeSymbol? GetRequestContextType(ITypeSymbol requestTypeSymbol)
+        {
+            //Traverse the base types.
+            var current = requestTypeSymbol.BaseType;
+            while (current != null)
+            {
+                //Compare the fully qualified name of the generic definition to our known RequestBase.
+                if (current.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                    == "global::CQRSharp.Shared.Data.Interfaces.Markers.Request.RequestBase<TContext>")
+                {
+                    if (current is INamedTypeSymbol named && named.TypeArguments.Length == 1)
+                    {
+                        return named.TypeArguments[0];
+                    }
+                }
+                current = current.BaseType;
+            }
+            return null;
+        }
+
+        /// <summary>
+        ///     Checks whether the given interface is marked with the [HandlerType] attribute.
         /// </summary>
         private static bool IsHandlerInterfaceMarked(INamedTypeSymbol iface, INamedTypeSymbol? handlerTypeAttributeSymbol)
         {
@@ -199,7 +245,7 @@ namespace CQRSharp.Generators.Types
         }
 
         /// <summary>
-        /// Extracts the "registration kind" from the HandlerType attribute constructor argument, if present.
+        ///     Extracts the "registration kind" from the HandlerType attribute constructor argument, if present.
         /// </summary>
         private static string ExtractRegistrationKind(INamedTypeSymbol iface, INamedTypeSymbol? handlerTypeAttributeSymbol)
         {
@@ -219,28 +265,22 @@ namespace CQRSharp.Generators.Types
         }
 
         /// <summary>
-        /// Generates code to instantiate an array of attribute instances from the given request type,
-        /// considering only attributes whose classes implement the specified interface.
+        ///     Generates code to instantiate an array of attribute instances from the given request type,
+        ///     considering only attributes whose classes implement the specified interface.
         /// </summary>
         private static string GenerateAttributeArrayCode(
             ITypeSymbol requestTypeSymbol,
             INamedTypeSymbol? attributeInterfaceSymbol,
             string fullyQualifiedInterfaceName)
         {
-            if (attributeInterfaceSymbol is null)
-            {
-                return $"Array.Empty<{fullyQualifiedInterfaceName}>()";
-            }
+            if (attributeInterfaceSymbol is null) return $"Array.Empty<{fullyQualifiedInterfaceName}>()";
 
             var attributeInstances = requestTypeSymbol.GetAttributes()
                 .Where(attr => attr.AttributeClass != null &&
                                InheritsOrImplements(attr.AttributeClass, attributeInterfaceSymbol))
                 .ToList();
 
-            if (!attributeInstances.Any())
-            {
-                return $"Array.Empty<{fullyQualifiedInterfaceName}>()";
-            }
+            if (!attributeInstances.Any()) return $"Array.Empty<{fullyQualifiedInterfaceName}>()";
 
             //Each attribute is constructed via known compile-time constants or default constructors.
             var instancesCode = attributeInstances.Select(attr =>
@@ -254,28 +294,27 @@ namespace CQRSharp.Generators.Types
         }
 
         /// <summary>
-        /// Scans the request type for properties marked with [SensitiveAttribute] and generates code
-        /// to create a PropertySensitivity array describing them.
+        ///     Scans the request type for properties marked with [SensitiveAttribute] and generates code
+        ///     to create a PropertySensitivity array describing them.
         /// </summary>
         private static string GenerateSensitivePropertiesCode(ITypeSymbol requestTypeSymbol)
         {
+            var propertySensitivityFullyQualifiedName = typeof(PropertySensitivity).FullName ??
+                                                        throw new InvalidOperationException("Could not resolve PropertySensitivity type name.");
             var sensitiveProps = requestTypeSymbol.GetMembers()
                 .OfType<IPropertySymbol>()
                 .Where(prop => prop.GetAttributes()
-                    .Any(attr => attr.AttributeClass?.Name == "SensitiveAttribute"))
-                .Select(prop => $"new CQRSharp.Data.Requests.PropertySensitivity(\"{prop.Name}\", true)")
+                    .Any(attr => attr.AttributeClass?.Name == nameof(SensitiveDataAttribute)))
+                .Select(prop => $"new {propertySensitivityFullyQualifiedName}(\"{prop.Name}\", true)")
                 .ToList();
 
-            if (!sensitiveProps.Any())
-            {
-                return "Array.Empty<CQRSharp.Data.Requests.PropertySensitivity>()";
-            }
-
-            return $"new CQRSharp.Data.Requests.PropertySensitivity[] {{ {string.Join(", ", sensitiveProps)} }}";
+            return !sensitiveProps.Any()
+                ? $"Array.Empty<{propertySensitivityFullyQualifiedName}>()"
+                : $"new {propertySensitivityFullyQualifiedName}[] {{ {string.Join(", ", sensitiveProps)} }}";
         }
 
         /// <summary>
-        /// Converts a Roslyn TypedConstant into a string representation suitable for source generation.
+        ///     Converts a Roslyn TypedConstant into a string representation suitable for source generation.
         /// </summary>
         private static string GenerateTypedConstant(TypedConstant constant)
         {
@@ -288,13 +327,14 @@ namespace CQRSharp.Generators.Types
                     ? $"\"{constant.Value}\""
                     : constant.Value?.ToString() ?? "null",
 
-                TypedConstantKind.Enum => $"{constant.Type!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{constant.Value}",
+                TypedConstantKind.Enum =>
+                    $"{constant.Type!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{constant.Value}",
                 _ => "null"
             };
         }
 
         /// <summary>
-        /// Determines whether a type inherits from or implements the specified base type/interface.
+        ///     Determines whether a type inherits from or implements the specified base type/interface.
         /// </summary>
         private static bool InheritsOrImplements(ITypeSymbol type, INamedTypeSymbol baseType)
         {
@@ -303,11 +343,8 @@ namespace CQRSharp.Generators.Types
                 return true;
 
             //Check all interfaces.
-            foreach (var iface in type.AllInterfaces)
-            {
-                if (SymbolEqualityComparer.Default.Equals(iface, baseType))
-                    return true;
-            }
+            if (type.AllInterfaces.Any(iface => SymbolEqualityComparer.Default.Equals(iface, baseType)))
+                return true;
 
             //Traverse base types.
             var current = type.BaseType;
@@ -322,44 +359,44 @@ namespace CQRSharp.Generators.Types
         }
 
         /// <summary>
-        /// Contains diagnostic descriptors used by the <see cref="RequestRegistryGenerator"/>.
+        ///     Contains diagnostic descriptors used by the <see cref="RequestRegistryGenerator" />.
         /// </summary>
         private static class RequestRegistryDiagnostics
         {
             /// <summary>
-            /// Emitted when the interface is marked with [HandlerType] but has no generic arguments.
+            ///     Emitted when the interface is marked with [HandlerType] but has no generic arguments.
             /// </summary>
             public static readonly DiagnosticDescriptor MissingGenericArgument = new(
-                id: "CQRMD001",
-                title: "Handler Interface Missing Generic Argument",
-                messageFormat: "Interface '{0}' is marked with [HandlerType] but has no generic arguments",
-                category: "CQRSharp.Generators",
-                defaultSeverity: DiagnosticSeverity.Warning,
-                isEnabledByDefault: true
+                "CQRMD001",
+                "Handler Interface Missing Generic Argument",
+                "Interface '{0}' is marked with [HandlerType] but has no generic arguments",
+                "CQRSharp.Generators",
+                DiagnosticSeverity.Warning,
+                true
             );
 
             /// <summary>
-            /// Emitted when no request metadata was discovered in the process.
+            ///     Emitted when no request metadata was discovered in the process.
             /// </summary>
             public static readonly DiagnosticDescriptor NoRequestMetadataDiscovered = new(
-                id: "CQRMD002",
-                title: "No Request Metadata Discovered",
-                messageFormat: "No request metadata was discovered. Ensure that your handlers implement interfaces marked with [HandlerType].",
-                category: "CQRSharp.Generators",
-                defaultSeverity: DiagnosticSeverity.Info,
-                isEnabledByDefault: true
+                "CQRMD002",
+                "No Request Metadata Discovered",
+                "No request metadata was discovered. Ensure that your handlers implement interfaces marked with [HandlerType].",
+                "CQRSharp.Generators",
+                DiagnosticSeverity.Info,
+                true
             );
 
             /// <summary>
-            /// Emitted for any unhandled exception in <see cref="RequestRegistryGenerator"/>.
+            ///     Emitted for any unhandled exception in <see cref="RequestRegistryGenerator" />.
             /// </summary>
             public static readonly DiagnosticDescriptor UnhandledException = new(
-                id: "CQRMD999",
-                title: "Unhandled Exception in RequestRegistryGenerator",
-                messageFormat: "Unhandled exception: {0}",
-                category: "CQRSharp.Generators",
-                defaultSeverity: DiagnosticSeverity.Error,
-                isEnabledByDefault: true
+                "CQRMD999",
+                "Unhandled Exception in RequestRegistryGenerator",
+                "Unhandled exception: {0}",
+                "CQRSharp.Generators",
+                DiagnosticSeverity.Error,
+                true
             );
         }
     }
