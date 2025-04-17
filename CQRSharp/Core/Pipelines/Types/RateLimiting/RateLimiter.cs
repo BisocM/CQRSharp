@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using CQRSharp.Core.Options;
 using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Pipelines.Types.RateLimiting

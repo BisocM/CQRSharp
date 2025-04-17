@@ -1,4 +1,6 @@
-﻿namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
+﻿using CQRSharp.Core.Pipelines.Types.RateLimiting;
+
+namespace CQRSharp.Core.Options;
 
 /// <summary>
 ///     Class object for the options needed for the rate limited.
