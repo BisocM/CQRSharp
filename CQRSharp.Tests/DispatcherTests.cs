@@ -285,8 +285,8 @@ namespace CQRSharp.Tests
             Assert.False(task.IsCompleted, "Expected Task not completed before background execution");
 
             //Simulate background consumer
-            var workItem = await _queue.DequeueAsync(CancellationToken.None);
-            await workItem(CancellationToken.None);
+            var queuedTask = await _queue.DequeueAsync(CancellationToken.None);
+            await queuedTask.WorkItem(CancellationToken.None);
 
             var result = await task;
 

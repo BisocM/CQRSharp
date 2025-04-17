@@ -1,13 +1,13 @@
-﻿using CQRSharp.Core.Options;
-using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using CQRSharp.Core.Options;
 
 namespace CQRSharp.Core.BackgroundTasks
 {
     /// <summary>
-    /// Hosted service that continuously pulls work items in batches
-    /// and dispatches them via the ThreadPool with minimal overhead.
+    /// A <see cref="BackgroundService"/> that continuously consumes work items
+    /// from an <see cref="IBackgroundTaskQueue"/> and dispatches them to the thread pool.
     /// </summary>
     public class BackgroundTaskQueueConsumer : BackgroundService
     {
@@ -21,45 +21,44 @@ namespace CQRSharp.Core.BackgroundTasks
         /// <param name="taskQueue">The queue to consume from.</param>
         /// <param name="logger">Logger for lifecycle and error events.</param>
         /// <param name="options">Queue options for batch sizing.</param>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown if any dependency is null.
-        /// </exception>
+        /// <exception cref="ArgumentNullException">Thrown if any dependency is null.</exception>
         public BackgroundTaskQueueConsumer(
             IBackgroundTaskQueue taskQueue,
             ILogger<BackgroundTaskQueueConsumer> logger,
             IOptions<BackgroundTaskQueueOptions> options)
         {
-            _taskQueue = taskQueue    ?? throw new ArgumentNullException(nameof(taskQueue));
-            _logger    = logger       ?? throw new ArgumentNullException(nameof(logger));
-            ArgumentNullException.ThrowIfNull(options);
-
-            var opts = options.Value;
-            _batchSize = opts.DequeueBatchSize > 0
-                ? opts.DequeueBatchSize
-                : int.MaxValue;
+            _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            var opts = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            _batchSize = opts.DequeueBatchSize > 0 ? opts.DequeueBatchSize : int.MaxValue;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Executes the background consumer loop, reading tasks in batches and queuing them
+        /// on the thread pool for execution.
+        /// </summary>
+        /// <param name="stoppingToken">A token that signals when the host is shutting down.</param>
+        /// <returns>A <see cref="Task"/> that completes when the consumer stops.</returns>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("BackgroundTaskQueueConsumer starting.");
 
             var reader = _taskQueue.Reader;
-            while (await reader.WaitToReadAsync(stoppingToken))
+            while (await reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
             {
                 var processed = 0;
-                while (processed++ < _batchSize && reader.TryRead(out var workItem))
+                while (processed++ < _batchSize && reader.TryRead(out var qt))
                 {
-                    ThreadPool.UnsafeQueueUserWorkItem(state =>
+                    ThreadPool.UnsafeQueueUserWorkItem(async void (_) =>
                     {
-                        workItem(stoppingToken)
-                          .ContinueWith(t =>
-                          {
-                              if (t.Exception is not null)
-                                  _logger.LogError(
-                                      t.Exception,
-                                      "Error executing background work item.");
-                          }, TaskContinuationOptions.OnlyOnFaulted);
+                        try
+                        {
+                            await qt.WorkItem(stoppingToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error executing work item {SequenceNumber}.", qt.SequenceNumber);
+                        }
                     }, null);
                 }
             }

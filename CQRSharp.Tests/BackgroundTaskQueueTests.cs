@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Threading.Channels;
 using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.BackgroundTasks.Types;
 using CQRSharp.Core.Options;
 using Microsoft.Extensions.Options;
 
@@ -16,14 +17,14 @@ namespace CQRSharp.Tests
         private static BackgroundTaskQueueOptions MakeOptions(
             int capacity,
             BoundedChannelFullMode fullMode,
-            Action<Func<CancellationToken, Task>>? onRejected = null)
+            Action<TaskRejectedEventArgs>? onRejected = null)
             => new()
             {
-                Capacity         = capacity,
-                FullMode         = fullMode,
-                ConsumerCount    = 1,
+                Capacity = capacity,
+                FullMode = fullMode,
+                ConsumerCount = 1,
                 DequeueBatchSize = 1,
-                OnTaskRejected   = onRejected
+                OnTaskRejected = onRejected
             };
 
         private static IOptions<BackgroundTaskQueueOptions> Opts(BackgroundTaskQueueOptions o)
@@ -32,9 +33,9 @@ namespace CQRSharp.Tests
         [Fact(DisplayName = "Unbounded queue preserves FIFO order and never drops items")]
         public async Task UnboundedQueue_PreservesOrderAndNoDrops()
         {
-            var opts  = MakeOptions(capacity: 0, fullMode: BoundedChannelFullMode.Wait);
+            var opts = MakeOptions(capacity: 0, fullMode: BoundedChannelFullMode.Wait);
             var queue = new BackgroundTaskQueue(Opts(opts));
-            var ct    = CancellationToken.None;
+            var ct = CancellationToken.None;
             var items = Enumerable.Range(1, 50)
                                   .Select(i => (Func<CancellationToken, Task>)(_ => Task.CompletedTask))
                                   .ToList();
@@ -44,7 +45,10 @@ namespace CQRSharp.Tests
 
             var drained = new List<Func<CancellationToken, Task>>();
             for (int i = 0; i < items.Count; i++)
-                drained.Add(await queue.DequeueAsync(ct));
+            {
+                var queued = await queue.DequeueAsync(ct);
+                drained.Add(queued.WorkItem);
+            }
 
             Assert.Equal(items.Count, drained.Count);
             Assert.True(
@@ -56,78 +60,75 @@ namespace CQRSharp.Tests
         [Fact(DisplayName = "DropNewest policy rejects newest items once full")]
         public async Task DropNewest_RejectsNewestBeyondCapacity()
         {
-            var rejected = new List<Func<CancellationToken, Task>>();
-            var opts     = MakeOptions(
-                capacity:   2,
-                fullMode:   BoundedChannelFullMode.DropNewest,
+            var rejected = new List<TaskRejectedEventArgs>();
+            var opts = MakeOptions(
+                capacity: 2,
+                fullMode: BoundedChannelFullMode.DropNewest,
                 onRejected: rejected.Add
             );
             var queue = new BackgroundTaskQueue(Opts(opts));
-            var ct    = CancellationToken.None;
+            var ct = CancellationToken.None;
 
             await queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct);
             await queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct);
+
             var third = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
             await queue.QueueBackgroundWorkItemAsync(third, ct);
 
             var got = new[]
             {
-                await queue.DequeueAsync(ct),
-                await queue.DequeueAsync(ct)
+                (await queue.DequeueAsync(ct)).WorkItem,
+                (await queue.DequeueAsync(ct)).WorkItem
             };
 
             Assert.Single(rejected);
-            Assert.Contains(third, rejected);
             Assert.DoesNotContain(third, got);
-            Assert.True(
-                got.Length == 2,
-                "Queue should contain exactly two items after DropNewest."
-            );
+            Assert.Equal(2, got.Length);
         }
 
         [Fact(DisplayName = "DropWrite policy behaves like DropNewest")]
         public async Task DropWrite_RejectsWriteWhenFull()
         {
-            var rejected = new List<Func<CancellationToken, Task>>();
-            var opts     = MakeOptions(
-                capacity:   2,
-                fullMode:   BoundedChannelFullMode.DropWrite,
+            var rejected = new List<TaskRejectedEventArgs>();
+            var opts = MakeOptions(
+                capacity: 2,
+                fullMode: BoundedChannelFullMode.DropWrite,
                 onRejected: rejected.Add
             );
             var queue = new BackgroundTaskQueue(Opts(opts));
-            var ct    = CancellationToken.None;
+            var ct = CancellationToken.None;
 
             await queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct);
             await queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct);
+
             var third = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
             await queue.QueueBackgroundWorkItemAsync(third, ct);
 
             var got = new[]
             {
-                await queue.DequeueAsync(ct),
-                await queue.DequeueAsync(ct)
+                (await queue.DequeueAsync(ct)).WorkItem,
+                (await queue.DequeueAsync(ct)).WorkItem
             };
 
             Assert.Single(rejected);
-            Assert.Contains(third, rejected);
             Assert.DoesNotContain(third, got);
         }
 
         [Fact(DisplayName = "DropOldest policy replaces oldest when full")]
         public async Task DropOldest_ReplacesOldestWhenFull()
         {
-            var rejected = new List<Func<CancellationToken, Task>>();
-            var opts     = MakeOptions(
-                capacity:   2,
-                fullMode:   BoundedChannelFullMode.DropOldest,
+            var rejected = new List<TaskRejectedEventArgs>();
+            var opts = MakeOptions(
+                capacity: 2,
+                fullMode: BoundedChannelFullMode.DropOldest,
                 onRejected: rejected.Add
             );
             var queue = new BackgroundTaskQueue(Opts(opts));
-            var ct    = CancellationToken.None;
+            var ct = CancellationToken.None;
 
-            var first  = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
+            var first = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
             var second = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
-            var third  = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
+            var third = (Func<CancellationToken, Task>)(_ => Task.CompletedTask);
 
             await queue.QueueBackgroundWorkItemAsync(first, ct);
             await queue.QueueBackgroundWorkItemAsync(second, ct);
@@ -135,30 +136,28 @@ namespace CQRSharp.Tests
 
             var got = new[]
             {
-                await queue.DequeueAsync(ct),
-                await queue.DequeueAsync(ct)
+                (await queue.DequeueAsync(ct)).WorkItem,
+                (await queue.DequeueAsync(ct)).WorkItem
             };
 
             Assert.Single(rejected);
-            Assert.Contains(third, rejected);
-            Assert.DoesNotContain(first, got);
-            Assert.Equal([second, third], got);
+            Assert.Equal(new[] { second, third }, got);
         }
 
         [Fact(DisplayName = "Wait policy blocks and throws when canceled")]
         public async Task WaitMode_CancelsWhenCancelledBeforeSpaceAvailable()
         {
-            var opts  = MakeOptions(capacity: 1, fullMode: BoundedChannelFullMode.Wait);
+            var opts = MakeOptions(capacity: 1, fullMode: BoundedChannelFullMode.Wait);
             var queue = new BackgroundTaskQueue(Opts(opts));
 
             var cts = new CancellationTokenSource();
-            var ct  = cts.Token;
+            var ct = cts.Token;
 
             //Fill once
             await queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct);
 
             //Cancel before second enqueue
-            await cts.CancelAsync();
+            cts.Cancel();
 
             await Assert.ThrowsAsync<TaskCanceledException>(
                 () => queue.QueueBackgroundWorkItemAsync(_ => Task.CompletedTask, ct)
@@ -168,10 +167,10 @@ namespace CQRSharp.Tests
         [Fact(DisplayName = "DequeueAsync throws when canceled immediately")]
         public async Task DequeueAsync_RespectsImmediateCancellation()
         {
-            var opts  = MakeOptions(capacity: 1, fullMode: BoundedChannelFullMode.Wait);
+            var opts = MakeOptions(capacity: 1, fullMode: BoundedChannelFullMode.Wait);
             var queue = new BackgroundTaskQueue(Opts(opts));
-            var cts   = new CancellationTokenSource();
-            await cts.CancelAsync();
+            var cts = new CancellationTokenSource();
+            cts.Cancel();
 
             await Assert.ThrowsAsync<TaskCanceledException>(
                 () => queue.DequeueAsync(cts.Token).AsTask()
@@ -181,10 +180,9 @@ namespace CQRSharp.Tests
         [Fact(DisplayName = "Stress test under DropNewest with high concurrency and capacity reporting")]
         public async Task StressTest_HighConcurrencyDropNewest()
         {
-            //Arrange
             const int capacity = 100;
             const int producerCount = 1000;
-            var rejected = new ConcurrentBag<Func<CancellationToken, Task>>();
+            var rejected = new ConcurrentBag<TaskRejectedEventArgs>();
             var opts = MakeOptions(capacity, BoundedChannelFullMode.DropNewest, onRejected: rejected.Add);
             var queue = new BackgroundTaskQueue(Opts(opts));
             var ct = CancellationToken.None;
@@ -210,7 +208,6 @@ namespace CQRSharp.Tests
         [Fact(DisplayName = "Stress test on unbounded queue under high concurrency")]
         public async Task StressTest_UnboundedHighConcurrency()
         {
-            //Arrange
             const int tasksToProduce = 100000;
             var opts = MakeOptions(capacity: 0, fullMode: BoundedChannelFullMode.Wait);
             var queue = new BackgroundTaskQueue(Opts(opts));

@@ -1,28 +1,27 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.Options;
+using CQRSharp.Core.BackgroundTasks.Types;
 using Microsoft.Extensions.Options;
+using CQRSharp.Core.Options;
 
 namespace CQRSharp.Core.BackgroundTasks
 {
     /// <summary>
-    /// Provides a queue for background tasks that can be processed asynchronously.
-    /// Supports bounded/unbounded channels with strict backpressure and minimal
-    /// contention settings.
+    /// Implements <see cref="IBackgroundTaskQueue"/> with optional bounded/unbounded channels,
+    /// rich enqueue feedback, sequence numbers, event callbacks, and built-in metrics.
     /// </summary>
     public sealed class BackgroundTaskQueue : IBackgroundTaskQueue
     {
         private readonly BackgroundTaskQueueOptions _options;
-        private readonly Channel<Func<CancellationToken, Task>> _workItems;
+        private readonly Channel<QueuedTask> _workItems;
+        private long _sequenceGenerator, _enqueuedCount, _droppedNewestCount, _droppedOldestCount;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BackgroundTaskQueue"/> class.
         /// </summary>
         /// <param name="options">
-        /// The options used to configure capacity, backpressure, and batch settings.
+        /// The options used to configure capacity, backpressure policy, and event callbacks.
         /// </param>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown if <paramref name="options"/> is null.
-        /// </exception>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="options"/> is null.</exception>
         public BackgroundTaskQueue(IOptions<BackgroundTaskQueueOptions> options)
         {
             ArgumentNullException.ThrowIfNull(options);
@@ -32,82 +31,111 @@ namespace CQRSharp.Core.BackgroundTasks
             {
                 var bounded = new BoundedChannelOptions(_options.Capacity)
                 {
-                    FullMode                      = _options.FullMode,
-                    SingleReader                  = false,
-                    SingleWriter                  = false,
+                    FullMode = _options.FullMode,
+                    SingleReader = false,
+                    SingleWriter = false,
                     AllowSynchronousContinuations = false
                 };
-                _workItems = Channel.CreateBounded<Func<CancellationToken, Task>>(bounded);
+                _workItems = Channel.CreateBounded<QueuedTask>(bounded);
             }
             else
             {
                 var unbounded = new UnboundedChannelOptions
                 {
-                    SingleReader                  = false,
-                    SingleWriter                  = false,
+                    SingleReader = false,
+                    SingleWriter = false,
                     AllowSynchronousContinuations = false
                 };
-                _workItems = Channel.CreateUnbounded<Func<CancellationToken, Task>>(unbounded);
+                _workItems = Channel.CreateUnbounded<QueuedTask>(unbounded);
             }
         }
 
         /// <inheritdoc/>
-        public Task QueueBackgroundWorkItemAsync(
+        public long TotalItemsEnqueued => Interlocked.Read(ref _enqueuedCount);
+
+        /// <inheritdoc/>
+        public long TotalDroppedNewest => Interlocked.Read(ref _droppedNewestCount);
+
+        /// <inheritdoc/>
+        public long TotalDroppedOldest => Interlocked.Read(ref _droppedOldestCount);
+
+        /// <inheritdoc/>
+        public event Action<TaskEnqueuedEventArgs>? OnTaskEnqueued;
+
+        /// <inheritdoc/>
+        public event Action<TaskRejectedEventArgs>? OnTaskRejected;
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Assigns a unique sequence number to each work item, applies the configured full-mode policy,
+        /// updates metrics, and fires appropriate callbacks.
+        /// </remarks>
+        public async Task<QueueWriteResult> QueueBackgroundWorkItemAsync(
             Func<CancellationToken, Task> workItem,
             CancellationToken cancellationToken)
         {
-            //Validate
             ArgumentNullException.ThrowIfNull(workItem);
 
-            //If capacity is bounded and we've reached it, apply backpressure policy
-            if (_options.Capacity > 0 &&
-                _workItems.Reader.Count >= _options.Capacity)
+            // Assign a unique ID for tracing
+            var seq = Interlocked.Increment(ref _sequenceGenerator);
+            var qt = new QueuedTask(seq, workItem);
+
+            // If bounded and full, apply policy
+            if (_options.Capacity > 0 && _workItems.Reader.Count >= _options.Capacity)
             {
-                //Notify that we're rejecting this item
-                _options.OnTaskRejected?.Invoke(workItem);
-
-                //Handle according to FullMode
-                return _options.FullMode switch
+                if (_options.FullMode == BoundedChannelFullMode.DropOldest &&
+                    _workItems.Reader.TryRead(out var oldest))
                 {
-                    //Block (or cancel) until space frees up
-                    BoundedChannelFullMode.Wait =>
-                        _workItems.Writer.WriteAsync(workItem, cancellationToken).AsTask(),
+                    Interlocked.Increment(ref _droppedOldestCount);
+                    var rej = new TaskRejectedEventArgs(seq, _options.FullMode, oldest.SequenceNumber);
+                    _options.OnTaskRejected?.Invoke(rej);
+                    OnTaskRejected?.Invoke(rej);
+                }
+                else if (_options.FullMode == BoundedChannelFullMode.DropNewest ||
+                         _options.FullMode == BoundedChannelFullMode.DropWrite)
+                {
+                    Interlocked.Increment(ref _droppedNewestCount);
+                    var rej = new TaskRejectedEventArgs(seq, _options.FullMode, null);
+                    _options.OnTaskRejected?.Invoke(rej);
+                    OnTaskRejected?.Invoke(rej);
+                    return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, seq);
+                }
 
-                    //Simply drop the newest/write without enqueueing
-                    BoundedChannelFullMode.DropNewest or
-                        BoundedChannelFullMode.DropWrite =>
-                        Task.CompletedTask,
-
-                    //Remove oldest then enqueue this one
-                    BoundedChannelFullMode.DropOldest =>
-                        DropOldestAndEnqueue(workItem),
-
-                    //If someone configures an unknown mode, that's an error
-                    _ =>
-                        throw new InvalidOperationException(
-                            "Queue full and policy set to throw.")
-                };
+                if (_options.FullMode == BoundedChannelFullMode.Wait)
+                {
+                    await _workItems.Writer.WriteAsync(qt, cancellationToken).ConfigureAwait(false);
+                    Interlocked.Increment(ref _enqueuedCount);
+                    var enq = new TaskEnqueuedEventArgs(seq, workItem);
+                    _options.OnTaskEnqueued?.Invoke(enq);
+                    OnTaskEnqueued?.Invoke(enq);
+                    return new QueueWriteResult(QueueWriteResultCode.Waited, seq);
+                }
             }
 
-            //Otherwise, enqueue immediately (unbounded or not yet full)
-            _workItems.Writer.TryWrite(workItem);
-            return Task.CompletedTask;
+            // Default: unbounded or not full
+            if (_workItems.Writer.TryWrite(qt))
+            {
+                Interlocked.Increment(ref _enqueuedCount);
+                var enq = new TaskEnqueuedEventArgs(seq, workItem);
+                _options.OnTaskEnqueued?.Invoke(enq);
+                OnTaskEnqueued?.Invoke(enq);
+                return new QueueWriteResult(QueueWriteResultCode.Enqueued, seq);
+            }
+
+            // Fallback to waiting
+            await _workItems.Writer.WriteAsync(qt, cancellationToken).ConfigureAwait(false);
+            Interlocked.Increment(ref _enqueuedCount);
+            var fallback = new TaskEnqueuedEventArgs(seq, workItem);
+            _options.OnTaskEnqueued?.Invoke(fallback);
+            OnTaskEnqueued?.Invoke(fallback);
+            return new QueueWriteResult(QueueWriteResultCode.Waited, seq);
         }
 
         /// <inheritdoc/>
-        public ValueTask<Func<CancellationToken, Task>> DequeueAsync(
-            CancellationToken cancellationToken) =>
+        public ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken) =>
             _workItems.Reader.ReadAsync(cancellationToken);
 
         /// <inheritdoc/>
-        public ChannelReader<Func<CancellationToken, Task>> Reader
-            => _workItems.Reader;
-
-        private Task DropOldestAndEnqueue(Func<CancellationToken, Task> workItem)
-        {
-            _workItems.Reader.TryRead(out _);
-            _workItems.Writer.TryWrite(workItem);
-            return Task.CompletedTask;
-        }
+        public ChannelReader<QueuedTask> Reader => _workItems.Reader;
     }
 }

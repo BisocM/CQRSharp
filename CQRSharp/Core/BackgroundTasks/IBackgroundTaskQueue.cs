@@ -1,51 +1,70 @@
 ﻿using System.Threading.Channels;
+using CQRSharp.Core.BackgroundTasks.Types;
 
 namespace CQRSharp.Core.BackgroundTasks
 {
     /// <summary>
-    /// Defines a contract for a background task queue capable of scheduling
-    /// and retrieving work items, and exposing the underlying channel reader
-    /// for high‑throughput batch dequeue scenarios.
+    /// Defines a background-task queue with detailed introspection, metrics, and event hooks.
     /// </summary>
     public interface IBackgroundTaskQueue
     {
         /// <summary>
         /// Queues a background work item to be processed asynchronously.
         /// </summary>
+        /// <remarks>
+        /// Returns a <see cref="QueueWriteResult"/> describing whether the item was enqueued,
+        /// dropped, or waited until space became available.
+        /// </remarks>
         /// <param name="workItem">
         /// Delegate representing the work to be processed. Must not be null.
         /// </param>
         /// <param name="cancellationToken">
-        /// Token to cancel the enqueue operation.
+        /// Token to cancel the enqueue operation when waiting.
         /// </param>
         /// <returns>
-        /// A <see cref="Task"/> representing the asynchronous enqueue operation.
+        /// A <see cref="Task{QueueWriteResult}"/> whose result indicates the enqueue outcome and sequence number.
         /// </returns>
-        /// <exception cref="ArgumentNullException">
-        /// Thrown if <paramref name="workItem"/> is null.
-        /// </exception>
-        /// <exception cref="InvalidOperationException">
-        /// Thrown if the queue is full and the configured policy is to throw.
-        /// </exception>
-        Task QueueBackgroundWorkItemAsync(
+        Task<QueueWriteResult> QueueBackgroundWorkItemAsync(
             Func<CancellationToken, Task> workItem,
             CancellationToken cancellationToken);
 
         /// <summary>
         /// Dequeues the next background work item, waiting asynchronously if none are available.
         /// </summary>
-        /// <param name="cancellationToken">
-        /// Token to cancel the dequeue operation.
-        /// </param>
+        /// <param name="cancellationToken">Token to cancel the dequeue operation.</param>
         /// <returns>
-        /// A <see cref="ValueTask{TResult}"/> whose result is the dequeued work delegate.
+        /// A <see cref="ValueTask{TResult}"/> whose result is the dequeued <see cref="QueuedTask"/>.
         /// </returns>
-        ValueTask<Func<CancellationToken, Task>> DequeueAsync(
-            CancellationToken cancellationToken);
+        ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken);
 
         /// <summary>
-        /// Provides direct access to the channel reader for batch dequeue patterns.
+        /// Provides direct access to the channel reader for high-throughput batch dequeue patterns.
         /// </summary>
-        ChannelReader<Func<CancellationToken, Task>> Reader { get; }
+        ChannelReader<QueuedTask> Reader { get; }
+
+        /// <summary>
+        /// Gets the total number of items ever enqueued (including those later dropped).
+        /// </summary>
+        long TotalItemsEnqueued { get; }
+
+        /// <summary>
+        /// Gets the total number of items dropped under DropNewest or DropWrite policies.
+        /// </summary>
+        long TotalDroppedNewest { get; }
+
+        /// <summary>
+        /// Gets the total number of items dropped under the DropOldest policy.
+        /// </summary>
+        long TotalDroppedOldest { get; }
+
+        /// <summary>
+        /// Event raised whenever a work item is successfully enqueued.
+        /// </summary>
+        event Action<TaskEnqueuedEventArgs> OnTaskEnqueued;
+
+        /// <summary>
+        /// Event raised whenever a work item is rejected due to backpressure policy.
+        /// </summary>
+        event Action<TaskRejectedEventArgs> OnTaskRejected;
     }
 }
