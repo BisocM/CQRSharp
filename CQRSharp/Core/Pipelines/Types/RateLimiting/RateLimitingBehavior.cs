@@ -54,7 +54,11 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
             baseRequest.RequestId);
 
         //Apply rate limiting based on the user identifier
-        var isAllowed = rateLimiter.AllowRequest((string)baseRequest.UserId, baseRequest.GetType().Name);
+        var commandName = request.GetType().Name;
+        var isAllowed   = rateLimiter.AllowRequest(
+            (string)baseRequest.UserId,
+            commandName
+        );
         if (!isAllowed)
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",

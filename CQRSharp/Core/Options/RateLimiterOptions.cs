@@ -1,4 +1,6 @@
-﻿namespace CQRSharp.Core.Pipelines.Types.RateLimiting;
+﻿using CQRSharp.Core.Pipelines.Types.RateLimiting;
+
+namespace CQRSharp.Core.Options;
 
 /// <summary>
 ///     Class object for the options needed for the rate limited.
@@ -35,4 +37,12 @@ public sealed class RateLimiterOptions
     ///     to free up memory and maintain optimal performance.
     /// </summary>
     public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    ///     The maximum number of entries the rate limiter cache can hold before older entries are evicted.
+    /// </summary>
+    /// <remarks>
+    ///     Default value is 10000.
+    /// </remarks>
+    public int MaxEntries { get; set; } = 10000;
 }

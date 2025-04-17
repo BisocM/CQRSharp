@@ -10,7 +10,7 @@
         <EnableAotAnalyzer>true</EnableAotAnalyzer>
         <RunAOTCompilation>true</RunAOTCompilation>
 
-        
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>..\NuGetPackages</PackageOutputPath>
     </PropertyGroup>
@@ -71,7 +71,6 @@
     <!-- Project References -->
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
-        <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj"/>
     </ItemGroup>
 
     <Target Name="CleanPackages" BeforeTargets="Pack">

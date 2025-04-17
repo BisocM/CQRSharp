@@ -28,7 +28,7 @@
     <!-- NuGet Package Metadata -->
     <PropertyGroup>
         <PackageId>CQRSharp.Generators</PackageId>
-        <Version>2.2.5</Version>
+        <Version>2.2.6</Version>
         <Title>CQRSharp Source Generators</Title>
         <Authors>BisocM</Authors>
         <Description>A set of Roslyn source code generators that allow Native AoT compatibility for the CQRSharp Library.</Description>

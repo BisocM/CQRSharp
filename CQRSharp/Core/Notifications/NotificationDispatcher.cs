@@ -4,19 +4,17 @@ using Microsoft.Extensions.DependencyInjection;
 namespace CQRSharp.Core.Notifications;
 
 /// <inheritdoc />
-public sealed class NotificationDispatcher(IServiceProvider serviceProvider) : INotificationDispatcher
+public sealed class NotificationDispatcher(IServiceScopeFactory scopeFactory) : INotificationDispatcher
 {
     /// <inheritdoc />
     public async Task Publish<TNotification>(TNotification notification,
         CancellationToken cancellationToken = default)
         where TNotification : INotification
     {
-        //Get all handlers for the notification.
-        var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>();
-
-        //Invoke all handlers concurrently.
-        //FIXME: This might cause issues with control flow later.
-        var tasks = handlers.Select(handler => handler.Handle(notification, cancellationToken));
+        using var scope = scopeFactory.CreateScope();
+        var handlers = scope.ServiceProvider
+            .GetServices<INotificationHandler<TNotification>>();
+        var tasks    = handlers.Select(h => h.Handle(notification, cancellationToken));
         await Task.WhenAll(tasks);
     }
 }

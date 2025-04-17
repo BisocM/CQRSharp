@@ -27,8 +27,6 @@ public static partial class DependencyInjectionExtensions
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
 
-        Logger.LogInformation("ResilienceBehavior has been registered.");
-
         return services;
     }
 
@@ -49,8 +47,6 @@ public static partial class DependencyInjectionExtensions
         });
         
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
-
-        Logger.LogInformation("TimeoutBehavior has been registered.");
 
         return services;
     }
@@ -77,8 +73,6 @@ public static partial class DependencyInjectionExtensions
         
         services.AddSingleton<RateLimiter>();
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>));
-
-        Logger.LogInformation("RateLimitingBehavior has been registered.");
 
         return services;
     }

@@ -31,7 +31,7 @@ public sealed class Dispatcher(
     IOptions<DispatcherOptions> options) : IDispatcher
 {
     /// <inheritdoc />
-    public async Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
+    public Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
     {
         //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
@@ -45,28 +45,46 @@ public sealed class Dispatcher(
 
         //Synchronous execution - await the pipeline.
         if (options.Value.RunMode != RunMode.Async)
-            return await PipelineTask(cancellationToken);
+            return PipelineTask(cancellationToken);
 
         //Asynchronous mode: wrap the full pipeline in a TaskCompletionSource. This will allow the user to receive a callback
         //in-line, without having to listen to the completion notification.
         var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = EnqueueAndWatchAsync();
+        
+        //Return the task that completes once the entire pipeline has finished.
+        return tcs.Task;
 
-        await backgroundTaskQueue.QueueBackgroundWorkItemAsync(async ct =>
+        //Helper to do the enqueue and catch any errors while queuing
+        async Task EnqueueAndWatchAsync()
         {
             try
             {
-                var result = await PipelineTask(ct);
-                tcs.SetResult(result);
+                await backgroundTaskQueue
+                    .QueueBackgroundWorkItemAsync(async ct =>
+                    {
+                        try
+                        {
+                            var result = await PipelineTask(ct).ConfigureAwait(false);
+                            tcs.SetResult(result);
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    }, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                tcs.TrySetCanceled(cancellationToken);
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
-        }, cancellationToken);
-
-        //Return the task that completes once the entire pipeline has finished.
-        return await tcs.Task;
-
+        }
+        
         //Define the pipeline task.
         async Task<CommandResult> PipelineTask(CancellationToken ct)
         {
@@ -97,7 +115,7 @@ public sealed class Dispatcher(
     }
 
     /// <inheritdoc />
-    public async Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query,
+    public Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query,
         CancellationToken cancellationToken = default)
     {
         //Ensure the query is not null.
@@ -112,26 +130,45 @@ public sealed class Dispatcher(
 
         //Synchronous execution - await the pipeline.
         if (options.Value.RunMode != RunMode.Async)
-            return await PipelineTask(cancellationToken);
+            return PipelineTask(cancellationToken);
 
         //Asynchronous mode: use TaskCompletionSource to wrap the full pipeline.
         var tcs = new TaskCompletionSource<TResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        await backgroundTaskQueue.QueueBackgroundWorkItemAsync(async ct =>
+        _ = EnqueueAndWatchAsync();
+
+        return tcs.Task;
+        
+        //Helper to do the enqueue and catch any errors while queuing
+        async Task EnqueueAndWatchAsync()
         {
             try
             {
-                var result = await PipelineTask(ct);
-                tcs.SetResult(result);
+                await backgroundTaskQueue
+                    .QueueBackgroundWorkItemAsync(async ct =>
+                    {
+                        try
+                        {
+                            var result = await PipelineTask(ct).ConfigureAwait(false);
+                            tcs.SetResult(result);
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    }, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                tcs.TrySetCanceled(cancellationToken);
             }
             catch (Exception ex)
             {
-                tcs.SetException(ex);
+                tcs.TrySetException(ex);
             }
-        }, cancellationToken);
+        }
 
-        return await tcs.Task;
-
-        async Task<TResult> PipelineTask(CancellationToken ct)
+        async Task<TResult?> PipelineTask(CancellationToken ct)
         {
             using var scope = serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
@@ -180,15 +217,15 @@ public sealed class Dispatcher(
         var pipelineBuilder = pipelineRegistry.GetPipelineBuilder(requestType);
         if (pipelineBuilder is null)
             //Fallback: If no precompiled builder exists, invoke the handler directly.
-            return (req, ct) =>
+            return async (req, ct) =>
             {
                 if (typeof(TResult) != typeof(CommandResult))
-                    //For queries
-                    return HandleQuery<TResult>(req, handler, ct);
-
-                //For commands
-                return HandleCommand(req, handler, ct)
-                    .ContinueWith(_ => (TResult)(object)CommandResult.FromSuccess(), ct);
+                {
+                    var result = await HandleQuery<TResult>(req, handler, ct).ConfigureAwait(false);
+                    return result;
+                }
+                await HandleCommand(req, handler, ct).ConfigureAwait(false);
+                return (TResult)(object)CommandResult.FromSuccess();
             };
 
         //Construct a final handler delegate that calls the actual handler.
@@ -197,21 +234,26 @@ public sealed class Dispatcher(
         //                                         Func<CancellationToken, Task<object>> finalHandler,
         //                                         CancellationToken)
         //so we need to create a finalHandler that uses our existing handler invokers.
-        Func<CancellationToken, Task<object>> finalHandlerWrapper = ct =>
+        Func<CancellationToken, Task<object>> finalHandlerWrapper = async ct =>
         {
             if (typeof(TResult) != typeof(CommandResult))
-                return HandleQuery<TResult>(request, handler, ct)
-                    .ContinueWith(t => (object)t.Result, ct);
+            {
+                var qr = await HandleQuery<TResult>(request, handler, ct)
+                    .ConfigureAwait(false);
+                return qr;
+            }
 
-            return HandleCommand(request, handler, ct)
-                .ContinueWith(object (_) => CommandResult.FromSuccess(), ct);
+            await HandleCommand(request, handler, ct)
+                .ConfigureAwait(false);
+            return CommandResult.FromSuccess();
         };
 
         //Now return a delegate that uses the precompiled pipeline builder.
-        return (req, ct) =>
+        return async (req, ct) =>
         {
-            return pipelineBuilder.Invoke(services, req, finalHandlerWrapper, ct)
-                .ContinueWith(t => (TResult)t.Result, ct);
+            //Invoke the precompiled pipeline builder
+            var raw = await pipelineBuilder(services, req, finalHandlerWrapper, ct).ConfigureAwait(false);
+            return (TResult)raw;
         };
     }
 
@@ -363,7 +405,7 @@ public sealed class Dispatcher(
                 "Ensure that you have implemented and registered an IRequestContextFactory for this type.");
         }
     
-        // Create the request context using the resolved factory
+        //Create the request context using the resolved factory
         requestBase.Context = contextFactory.CreateContext(requestBase);
     }
 }
