@@ -28,7 +28,7 @@ namespace CQRSharp.Core.Options
 
         /// <summary>
         /// Gets or sets the maximum number of work items to dequeue in one batch.
-        /// A value less than or equal to zero drains the queue until empty on each wake-up.
+        /// A value less than or equal to zero drains the queue until empty on each wake‑up.
         /// </summary>
         public int DequeueBatchSize { get; set; }
 
@@ -41,5 +41,13 @@ namespace CQRSharp.Core.Options
         /// Gets or sets an optional callback invoked when a work item is successfully enqueued.
         /// </summary>
         public Action<TaskEnqueuedEventArgs>? OnTaskEnqueued { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of shards to use for the internal queue channels.
+        /// A value &lt;= 0 defaults to:
+        /// - <c>Math.Min(Capacity, Environment.ProcessorCount)</c> for bounded queues,
+        /// - <c>Environment.ProcessorCount</c> for unbounded queues.
+        /// </summary>
+        public int ShardCount { get; set; }
     }
 }

@@ -2,26 +2,28 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using CQRSharp.Core.Options;
+using CQRSharp.Core.BackgroundTasks.Types;
 
 namespace CQRSharp.Core.BackgroundTasks
 {
     /// <summary>
-    /// A <see cref="BackgroundService"/> that continuously consumes work items
-    /// from an <see cref="IBackgroundTaskQueue"/> and dispatches them to the thread pool.
+    /// A hosted background service that continuously consumes <see cref="QueuedTask"/> instances
+    /// from an <see cref="IBackgroundTaskQueue"/> and dispatches them for execution.
     /// </summary>
     public class BackgroundTaskQueueConsumer : BackgroundService
     {
         private readonly IBackgroundTaskQueue _taskQueue;
         private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
         private readonly int _batchSize;
+        private readonly int _consumerCount;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BackgroundTaskQueueConsumer"/> class.
+        /// Creates a new <see cref="BackgroundTaskQueueConsumer"/>.
         /// </summary>
-        /// <param name="taskQueue">The queue to consume from.</param>
+        /// <param name="taskQueue">The background task queue to consume from.</param>
         /// <param name="logger">Logger for lifecycle and error events.</param>
-        /// <param name="options">Queue options for batch sizing.</param>
-        /// <exception cref="ArgumentNullException">Thrown if any dependency is null.</exception>
+        /// <param name="options">Configuration options for queue consumption.</param>
+        /// <exception cref="ArgumentNullException">Thrown if any argument is null.</exception>
         public BackgroundTaskQueueConsumer(
             IBackgroundTaskQueue taskQueue,
             ILogger<BackgroundTaskQueueConsumer> logger,
@@ -29,41 +31,74 @@ namespace CQRSharp.Core.BackgroundTasks
         {
             _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            var opts = options?.Value ?? throw new ArgumentNullException(nameof(options));
-            _batchSize = opts.DequeueBatchSize > 0 ? opts.DequeueBatchSize : int.MaxValue;
+
+            var opts = options.Value ?? throw new ArgumentNullException(nameof(options));
+            _batchSize     = opts.DequeueBatchSize > 0 ? opts.DequeueBatchSize : int.MaxValue;
+            _consumerCount = opts.ConsumerCount     > 0 ? opts.ConsumerCount     : Environment.ProcessorCount;
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Spins up <c>ConsumerCount</c> parallel loops that each drain up to <c>DequeueBatchSize</c>
+        /// items per wake‑up, dispatching each onto the thread‑pool.
+        /// </remarks>
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation(
+                "BackgroundTaskQueueConsumer starting with {Count} consumers.",
+                _consumerCount);
+
+            //Launch multiple consumer loops in parallel
+            var consumers = new List<Task>(_consumerCount);
+            for (int i = 0; i < _consumerCount; i++)
+            {
+                consumers.Add(ConsumeLoopAsync(stoppingToken));
+            }
+
+            //Wait until all loops observe cancellation
+            await Task.WhenAll(consumers).ConfigureAwait(false);
+
+            _logger.LogInformation("BackgroundTaskQueueConsumer stopping.");
         }
 
         /// <summary>
-        /// Executes the background consumer loop, reading tasks in batches and queuing them
-        /// on the thread pool for execution.
+        /// Core loop for each consumer instance: waits for available work, then reads
+        /// and dispatches up to <c>_batchSize</c> tasks in one batch.
         /// </summary>
-        /// <param name="stoppingToken">A token that signals when the host is shutting down.</param>
-        /// <returns>A <see cref="Task"/> that completes when the consumer stops.</returns>
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        /// <param name="stoppingToken">Token signaled when the host is shutting down.</param>
+        private async Task ConsumeLoopAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("BackgroundTaskQueueConsumer starting.");
-
             var reader = _taskQueue.Reader;
+
             while (await reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
             {
-                var processed = 0;
+                int processed = 0;
                 while (processed++ < _batchSize && reader.TryRead(out var qt))
                 {
-                    ThreadPool.UnsafeQueueUserWorkItem(async void (_) =>
-                    {
-                        try
-                        {
-                            await qt.WorkItem(stoppingToken).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Error executing work item {SequenceNumber}.", qt.SequenceNumber);
-                        }
-                    }, null);
+                    //Fire-and-forget dispatch; exceptions are caught/logged inside.
+                    _ = ProcessWorkItemAsync(qt, stoppingToken);
                 }
             }
+        }
 
-            _logger.LogInformation("BackgroundTaskQueueConsumer stopping.");
+        /// <summary>
+        /// Executes the queued work item and logs any exception.
+        /// </summary>
+        /// <param name="qt">The queued task encapsulating work and sequence number.</param>
+        /// <param name="cancellationToken">Token for task cancellation.</param>
+        private async Task ProcessWorkItemAsync(QueuedTask qt, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await qt.WorkItem(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error executing work item {SequenceNumber}.",
+                    qt.SequenceNumber);
+            }
         }
     }
 }
