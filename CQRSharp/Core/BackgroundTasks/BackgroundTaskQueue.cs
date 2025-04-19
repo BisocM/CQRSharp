@@ -5,6 +5,7 @@ using CQRSharp.Core.Options;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Shared.Data.Interfaces.Notifications;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.BackgroundTasks
@@ -13,12 +14,6 @@ namespace CQRSharp.Core.BackgroundTasks
     ///     A bounded, high-throughput background task queue that offloads
     ///     task-enqueued/rejected notifications to a dedicated background loop.
     /// </summary>
-    /// <remarks>
-    ///     Uses a <see cref="Channel{QueuedTask}"/> internally to store work
-    ///     items in FIFO order, and a separate <see cref="Channel{INotification}"/>
-    ///     to decouple notification dispatch from the enqueue path.
-    ///     Notifications are published via <see cref="INotificationDispatcher"/>.
-    /// </remarks>
     public sealed class BackgroundTaskQueue : IBackgroundTaskQueue
     {
         private readonly Channel<QueuedTask> _channel;
@@ -27,15 +22,16 @@ namespace CQRSharp.Core.BackgroundTasks
         private readonly Channel<INotification> _notificationChannel;
         private readonly INotificationDispatcher _dispatcher;
         private readonly ILogger<BackgroundTaskQueue> _logger;
-
-        private const int NotificationMaxRetries = 3;
-        private readonly TimeSpan _notificationRetryDelay = TimeSpan.FromSeconds(2);
+        private readonly CancellationToken _shutdownToken;
 
         private long _sequenceCounter;
         private long _enqueuedCount;
         private long _droppedNewestCount;
         private long _droppedOldestCount;
         private long _currentCount;
+
+        private const int NotificationMaxRetries = 3;
+        private static readonly TimeSpan NotificationRetryDelay = TimeSpan.FromSeconds(2);
 
         /// <inheritdoc/>
         public long TotalItemsEnqueued => Interlocked.Read(ref _enqueuedCount);
@@ -52,21 +48,27 @@ namespace CQRSharp.Core.BackgroundTasks
         /// <summary>
         ///     Initializes a new instance of the <see cref="BackgroundTaskQueue"/> class.
         /// </summary>
+        /// <param name="options">Configuration options for the queue.</param>
+        /// <param name="dispatcher">Notification dispatcher for enqueue/reject events.</param>
+        /// <param name="lifetime">Host lifetime to observe shutdown.</param>
+        /// <param name="logger">Logger instance.</param>
         public BackgroundTaskQueue(
             IOptions<BackgroundTaskQueueOptions> options,
             INotificationDispatcher dispatcher,
+            IHostApplicationLifetime lifetime,
             ILogger<BackgroundTaskQueue> logger)
         {
             ArgumentNullException.ThrowIfNull(dispatcher);
             ArgumentNullException.ThrowIfNull(logger);
+            ArgumentNullException.ThrowIfNull(lifetime);
 
-            _options    = options.Value;
-            _dispatcher = dispatcher;
-            _logger     = logger;
+            _options       = options.Value;
+            _dispatcher    = dispatcher;
+            _logger        = logger;
+            _shutdownToken = lifetime.ApplicationStopping;
 
             if (_options.Capacity <= 0)
-                throw new ArgumentOutOfRangeException(
-                    nameof(_options.Capacity), "Capacity must be > 0.");
+                throw new ArgumentOutOfRangeException(nameof(_options.Capacity), "Capacity must be > 0.");
 
             var bounded = new BoundedChannelOptions(_options.Capacity)
             {
@@ -87,7 +89,8 @@ namespace CQRSharp.Core.BackgroundTasks
             };
             _notificationChannel = Channel.CreateBounded<INotification>(notifOptions);
 
-            _ = ProcessNotificationsAsync(CancellationToken.None);
+            // Start the notification loop and observe shutdown
+            _ = ProcessNotificationsAsync(_shutdownToken);
         }
 
         /// <inheritdoc/>
@@ -109,17 +112,13 @@ namespace CQRSharp.Core.BackgroundTasks
                     if (!writer.TryWrite(qt))
                     {
                         Interlocked.Increment(ref _droppedNewestCount);
-                        EnqueueNotification(
-                            new TaskRejectedNotification(seq, _options.FullMode));
-                        return new QueueWriteResult(
-                            QueueWriteResultCode.DroppedNewest, seq);
+                        EnqueueNotification(new TaskRejectedNotification(seq, _options.FullMode));
+                        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, seq);
                     }
                     Interlocked.Increment(ref _enqueuedCount);
                     Interlocked.Increment(ref _currentCount);
-                    EnqueueNotification(
-                        new TaskEnqueuedNotification(seq, workItem));
-                    return new QueueWriteResult(
-                        QueueWriteResultCode.Enqueued, seq);
+                    EnqueueNotification(new TaskEnqueuedNotification(seq, workItem));
+                    return new QueueWriteResult(QueueWriteResultCode.Enqueued, seq);
 
                 case BoundedChannelFullMode.DropOldest:
                     if (Interlocked.Read(ref _currentCount) >= _options.Capacity)
@@ -127,25 +126,19 @@ namespace CQRSharp.Core.BackgroundTasks
                         if (_reader.TryRead(out _))
                             Interlocked.Increment(ref _droppedOldestCount);
                     }
-                    await writer.WriteAsync(qt, cancellationToken)
-                                .ConfigureAwait(false);
+                    await writer.WriteAsync(qt, cancellationToken).ConfigureAwait(false);
                     Interlocked.Increment(ref _enqueuedCount);
                     Interlocked.Increment(ref _currentCount);
-                    EnqueueNotification(
-                        new TaskEnqueuedNotification(seq, workItem));
-                    return new QueueWriteResult(
-                        QueueWriteResultCode.DroppedOldest, seq);
+                    EnqueueNotification(new TaskEnqueuedNotification(seq, workItem));
+                    return new QueueWriteResult(QueueWriteResultCode.DroppedOldest, seq);
 
                 case BoundedChannelFullMode.Wait:
                 default:
-                    await writer.WriteAsync(qt, cancellationToken)
-                                .ConfigureAwait(false);
+                    await writer.WriteAsync(qt, cancellationToken).ConfigureAwait(false);
                     Interlocked.Increment(ref _enqueuedCount);
                     Interlocked.Increment(ref _currentCount);
-                    EnqueueNotification(
-                        new TaskEnqueuedNotification(seq, workItem));
-                    return new QueueWriteResult(
-                        QueueWriteResultCode.Enqueued, seq);
+                    EnqueueNotification(new TaskEnqueuedNotification(seq, workItem));
+                    return new QueueWriteResult(QueueWriteResultCode.Enqueued, seq);
             }
         }
 
@@ -153,19 +146,47 @@ namespace CQRSharp.Core.BackgroundTasks
         public ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken) =>
             _reader.ReadAsync(cancellationToken);
 
+        /// <summary>
+        ///     Queues a notification for background dispatch, retrying once if needed.
+        /// </summary>
+        /// <param name="notification">Notification to enqueue.</param>
         private void EnqueueNotification(INotification notification)
         {
-            _ = _notificationChannel.Writer.TryWrite(notification);
+            // Fire-and-forget to avoid blocking the enqueue path
+            _ = WriteNotificationAsync(notification);
+        }
+
+        /// <summary>
+        ///     Writes a notification into the notification channel, observing shutdown.
+        /// </summary>
+        /// <param name="notification">The notification to write.</param>
+        private async Task WriteNotificationAsync(INotification notification)
+        {
+            try
+            {
+                await _notificationChannel
+                    .Writer
+                    .WriteAsync(notification, _shutdownToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Notification write cancelled due to application shutdown.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to enqueue notification.");
+            }
         }
 
         /// <summary>
         ///     Drains notifications and publishes them with retries and logging.
         /// </summary>
+        /// <param name="cancellationToken">Token that signals host shutdown.</param>
         private async Task ProcessNotificationsAsync(CancellationToken cancellationToken)
         {
             var reader = _notificationChannel.Reader;
-            while (await reader.WaitToReadAsync(cancellationToken)
-                               .ConfigureAwait(false))
+            while (await reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 while (reader.TryRead(out var notification))
                 {
@@ -178,7 +199,7 @@ namespace CQRSharp.Core.BackgroundTasks
                                 notification,
                                 CancellationToken.None)
                                 .ConfigureAwait(false);
-                            break; // success
+                            break;
                         }
                         catch (Exception ex)
                         {
@@ -188,10 +209,8 @@ namespace CQRSharp.Core.BackgroundTasks
                                 "Failed to publish notification (attempt {Attempt})",
                                 attempt);
                             if (attempt < NotificationMaxRetries)
-                                await Task.Delay(
-                                    _notificationRetryDelay,
-                                    cancellationToken)
-                                    .ConfigureAwait(false);
+                                await Task.Delay(NotificationRetryDelay, cancellationToken)
+                                      .ConfigureAwait(false);
                             else
                                 _logger.LogError(
                                     ex,

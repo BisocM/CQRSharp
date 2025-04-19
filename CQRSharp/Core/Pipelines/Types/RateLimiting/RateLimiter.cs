@@ -6,6 +6,8 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
 {
     /// <summary>
     ///   A highly concurrent rate limiter using a sharded LRU cache and lock-minimized token buckets.
+    ///   In addition to count-based LRU eviction, stale buckets are removed based on idle time
+    ///   on each request and via a periodic cleanup timer.
     /// </summary>
     public sealed class RateLimiter : IDisposable
     {
@@ -14,23 +16,20 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
         private readonly Timer? _cleanupTimer;
 
         /// <summary>
-        /// Implements a rate-limiting mechanism to control the number of requests or commands
-        /// that can be executed within a specified configuration limit.
+        ///     Initializes a new instance of the <see cref="RateLimiter"/> class.
         /// </summary>
-        /// <remarks>
-        /// Instances of <see cref="RateLimiter"/> use token buckets to manage rate-limiting
-        /// based on the configuration provided. This class is intended for use in scenarios
-        /// where requests need to be controlled or restricted to conform to defined limits.
-        /// </remarks>
+        /// <param name="config">Options for rate limiting behavior.</param>
         public RateLimiter(IOptions<RateLimiterOptions> config)
         {
             _config = config.Value ?? throw new ArgumentNullException(nameof(config));
             ValidateConfiguration(_config);
 
+            //Initialize sharded LRU cache for concurrency
             var shardCount = Environment.ProcessorCount * 2;
             _cache = new ShardedLruCache<object, TokenBucket>(_config.MaxEntries, shardCount);
 
-            if (_config.MaxIdleTime > TimeSpan.Zero)
+            //Schedule periodic cleanup if configured
+            if (_config.CleanupInterval > TimeSpan.Zero)
             {
                 _cleanupTimer = new Timer(
                     _ => CleanupStaleBuckets(),
@@ -41,12 +40,12 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
         }
 
         /// <summary>
-        /// Determines whether a request is allowed based on rate limiting rules.
+        ///     Determines whether a request is allowed based on rate limiting rules.
+        ///     Also cleans up stale buckets before evaluating the token bucket.
         /// </summary>
         /// <param name="userIdentifier">The unique identifier for the user making the request.</param>
         /// <param name="commandName">The name of the command being executed.</param>
         /// <returns><c>true</c> if the request is allowed; otherwise, <c>false</c>.</returns>
-        /// <exception cref="ArgumentNullException">Thrown if <paramref name="userIdentifier"/> or <paramref name="commandName"/> is null or whitespace.</exception>
         public bool AllowRequest(string userIdentifier, string commandName)
         {
             if (string.IsNullOrWhiteSpace(userIdentifier))
@@ -54,6 +53,10 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
             if (string.IsNullOrWhiteSpace(commandName))
                 throw new ArgumentNullException(nameof(commandName));
 
+            //Clean up stale buckets on each request
+            CleanupStaleBuckets();
+
+            //Determine key based on scope
             object key = _config.Scope == RateLimitScope.PerCommand
                 ? new UserCommandKey(userIdentifier, commandName)
                 : userIdentifier;
@@ -65,11 +68,22 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
             return bucket.TryConsume();
         }
 
+        /// <summary>
+        ///     Removes token buckets that have been idle longer than the configured maximum idle time.
+        /// </summary>
         private void CleanupStaleBuckets()
         {
+            if (_config.MaxIdleTime <= TimeSpan.Zero)
+                return; //No stale cleanup if not configured
+
             var threshold = DateTime.UtcNow - _config.MaxIdleTime;
             _cache.RemoveWhere(pair => pair.Value.LastAccessed < threshold);
         }
+
+        /// <summary>
+        ///     Disposes the cleanup timer.
+        /// </summary>
+        public void Dispose() => _cleanupTimer?.Dispose();
 
         private static void ValidateConfiguration(RateLimiterOptions config)
         {
@@ -81,10 +95,10 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
                 throw new ArgumentException("MaxEntries must be > 0", nameof(config.MaxEntries));
         }
 
-        /// <inheritdoc />
-        public void Dispose() => _cleanupTimer?.Dispose();
-
-        private record UserCommandKey(string UserIdentifier, string CommandName);
+        /// <summary>
+        ///   Composite key for per-command rate limiting.
+        /// </summary>
+        private sealed record UserCommandKey(string UserIdentifier, string CommandName);
     }
 
     /// <summary>
@@ -109,10 +123,7 @@ namespace CQRSharp.Core.Pipelines.Types.RateLimiting
 
         private int GetShardIndex(TKey key) => key.GetHashCode() & _mask;
 
-        public TValue GetOrAdd(TKey key, Func<TKey, TValue> factory)
-        {
-            return _shards[GetShardIndex(key)].GetOrAdd(key, factory);
-        }
+        public TValue GetOrAdd(TKey key, Func<TKey, TValue> factory) => _shards[GetShardIndex(key)].GetOrAdd(key, factory);
 
         public void RemoveWhere(Func<KeyValuePair<TKey, TValue>, bool> predicate)
         {
