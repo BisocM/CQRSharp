@@ -1,8 +1,8 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using CQRSharp.Core.Requests;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
@@ -13,6 +13,7 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Requests;
 using CQRSharp.Shared.Data.Interfaces.Context;
 using CQRSharp.Shared.Data.Interfaces.Handlers;
 using CQRSharp.Shared.Data.Interfaces.Markers.Command;
@@ -25,7 +26,7 @@ using CQRSharp.Shared.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Tests
 {
-    //Dummy command and handler
+    // Dummy command and handler
     public class DummyCommand : CommandBase { }
     public class DummyCommandHandler : ICommandHandler<DummyCommand>
     {
@@ -37,7 +38,7 @@ namespace CQRSharp.Tests
         }
     }
 
-    //Dummy query and handler
+    // Dummy query and handler
     public class DummyQuery : QueryBase<int> { }
     public class DummyQueryHandler : IQueryHandler<DummyQuery, int>
     {
@@ -49,7 +50,7 @@ namespace CQRSharp.Tests
         }
     }
 
-    //Pre- and post-handler attributes
+    // Pre- and post-handler attributes
     internal class DummyPreHandler : IPreHandlerAttribute
     {
         public int PreHandlerExecutionPriority => 0;
@@ -72,7 +73,7 @@ namespace CQRSharp.Tests
         }
     }
 
-    //Notification handlers
+    // Notification handlers
     internal class CommandInitiatedHandler : INotificationHandler<CommandInitiatedNotification>
     {
         public bool Invoked { get; private set; }
@@ -115,95 +116,115 @@ namespace CQRSharp.Tests
         }
     }
 
+    // A fake IHostApplicationLifetime to supply shutdown token
+    internal class TestHostApplicationLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _cts = new();
+        public CancellationToken ApplicationStarted  => CancellationToken.None;
+        public CancellationToken ApplicationStopping => _cts.Token;
+        public CancellationToken ApplicationStopped  => CancellationToken.None;
+        public void StopApplication() => _cts.Cancel();
+    }
+
     public class DispatcherTests
     {
-        private readonly DummyPreHandler    _pre            = new();
-        private readonly DummyPostHandler   _post           = new();
-        private readonly DummyCommandHandler _cmdHandler    = new();
-        private readonly DummyQueryHandler   _qryHandler    = new();
+        private readonly DummyPreHandler        _pre          = new();
+        private readonly DummyPostHandler       _post         = new();
+        private readonly DummyCommandHandler    _cmdHandler   = new();
+        private readonly DummyQueryHandler      _qryHandler   = new();
         private readonly CommandInitiatedHandler _cmdInitNotif = new();
         private readonly CommandCompletedHandler _cmdDoneNotif = new();
         private readonly QueryInitiatedHandler   _qryInitNotif = new();
         private readonly QueryCompletedHandler   _qryDoneNotif = new();
-        private readonly BackgroundTaskQueue    _queue;
+        private readonly IBackgroundTaskQueue   _queue;
         private readonly ServiceProvider        _syncProvider;
 
         public DispatcherTests()
         {
-            //Build sync container + queue
             var services = new ServiceCollection();
 
-            //Logging
-            services.AddSingleton(LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.None)));
+            // Logging
+            services.AddSingleton<ILoggerFactory>(_ => LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.None)));
             services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
 
-            //Options
-            services.AddSingleton(Options.Create(new DispatcherOptions { RunMode = RunMode.Sync }));
-            services.AddSingleton(Options.Create(new BackgroundTaskQueueOptions()));
+            // Host lifetime (needed for BackgroundTaskQueue constructor)
+            services.AddSingleton<IHostApplicationLifetime, TestHostApplicationLifetime>();
 
-            //Background queue
-            _queue = new BackgroundTaskQueue(services.BuildServiceProvider()
-                .GetRequiredService<IOptions<BackgroundTaskQueueOptions>>());
-            services.AddSingleton<IBackgroundTaskQueue>(_queue);
+            // Options
+            services.AddSingleton<IOptions<DispatcherOptions>>(_ => Options.Create(new DispatcherOptions { RunMode = RunMode.Sync }));
+            services.AddSingleton<IOptions<BackgroundTaskQueueOptions>>(_ => Options.Create(new BackgroundTaskQueueOptions()));
 
-            //Request registry
-            var reqMap = new ConcurrentDictionary<Type, RequestMetadata>
-            {
-                [typeof(DummyCommand)] = new RequestMetadata(
-                    typeof(DummyCommand), typeof(DummyCommandHandler),
-                    [_pre], [_post],
-                    [],
-                    [],
-                    ResultType: null, ContextType: typeof(RequestContextBase)
-                ),
-                [typeof(DummyQuery)] = new RequestMetadata(
-                    typeof(DummyQuery), typeof(DummyQueryHandler),
-                    [],
-                    [],
-                    [],
-                    [],
-                    ResultType: typeof(int), ContextType: typeof(RequestContextBase)
-                )
-            };
-            services.AddSingleton<IRequestRegistry>(new RequestRegistry(reqMap));
-
-            //Handler registry
-            var handlerMap = new ConcurrentDictionary<Type, HandlerInvokerDelegate>
-            {
-                [typeof(DummyCommand)] = (_,r,ct) =>
-                    _cmdHandler.Handle((DummyCommand)r, ct)
-                               .ContinueWith<object>(t => t.Result, ct),
-                [typeof(DummyQuery)]   = (_,r,ct) =>
-                    _qryHandler.Handle((DummyQuery)r, ct)
-                               .ContinueWith<object>(t => t.Result, ct)
-            };
-            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMap));
-
-            //Pipeline registry (empty)
-            services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(new ConcurrentDictionary<Type, PipelineBuilderDelegate>()));
-
-            //Context factory
-            services.AddSingleton<IContextFactoryRegistry>(
-                new ContextFactoryRegistry(new ConcurrentDictionary<Type, Func<IServiceProvider, object>>
-                {
-                    [typeof(RequestContextBase)] = sp => sp.GetRequiredService<IRequestContextFactory>()
-                }));
-            services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
-
-            //Notifications
+            // Notification dispatcher and handlers (also needed by queue)
             services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
             services.AddSingleton<INotificationHandler<CommandInitiatedNotification>>(_ => _cmdInitNotif);
             services.AddSingleton<INotificationHandler<CommandCompletedNotification>>(_ => _cmdDoneNotif);
             services.AddSingleton<INotificationHandler<QueryInitiatedNotification<int>>>(_ => _qryInitNotif);
             services.AddSingleton<INotificationHandler<QueryCompletedNotification<int>>>(_ => _qryDoneNotif);
 
-            //Concrete handlers
+            // Build an interim provider to resolve queue dependencies
+            var interimProvider = services.BuildServiceProvider();
+            _queue = new BackgroundTaskQueue(
+                interimProvider.GetRequiredService<IOptions<BackgroundTaskQueueOptions>>(),
+                interimProvider.GetRequiredService<INotificationDispatcher>(),
+                interimProvider.GetRequiredService<IHostApplicationLifetime>(),
+                interimProvider.GetRequiredService<ILogger<BackgroundTaskQueue>>()
+            );
+            services.AddSingleton<IBackgroundTaskQueue>(_queue);
+
+            // Request registry
+            var reqMap = new ConcurrentDictionary<Type, RequestMetadata>
+            {
+                [typeof(DummyCommand)] = new RequestMetadata(
+                    typeof(DummyCommand),
+                    typeof(DummyCommandHandler),
+                    new[] { (IPreHandlerAttribute)_pre },
+                    new[] { (IPostHandlerAttribute)_post },
+                    [],
+                    [],
+                    ResultType: null,
+                    ContextType: typeof(RequestContextBase)
+                ),
+                [typeof(DummyQuery)] = new RequestMetadata(
+                    typeof(DummyQuery),
+                    typeof(DummyQueryHandler),
+                    Array.Empty<IPreHandlerAttribute>(),
+                    Array.Empty<IPostHandlerAttribute>(),
+                    [],
+                    [],
+                    ResultType: typeof(int),
+                    ContextType: typeof(RequestContextBase)
+                )
+            };
+            services.AddSingleton<IRequestRegistry>(new RequestRegistry(reqMap));
+
+            // Handler registry
+            var handlerMap = new ConcurrentDictionary<Type, HandlerInvokerDelegate>
+            {
+                [typeof(DummyCommand)] = (_, req, ct) =>
+                    _cmdHandler.Handle((DummyCommand)req, ct).ContinueWith<object>(t => t.Result, ct),
+                [typeof(DummyQuery)] = (_, req, ct) =>
+                    _qryHandler.Handle((DummyQuery)req, ct).ContinueWith<object>(t => t.Result, ct)
+            };
+            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMap));
+
+            // Pipeline registry (empty)
+            services.AddSingleton<IPipelineRegistry>(new PipelineRegistry(new ConcurrentDictionary<Type, PipelineBuilderDelegate>()));
+
+            // Context factory registry and factory
+            services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(new ConcurrentDictionary<Type, Func<IServiceProvider, object>>
+            {
+                [typeof(RequestContextBase)] = sp => sp.GetRequiredService<IRequestContextFactory>()
+            }));
+            services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
+
+            // Concrete handlers
             services.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
             services.AddTransient<DummyQueryHandler>(_ => _qryHandler);
 
-            //Dispatcher
+            // Dispatcher
             services.AddSingleton<IDispatcher, Dispatcher>();
 
+            // Build final service provider
             _syncProvider = services.BuildServiceProvider();
         }
 
@@ -212,35 +233,29 @@ namespace CQRSharp.Tests
             if (mode == RunMode.Sync)
                 return _syncProvider.GetRequiredService<IDispatcher>();
 
-            //Async container
-            var asyncOpts = Options.Create(new DispatcherOptions { RunMode = RunMode.Async });
+            // Async container
             var asyncServices = new ServiceCollection();
-
-            asyncServices.AddSingleton(_ => asyncOpts);
-            asyncServices.AddSingleton<IOptions<DispatcherOptions>>(_ => asyncOpts);
-            asyncServices.AddSingleton<IOptions<BackgroundTaskQueueOptions>>(_ =>
-                _syncProvider.GetRequiredService<IOptions<BackgroundTaskQueueOptions>>());
-
+            asyncServices.AddSingleton<IOptions<DispatcherOptions>>(_ => Options.Create(new DispatcherOptions { RunMode = RunMode.Async }));
+            asyncServices.AddSingleton(_syncProvider.GetRequiredService<IOptions<BackgroundTaskQueueOptions>>());
             asyncServices.AddSingleton(_syncProvider.GetRequiredService<ILoggerFactory>());
             asyncServices.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
-
+            asyncServices.AddSingleton(_syncProvider.GetRequiredService<IHostApplicationLifetime>());
             asyncServices.AddSingleton<IBackgroundTaskQueue>(_queue);
             asyncServices.AddSingleton(_syncProvider.GetRequiredService<IRequestRegistry>());
             asyncServices.AddSingleton(_syncProvider.GetRequiredService<IHandlerRegistry>());
             asyncServices.AddSingleton(_syncProvider.GetRequiredService<IPipelineRegistry>());
             asyncServices.AddSingleton(_syncProvider.GetRequiredService<IContextFactoryRegistry>());
             asyncServices.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
-
-            asyncServices.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
+            asyncServices.AddSingleton(_syncProvider.GetRequiredService<INotificationDispatcher>());
             asyncServices.AddSingleton<INotificationHandler<CommandInitiatedNotification>>(_ => _cmdInitNotif);
             asyncServices.AddSingleton<INotificationHandler<CommandCompletedNotification>>(_ => _cmdDoneNotif);
             asyncServices.AddSingleton<INotificationHandler<QueryInitiatedNotification<int>>>(_ => _qryInitNotif);
             asyncServices.AddSingleton<INotificationHandler<QueryCompletedNotification<int>>>(_ => _qryDoneNotif);
-
-            asyncServices.AddSingleton<DummyCommandHandler>(_ => _cmdHandler);
+            asyncServices.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
             asyncServices.AddSingleton<IDispatcher, Dispatcher>();
 
-            return asyncServices.BuildServiceProvider().GetRequiredService<IDispatcher>();
+            var asyncProvider = asyncServices.BuildServiceProvider();
+            return asyncProvider.GetRequiredService<IDispatcher>();
         }
 
         [Fact(DisplayName = "Sync Command dispatches command, handlers, attributes, and notifications")]
@@ -280,11 +295,11 @@ namespace CQRSharp.Tests
             var dispatcher = BuildDispatcher(RunMode.Async);
             var cmd = new DummyCommand();
 
-            //Fire-and-forget returns immediately, work enqueued
+            // Fire-and-forget returns immediately, work enqueued
             var task = dispatcher.ExecuteCommand(cmd);
             Assert.False(task.IsCompleted, "Expected Task not completed before background execution");
 
-            //Simulate background consumer
+            // Simulate background consumer
             var queuedTask = await _queue.DequeueAsync(CancellationToken.None);
             await queuedTask.WorkItem(CancellationToken.None);
 

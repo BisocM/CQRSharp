@@ -1,5 +1,5 @@
-﻿using CQRSharp.Core.Pipelines.Attributes;
-using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
+﻿using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
+using CQRSharp.Shared.Data.Attributes.Pipelines;
 using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.Logging;
 

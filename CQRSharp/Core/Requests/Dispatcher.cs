@@ -33,29 +33,18 @@ public sealed class Dispatcher(
     /// <inheritdoc />
     public Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default)
     {
-        //Ensure the command is not null.
         ArgumentNullException.ThrowIfNull(command);
 
-        //Create the command context for this particular request.
-        if (command is IRequest requestBase)
-            InitializeRequestContext(requestBase);
+        if (command is IRequest req)
+            InitializeRequestContext(req);
 
-        //Get the type of the command.
-        var requestType = command.GetType();
-
-        //Synchronous execution - await the pipeline.
         if (options.Value.RunMode != RunMode.Async)
             return PipelineTask(cancellationToken);
 
-        //Asynchronous mode: wrap the full pipeline in a TaskCompletionSource. This will allow the user to receive a callback
-        //in-line, without having to listen to the completion notification.
         var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = EnqueueAndWatchAsync();
-        
-        //Return the task that completes once the entire pipeline has finished.
         return tcs.Task;
 
-        //Helper to do the enqueue and catch any errors while queuing
         async Task EnqueueAndWatchAsync()
         {
             try
@@ -66,17 +55,23 @@ public sealed class Dispatcher(
                         try
                         {
                             var result = await PipelineTask(ct).ConfigureAwait(false);
-                            tcs.SetResult(result);
+                            tcs.TrySetResult(result);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Propagate cancellation to the caller's Task
+                            tcs.TrySetCanceled(ct);
                         }
                         catch (Exception ex)
                         {
-                            tcs.SetException(ex);
+                            tcs.TrySetException(ex);
                         }
                     }, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
+                // The queue operation was canceled before enqueueing
                 tcs.TrySetCanceled(cancellationToken);
             }
             catch (Exception ex)
@@ -84,62 +79,42 @@ public sealed class Dispatcher(
                 tcs.TrySetException(ex);
             }
         }
-        
-        //Define the pipeline task.
+
         async Task<CommandResult> PipelineTask(CancellationToken ct)
         {
             using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
+            var provider = scope.ServiceProvider;
 
-            //Send off the notification for command initiation before the attributes are handled.
             await notificationDispatcher.Publish(new CommandInitiatedNotification(command), ct);
+            await InvokePreHandleAttributes(command, provider, ct);
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(command, scopedProvider, ct);
+            var handler = GetHandler(command.GetType(), provider);
+            var pipeline = BuildPipeline<CommandResult>(command, handler, provider);
+            var result = await pipeline(command, ct).ConfigureAwait(false);
 
-            //Retrieve the appropriate handler for the command.
-            var handler = GetHandler(requestType, scopedProvider);
-
-            //Build and execute the query pipeline.
-            var pipeline = BuildPipeline<CommandResult>(command, handler, scopedProvider);
-            var result = await pipeline(command, ct);
-
-            //Send off the notification about command completion before the post-completion attributes are handled.
             await notificationDispatcher.Publish(new CommandCompletedNotification(command, result), ct);
-
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(command, scopedProvider, ct);
+            await InvokePostHandleAttributes(command, provider, ct);
 
             return result;
         }
     }
 
     /// <inheritdoc />
-    public Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query,
-        CancellationToken cancellationToken = default)
+    public Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default)
     {
-        //Ensure the query is not null.
         ArgumentNullException.ThrowIfNull(query);
 
-        //Assign a unique identifier
-        if (query is IRequest requestBase)
-            InitializeRequestContext(requestBase);
+        if (query is IRequest req)
+            InitializeRequestContext(req);
 
-        //Get the type of the request.
-        var requestType = query.GetType();
-
-        //Synchronous execution - await the pipeline.
         if (options.Value.RunMode != RunMode.Async)
-            return PipelineTask(cancellationToken);
+            return PipelineQueryTask(cancellationToken);
 
-        //Asynchronous mode: use TaskCompletionSource to wrap the full pipeline.
         var tcs = new TaskCompletionSource<TResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = EnqueueAndWatchAsync();
-
+        _ = EnqueueAndWatchQueryAsync();
         return tcs.Task;
-        
-        //Helper to do the enqueue and catch any errors while queuing
-        async Task EnqueueAndWatchAsync()
+
+        async Task EnqueueAndWatchQueryAsync()
         {
             try
             {
@@ -148,12 +123,16 @@ public sealed class Dispatcher(
                     {
                         try
                         {
-                            var result = await PipelineTask(ct).ConfigureAwait(false);
-                            tcs.SetResult(result);
+                            var result = await PipelineQueryTask(ct).ConfigureAwait(false);
+                            tcs.TrySetResult(result);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            tcs.TrySetCanceled(ct);
                         }
                         catch (Exception ex)
                         {
-                            tcs.SetException(ex);
+                            tcs.TrySetException(ex);
                         }
                     }, cancellationToken)
                     .ConfigureAwait(false);
@@ -168,28 +147,19 @@ public sealed class Dispatcher(
             }
         }
 
-        async Task<TResult?> PipelineTask(CancellationToken ct)
+        async Task<TResult?> PipelineQueryTask(CancellationToken ct)
         {
             using var scope = serviceProvider.CreateScope();
-            var scopedProvider = scope.ServiceProvider;
+            var provider = scope.ServiceProvider;
 
-            //Send off the notification for query initiation before the attributes are handled.
             await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(query), ct);
+            await InvokePreHandleAttributes(query, provider, ct);
 
-            //Invoke pre-handle attributes.
-            await InvokePreHandleAttributes(query, scopedProvider, ct);
+            var handler = GetHandler(query.GetType(), provider);
+            var pipeline = BuildPipeline<TResult>(query, handler, provider);
+            var result = await pipeline(query, ct).ConfigureAwait(false);
 
-            //Get the handler for the query.
-            var handler = GetHandler(requestType, scopedProvider);
-
-            //Build and execute the query pipeline.
-            var pipeline = BuildPipeline<TResult>(query, handler, scopedProvider);
-            var result = await pipeline(query, ct);
-
-            //Invoke post-handle attributes.
-            await InvokePostHandleAttributes(query, scopedProvider, ct);
-
-            //Publish the event.
+            await InvokePostHandleAttributes(query, provider, ct);
             await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(query, result), ct);
 
             return result;
