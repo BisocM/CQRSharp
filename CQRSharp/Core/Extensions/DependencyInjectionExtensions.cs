@@ -17,18 +17,24 @@ namespace CQRSharp.Core.Extensions
     {
         /// <summary>
         /// Registers the necessary CQRS services and configurations into the provided <c>IServiceCollection</c>.
-        /// This includes dispatchers, handlers, factories, registries, logging, and other components required
-        /// for executing requests and handling notifications effectively.
+        /// This includes dispatchers, handlers, factories, logging, background‑queue components, and defaults.
         /// </summary>
         /// <param name="services">The <c>IServiceCollection</c> used to register dependencies.</param>
-        /// <param name="configureOptions">An optional delegate to configure the <c>DispatcherOptions</c>.</param>
+        /// <param name="configureDispatcher">Optional: customize DispatcherOptions.</param>
+        /// <param name="configureQueue">Optional: customize BackgroundTaskQueueOptions.</param>
         /// <returns>The updated <c>IServiceCollection</c> with all required CQRS services registered.</returns>
         public static IServiceCollection AddCqrs(this IServiceCollection services,
-            Action<DispatcherOptions>? configureOptions)
+            Action<DispatcherOptions>? configureDispatcher = null,
+            Action<BackgroundTaskQueueOptions>? configureQueue = null)
         {
             //Configure options
-            services.Configure<DispatcherOptions>(opts => configureOptions?.Invoke(opts));
+            services.Configure<DispatcherOptions>(opts =>
+                configureDispatcher?.Invoke(opts));
 
+            //Configure the background task queue
+            services.Configure<BackgroundTaskQueueOptions>(opts =>
+                configureQueue?.Invoke(opts));
+            
             //Register core CQRS services
             services.AddSingleton<IDispatcher, Dispatcher>();
             services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();

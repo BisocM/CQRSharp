@@ -1,104 +1,41 @@
 ﻿using System.Threading.Channels;
+using Microsoft.Extensions.Options;
 using CQRSharp.Core.BackgroundTasks.Types;
 using CQRSharp.Core.Options;
-using Microsoft.Extensions.Options;
+using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Shared.Data.Interfaces.Notifications;
+using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.BackgroundTasks
 {
     /// <summary>
-    /// Implements <see cref="IBackgroundTaskQueue"/> with optional bounded/unbounded sharded channels,
-    /// rich enqueue feedback, sequence numbers, event callbacks, and built-in metrics.
-    /// Sharding reduces single‐channel contention under bursty loads.
+    ///     A bounded, high-throughput background task queue that offloads
+    ///     task-enqueued/rejected notifications to a dedicated background loop.
     /// </summary>
+    /// <remarks>
+    ///     Uses a <see cref="Channel{QueuedTask}"/> internally to store work
+    ///     items in FIFO order, and a separate <see cref="Channel{INotification}"/>
+    ///     to decouple notification dispatch from the enqueue path.
+    ///     Notifications are published via <see cref="INotificationDispatcher"/>.
+    /// </remarks>
     public sealed class BackgroundTaskQueue : IBackgroundTaskQueue
     {
+        private readonly Channel<QueuedTask> _channel;
+        private readonly CountingChannelReader _reader;
         private readonly BackgroundTaskQueueOptions _options;
-        private readonly Channel<QueuedTask>[] _shardChannels;
-        private readonly Channel<QueuedTask> _outputChannel;
-        private readonly Channel<Action> _callbackChannel;
-        private readonly int _shardCount;
-        private long _sequenceGenerator, _enqueuedCount, _droppedNewestCount, _droppedOldestCount;
+        private readonly Channel<INotification> _notificationChannel;
+        private readonly INotificationDispatcher _dispatcher;
+        private readonly ILogger<BackgroundTaskQueue> _logger;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="BackgroundTaskQueue"/> class.
-        /// </summary>
-        /// <param name="options">
-        /// The options used to configure capacity, backpressure policy, sharding, and event callbacks.
-        /// </param>
-        /// <exception cref="ArgumentNullException">Thrown if <paramref name="options"/> is null.</exception>
-        public BackgroundTaskQueue(IOptions<BackgroundTaskQueueOptions> options)
-        {
-            ArgumentNullException.ThrowIfNull(options);
-            _options = options.Value;
+        private const int NotificationMaxRetries = 3;
+        private readonly TimeSpan _notificationRetryDelay = TimeSpan.FromSeconds(2);
 
-            //Determine how many shards to use
-            if (_options.ShardCount > 0)
-                _shardCount = _options.ShardCount;
-            else if (_options.Capacity > 0)
-                _shardCount = Math.Min(_options.Capacity, Environment.ProcessorCount);
-            else
-                _shardCount = Environment.ProcessorCount;
-
-            //Build each shard channel
-            _shardChannels = new Channel<QueuedTask>[_shardCount];
-            if (_options.Capacity > 0)
-            {
-                int baseCap = _options.Capacity / _shardCount;
-                int remainder = _options.Capacity % _shardCount;
-                for (int i = 0; i < _shardCount; i++)
-                {
-                    int cap = baseCap + (i < remainder ? 1 : 0);
-                    var bounded = new BoundedChannelOptions(cap)
-                    {
-                        FullMode = _options.FullMode,
-                        SingleReader = false,
-                        SingleWriter = false,
-                        AllowSynchronousContinuations = false
-                    };
-                    _shardChannels[i] = Channel.CreateBounded<QueuedTask>(bounded);
-                }
-            }
-            else
-            {
-                for (int i = 0; i < _shardCount; i++)
-                {
-                    var unbounded = new UnboundedChannelOptions
-                    {
-                        SingleReader = false,
-                        SingleWriter = false,
-                        AllowSynchronousContinuations = false
-                    };
-                    _shardChannels[i] = Channel.CreateUnbounded<QueuedTask>(unbounded);
-                }
-            }
-
-            //Create merged output channel
-            _outputChannel = Channel.CreateUnbounded<QueuedTask>(new UnboundedChannelOptions
-            {
-                SingleReader = false,
-                SingleWriter = false,
-                AllowSynchronousContinuations = false
-            });
-
-            //Create single callback dispatch channel
-            _callbackChannel = Channel.CreateUnbounded<Action>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = false,
-                AllowSynchronousContinuations = false
-            });
-
-            //Start the callback‐dispatcher thread
-            Task.Factory.StartNew(
-                () => ProcessCallbacksAsync().GetAwaiter().GetResult(),
-                TaskCreationOptions.LongRunning);
-
-            //Launch merging tasks for each shard
-            foreach (var shard in _shardChannels)
-            {
-                _ = MergeShardAsync(shard.Reader, _outputChannel.Writer);
-            }
-        }
+        private long _sequenceCounter;
+        private long _enqueuedCount;
+        private long _droppedNewestCount;
+        private long _droppedOldestCount;
+        private long _currentCount;
 
         /// <inheritdoc/>
         public long TotalItemsEnqueued => Interlocked.Read(ref _enqueuedCount);
@@ -110,130 +47,202 @@ namespace CQRSharp.Core.BackgroundTasks
         public long TotalDroppedOldest => Interlocked.Read(ref _droppedOldestCount);
 
         /// <inheritdoc/>
-        public event Action<TaskEnqueuedEventArgs>? OnTaskEnqueued;
+        public ChannelReader<QueuedTask> Reader => _reader;
+
+        /// <summary>
+        ///     Initializes a new instance of the <see cref="BackgroundTaskQueue"/> class.
+        /// </summary>
+        public BackgroundTaskQueue(
+            IOptions<BackgroundTaskQueueOptions> options,
+            INotificationDispatcher dispatcher,
+            ILogger<BackgroundTaskQueue> logger)
+        {
+            ArgumentNullException.ThrowIfNull(dispatcher);
+            ArgumentNullException.ThrowIfNull(logger);
+
+            _options    = options.Value;
+            _dispatcher = dispatcher;
+            _logger     = logger;
+
+            if (_options.Capacity <= 0)
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.Capacity), "Capacity must be > 0.");
+
+            var bounded = new BoundedChannelOptions(_options.Capacity)
+            {
+                FullMode                     = _options.FullMode,
+                SingleReader                 = false,
+                SingleWriter                 = false,
+                AllowSynchronousContinuations = false
+            };
+            _channel = Channel.CreateBounded<QueuedTask>(bounded);
+            _reader  = new CountingChannelReader(_channel.Reader, this);
+
+            var notifOptions = new BoundedChannelOptions(_options.CallbackChannelCapacity)
+            {
+                FullMode                     = BoundedChannelFullMode.Wait,
+                SingleReader                 = true,
+                SingleWriter                 = false,
+                AllowSynchronousContinuations = false
+            };
+            _notificationChannel = Channel.CreateBounded<INotification>(notifOptions);
+
+            _ = ProcessNotificationsAsync(CancellationToken.None);
+        }
 
         /// <inheritdoc/>
-        public event Action<TaskRejectedEventArgs>? OnTaskRejected;
-
-        /// <inheritdoc/>
-        /// <remarks>
-        /// Assigns a unique sequence number to each work item, selects a shard in round‑robin,
-        /// applies the configured full‑mode policy on that shard, updates metrics, and fires callbacks.
-        /// </remarks>
         public async Task<QueueWriteResult> QueueBackgroundWorkItemAsync(
             Func<CancellationToken, Task> workItem,
             CancellationToken cancellationToken)
         {
-            ArgumentNullException.ThrowIfNull(workItem);
+            if (workItem is null)
+                throw new ArgumentNullException(nameof(workItem));
 
-            //Assign a unique ID for tracing
-            var seq = Interlocked.Increment(ref _sequenceGenerator);
-            var qt  = new QueuedTask(seq, workItem);
+            var seq    = Interlocked.Increment(ref _sequenceCounter);
+            var qt     = new QueuedTask(seq, workItem);
+            var writer = _channel.Writer;
 
-            //Pick the shard
-            int shardIndex = (int)((seq - 1) % _shardCount);
-            var channel    = _shardChannels[shardIndex];
-            var writer     = channel.Writer;
-            var reader     = channel.Reader;
-
-            //Try immediate enqueue
-            if (writer.TryWrite(qt))
-            {
-                Interlocked.Increment(ref _enqueuedCount);
-                EnqueueCallback(new TaskEnqueuedEventArgs(seq, workItem));
-                return new QueueWriteResult(QueueWriteResultCode.Enqueued, seq);
-            }
-
-            //Shard is full: apply configured FullMode
             switch (_options.FullMode)
             {
                 case BoundedChannelFullMode.DropNewest:
                 case BoundedChannelFullMode.DropWrite:
-                    Interlocked.Increment(ref _droppedNewestCount);
-                    RejectCallback(new TaskRejectedEventArgs(
-                        seq, _options.FullMode, null));
+                    if (!writer.TryWrite(qt))
+                    {
+                        Interlocked.Increment(ref _droppedNewestCount);
+                        EnqueueNotification(
+                            new TaskRejectedNotification(seq, _options.FullMode));
+                        return new QueueWriteResult(
+                            QueueWriteResultCode.DroppedNewest, seq);
+                    }
+                    Interlocked.Increment(ref _enqueuedCount);
+                    Interlocked.Increment(ref _currentCount);
+                    EnqueueNotification(
+                        new TaskEnqueuedNotification(seq, workItem));
                     return new QueueWriteResult(
-                        QueueWriteResultCode.DroppedNewest, seq);
+                        QueueWriteResultCode.Enqueued, seq);
 
                 case BoundedChannelFullMode.DropOldest:
-                    //Remove exactly one oldest element, if any
-                    if (reader.TryRead(out var dropped))
+                    if (Interlocked.Read(ref _currentCount) >= _options.Capacity)
                     {
-                        var droppedSeq = dropped.SequenceNumber;
-                        Interlocked.Increment(ref _droppedOldestCount);
-                        
-                        //Notify subscribers which sequence was dropped
-                        RejectCallback(new TaskRejectedEventArgs(
-                            seq, _options.FullMode, droppedSeq));
+                        if (_reader.TryRead(out _))
+                            Interlocked.Increment(ref _droppedOldestCount);
                     }
-
-                    //Now there is space for the new item
                     await writer.WriteAsync(qt, cancellationToken)
-                        .ConfigureAwait(false);
+                                .ConfigureAwait(false);
                     Interlocked.Increment(ref _enqueuedCount);
-                    EnqueueCallback(new TaskEnqueuedEventArgs(seq, workItem));
-
-                    //Return DroppedOldest to indicate we made room
+                    Interlocked.Increment(ref _currentCount);
+                    EnqueueNotification(
+                        new TaskEnqueuedNotification(seq, workItem));
                     return new QueueWriteResult(
                         QueueWriteResultCode.DroppedOldest, seq);
 
                 case BoundedChannelFullMode.Wait:
                 default:
                     await writer.WriteAsync(qt, cancellationToken)
-                        .ConfigureAwait(false);
+                                .ConfigureAwait(false);
                     Interlocked.Increment(ref _enqueuedCount);
-                    EnqueueCallback(new TaskEnqueuedEventArgs(seq, workItem));
+                    Interlocked.Increment(ref _currentCount);
+                    EnqueueNotification(
+                        new TaskEnqueuedNotification(seq, workItem));
                     return new QueueWriteResult(
-                        QueueWriteResultCode.Waited, seq);
+                        QueueWriteResultCode.Enqueued, seq);
             }
         }
 
         /// <inheritdoc/>
         public ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken) =>
-            _outputChannel.Reader.ReadAsync(cancellationToken);
+            _reader.ReadAsync(cancellationToken);
 
-        /// <inheritdoc/>
-        public ChannelReader<QueuedTask> Reader => _outputChannel.Reader;
-
-        //Merges one shard into the output channel using ReadAllAsync()
-        private async Task MergeShardAsync(
-            ChannelReader<QueuedTask> reader,
-            ChannelWriter<QueuedTask> writer)
+        private void EnqueueNotification(INotification notification)
         {
-            await foreach (var item in reader.ReadAllAsync().ConfigureAwait(false))
+            _ = _notificationChannel.Writer.TryWrite(notification);
+        }
+
+        /// <summary>
+        ///     Drains notifications and publishes them with retries and logging.
+        /// </summary>
+        private async Task ProcessNotificationsAsync(CancellationToken cancellationToken)
+        {
+            var reader = _notificationChannel.Reader;
+            while (await reader.WaitToReadAsync(cancellationToken)
+                               .ConfigureAwait(false))
             {
-                await writer.WriteAsync(item).ConfigureAwait(false);
+                while (reader.TryRead(out var notification))
+                {
+                    int attempt = 0;
+                    while (attempt < NotificationMaxRetries)
+                    {
+                        try
+                        {
+                            await _dispatcher.Publish(
+                                notification,
+                                CancellationToken.None)
+                                .ConfigureAwait(false);
+                            break; // success
+                        }
+                        catch (Exception ex)
+                        {
+                            attempt++;
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to publish notification (attempt {Attempt})",
+                                attempt);
+                            if (attempt < NotificationMaxRetries)
+                                await Task.Delay(
+                                    _notificationRetryDelay,
+                                    cancellationToken)
+                                    .ConfigureAwait(false);
+                            else
+                                _logger.LogError(
+                                    ex,
+                                    "Permanently failed to publish notification after {MaxAttempts} attempts",
+                                    NotificationMaxRetries);
+                        }
+                    }
+                }
             }
         }
 
-        //Single‐threaded dispatcher for all callbacks
-        private async Task ProcessCallbacksAsync()
+        #region CountingChannelReader
+        private sealed class CountingChannelReader : ChannelReader<QueuedTask>
         {
-            await foreach (var invoke in _callbackChannel.Reader.ReadAllAsync().ConfigureAwait(false))
+            private readonly ChannelReader<QueuedTask> _inner;
+            private readonly BackgroundTaskQueue _parent;
+
+            public CountingChannelReader(
+                ChannelReader<QueuedTask> inner,
+                BackgroundTaskQueue parent)
             {
-                try { invoke(); }
-                catch { /* swallow */ }
+                _inner  = inner;
+                _parent = parent;
             }
-        }
 
-        private void EnqueueCallback(TaskEnqueuedEventArgs args)
-        {
-            var staticHandlers = _options.OnTaskEnqueued;
-            var instanceHandlers = OnTaskEnqueued;
-            if (staticHandlers != null)
-                _callbackChannel.Writer.TryWrite(() => staticHandlers.Invoke(args));
-            if (instanceHandlers != null)
-                _callbackChannel.Writer.TryWrite(() => instanceHandlers.Invoke(args));
-        }
+            public override bool TryRead(out QueuedTask item)
+            {
+                var result = _inner.TryRead(out item);
+                if (result)
+                    Interlocked.Decrement(ref _parent._currentCount);
+                return result;
+            }
 
-        private void RejectCallback(TaskRejectedEventArgs args)
-        {
-            var staticHandlers = _options.OnTaskRejected;
-            var instanceHandlers = OnTaskRejected;
-            if (staticHandlers != null)
-                _callbackChannel.Writer.TryWrite(() => staticHandlers.Invoke(args));
-            if (instanceHandlers != null)
-                _callbackChannel.Writer.TryWrite(() => instanceHandlers.Invoke(args));
+            public override async ValueTask<QueuedTask> ReadAsync(
+                CancellationToken cancellationToken = default)
+            {
+                var item = await _inner
+                    .ReadAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                Interlocked.Decrement(ref _parent._currentCount);
+                return item;
+            }
+
+            public override IAsyncEnumerable<QueuedTask> ReadAllAsync(
+                CancellationToken cancellationToken = default) =>
+                _inner.ReadAllAsync(cancellationToken);
+
+            public override ValueTask<bool> WaitToReadAsync(
+                CancellationToken cancellationToken = default) =>
+                _inner.WaitToReadAsync(cancellationToken);
         }
+        #endregion
     }
 }

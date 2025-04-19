@@ -1,53 +1,45 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks.Types;
 
 namespace CQRSharp.Core.Options
 {
     /// <summary>
-    /// Configuration options for <see cref="CQRSharp.Core.BackgroundTasks.BackgroundTaskQueue"/>.
+    /// Configuration options for the <see cref="CQRSharp.Core.BackgroundTasks.BackgroundTaskQueue"/>.
     /// </summary>
     public sealed class BackgroundTaskQueueOptions
     {
         /// <summary>
-        /// Gets or sets the maximum number of items the queue may hold.
-        /// A value less than or equal to zero indicates an unbounded queue.
+        /// Default number of items to dequeue in one batch when not specified.
         /// </summary>
-        public int Capacity { get; set; }
+        internal const int DefaultDequeueBatchSize = 100;
 
         /// <summary>
-        /// Gets or sets the policy to apply when <see cref="Capacity"/> is reached.
-        /// Defaults to <see cref="BoundedChannelFullMode.Wait"/>.
+        /// Default callback channel capacity if none is provided.
         /// </summary>
-        public BoundedChannelFullMode FullMode { get; set; } = BoundedChannelFullMode.Wait;
+        internal const int DefaultCallbackChannelCapacity = 1024;
 
         /// <summary>
-        /// Gets or sets the number of consumer instances to spawn.
-        /// A value less than or equal to zero defaults to <c>Environment.ProcessorCount</c>.
+        /// Maximum number of items the queue may hold. Must be &gt; 0.
         /// </summary>
-        public int ConsumerCount { get; set; }
+        public int Capacity { get; set; } = 1000;
 
         /// <summary>
-        /// Gets or sets the maximum number of work items to dequeue in one batch.
-        /// A value less than or equal to zero drains the queue until empty on each wake‑up.
+        /// Policy when <see cref="Capacity"/> is reached. Default = <see cref="BoundedChannelFullMode.DropNewest"/>.
         /// </summary>
-        public int DequeueBatchSize { get; set; }
+        public BoundedChannelFullMode FullMode { get; set; } = BoundedChannelFullMode.DropNewest;
 
         /// <summary>
-        /// Gets or sets an optional callback invoked when a work item is rejected due to backpressure policy.
+        /// How many consumer loops to start. Default = <see cref="Environment.ProcessorCount"/>.
         /// </summary>
-        public Action<TaskRejectedEventArgs>? OnTaskRejected { get; set; }
+        public int ConsumerCount { get; set; } = Environment.ProcessorCount;
 
         /// <summary>
-        /// Gets or sets an optional callback invoked when a work item is successfully enqueued.
+        /// Max items to dequeue in one batch. Default = <see cref="DefaultDequeueBatchSize"/>.
         /// </summary>
-        public Action<TaskEnqueuedEventArgs>? OnTaskEnqueued { get; set; }
+        public int DequeueBatchSize { get; set; } = DefaultDequeueBatchSize;
 
         /// <summary>
-        /// Gets or sets the number of shards to use for the internal queue channels.
-        /// A value &lt;= 0 defaults to:
-        /// - <c>Math.Min(Capacity, Environment.ProcessorCount)</c> for bounded queues,
-        /// - <c>Environment.ProcessorCount</c> for unbounded queues.
+        /// Callback‑channel queue size to buffer OnEnqueue/OnReject callbacks. Default = <see cref="DefaultCallbackChannelCapacity"/>.
         /// </summary>
-        public int ShardCount { get; set; }
+        public int CallbackChannelCapacity { get; set; } = DefaultCallbackChannelCapacity;
     }
 }
