@@ -16,11 +16,11 @@ public interface IQueryHandler<in TQuery, TResult, TContext>
     where TContext : IRequestContext
 {
     /// <summary>
-    /// Processes a given query and returns the result asynchronously.
+    ///     Processes a given query and returns the result asynchronously.
     /// </summary>
     /// <param name="query">The query object containing the data to be processed.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task representing the asynchronous operation, containing the result of type <typeparamref name="TResult"/>.</returns>
+    /// <returns>A task representing the asynchronous operation, containing the result of type <typeparamref name="TResult" />.</returns>
     Task<TResult> Handle(TQuery query, CancellationToken cancellationToken);
 }
 

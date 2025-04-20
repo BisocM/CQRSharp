@@ -15,11 +15,14 @@ public interface ICommandHandler<in TCommand, TContext>
     where TCommand : ICommand where TContext : IRequestContext
 {
     /// <summary>
-    /// Handles the execution of a command and returns a <see cref="CommandResult"/>.
+    ///     Handles the execution of a command and returns a <see cref="CommandResult" />.
     /// </summary>
     /// <param name="command">The command to be handled.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous command handling operation. The task result contains the <see cref="CommandResult"/> of the operation.</returns>
+    /// <returns>
+    ///     A task that represents the asynchronous command handling operation. The task result contains the
+    ///     <see cref="CommandResult" /> of the operation.
+    /// </returns>
     Task<CommandResult> Handle(TCommand command, CancellationToken cancellationToken);
 }
 

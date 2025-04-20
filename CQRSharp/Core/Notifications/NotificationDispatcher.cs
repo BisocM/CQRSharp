@@ -3,20 +3,38 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Notifications;
 
-/// <inheritdoc />
-public sealed class NotificationDispatcher(IServiceProvider serviceProvider) : INotificationDispatcher
+/// <summary>
+///     Dispatches notifications to all registered <see cref="INotificationHandler{TNotification}" /> implementations.
+/// </summary>
+public sealed class NotificationDispatcher : INotificationDispatcher
 {
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    /// <summary>
+    ///     Constructs a new dispatcher.
+    /// </summary>
+    /// <param name="scopeFactory">Used to create a new DI scope per notification publish.</param>
+    public NotificationDispatcher(IServiceScopeFactory scopeFactory)
+    {
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+    }
+
     /// <inheritdoc />
-    public async Task Publish<TNotification>(TNotification notification,
+    public async Task Publish<TNotification>(
+        TNotification notification,
         CancellationToken cancellationToken = default)
         where TNotification : INotification
     {
-        //Get all handlers for the notification.
-        var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>();
+        using var scope = _scopeFactory.CreateScope();
 
-        //Invoke all handlers concurrently.
-        //FIXME: This might cause issues with control flow later.
-        var tasks = handlers.Select(handler => handler.Handle(notification, cancellationToken));
-        await Task.WhenAll(tasks);
+        var handlers = scope
+            .ServiceProvider
+            .GetServices<INotificationHandler<TNotification>>();
+
+        var tasks = handlers
+            .Select(h => h.Handle(notification, cancellationToken));
+
+        //Let ANY exception (other than cancellation) bubble out as an AggregateException
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 }

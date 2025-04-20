@@ -398,3 +398,4 @@ FodyWeavers.xsd
 *.sln.iml
 /.idea
 output.txt
+CQRSharp/outputfiles.txt

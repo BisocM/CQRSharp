@@ -21,6 +21,11 @@ public interface IRequestContextFactory : IRequestContextFactory<RequestContextB
 /// </summary>
 public interface IRequestContextFactory<out TContext> : IInternalRequestContextFactory where TContext : IRequestContext
 {
+    IRequestContext IInternalRequestContextFactory.CreateContext(IRequest request)
+    {
+        return CreateContext(request);
+    }
+
     /// <summary>
     ///     Creates an instance of <typeparamref name="TContext" /> based on the provided <see cref="IRequest" />.
     ///     This method is responsible for generating a contextual environment for the given request,
@@ -35,17 +40,15 @@ public interface IRequestContextFactory<out TContext> : IInternalRequestContextF
     ///     relevant to the provided request.
     /// </returns>
     new TContext CreateContext(IRequest request);
-    
-    IRequestContext IInternalRequestContextFactory.CreateContext(IRequest request) => CreateContext(request);
 }
 
 /// <summary>
-/// An internal request context factory.
+///     An internal request context factory.
 /// </summary>
 public interface IInternalRequestContextFactory
 {
     /// <summary>
-    /// Creates an instance of IRequestContext for the given request.
+    ///     Creates an instance of IRequestContext for the given request.
     /// </summary>
     /// <param name="request">The request that requires a context.</param>
     /// <returns>The created IRequestContext instance.</returns>

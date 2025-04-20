@@ -30,9 +30,10 @@ public static class Registrar
     ///     The source generator sets this value via a module initializer.
     /// </summary>
     public static IDataRegistrar? HandlerRegistryRegistrar { get; set; }
-    
+
     /// <summary>
-    ///     Represents the data registrar responsible for managing the registry that maps all requests to their respective context factories.
+    ///     Represents the data registrar responsible for managing the registry that maps all requests to their respective
+    ///     context factories.
     ///     The source generator sets this value via a module initializer.
     /// </summary>
     public static IDataRegistrar? ContextFactoryRegistryRegistrar { get; set; }

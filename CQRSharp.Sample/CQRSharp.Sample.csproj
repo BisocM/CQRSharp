@@ -13,10 +13,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="CQRSharp" Version="2.2.5" />
-        <PackageReference Include="CQRSharp.Generators" Version="2.2.5" />
-        <PackageReference Include="CQRSharp.Shared" Version="2.2.5" />
+        <PackageReference Include="CQRSharp" Version="2.2.6"/>
+        <PackageReference Include="CQRSharp.Generators" Version="2.2.6"/>
+        <PackageReference Include="CQRSharp.Shared" Version="2.2.6"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
     </ItemGroup>
- 
+
 </Project>

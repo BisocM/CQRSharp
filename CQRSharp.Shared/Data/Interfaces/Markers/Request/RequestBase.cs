@@ -1,6 +1,5 @@
 ﻿using CQRSharp.Shared.Data.Interfaces.Context;
 using CQRSharp.Shared.Data.Models.Requests;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
