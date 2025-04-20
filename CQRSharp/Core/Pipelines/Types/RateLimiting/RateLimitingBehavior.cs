@@ -38,8 +38,10 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
         //Ensure the request can be cast to RequestBase for identifier extraction
         if (request.Context is not IRateLimitedContext baseRequest)
         {
-            logger.LogError("Rate limiting failed: request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
-            throw new InvalidOperationException("Request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
+            logger.LogError(
+                "Rate limiting failed: request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
+            throw new InvalidOperationException(
+                "Request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
         }
 
         if (baseRequest.UserId == null)
@@ -55,7 +57,7 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
 
         //Apply rate limiting based on the user identifier
         var commandName = request.GetType().Name;
-        var isAllowed   = rateLimiter.AllowRequest(
+        var isAllowed = rateLimiter.AllowRequest(
             (string)baseRequest.UserId,
             commandName
         );

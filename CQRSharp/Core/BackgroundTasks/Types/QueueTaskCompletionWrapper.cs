@@ -1,14 +1,17 @@
 ﻿namespace CQRSharp.Core.BackgroundTasks.Types;
 
 /// <summary>
-/// Wraps a background task's completion so it can be signaled if the task is dropped
-/// or faults before execution.
+///     Holds the two callbacks required to
+///     • cancel a <see cref="TaskCompletionSource{TResult}" /> and
+///     • fault it with an <see cref="Exception" /> –
+///     for a task that was <em>scheduled</em> but never <em>executed</em>.
 /// </summary>
-internal class QueueTaskCompletionWrapper(Action cancelAction, Action<Exception> exceptionAction)
+internal sealed class QueueTaskCompletionWrapper(
+    Action cancelAction,
+    Action<Exception> exceptionAction)
 {
-    /// <summary>Action to invoke to cancel the awaiting TaskCompletionSource.</summary>
-    public Action CancelAction { get; } = cancelAction;
+    public Action CancelAction { get; } = cancelAction ?? throw new ArgumentNullException(nameof(cancelAction));
 
-    /// <summary>Action to invoke to fault the awaiting TaskCompletionSource with an exception.</summary>
-    public Action<Exception> ExceptionAction { get; } = exceptionAction;
+    public Action<Exception> ExceptionAction { get; } =
+        exceptionAction ?? throw new ArgumentNullException(nameof(exceptionAction));
 }

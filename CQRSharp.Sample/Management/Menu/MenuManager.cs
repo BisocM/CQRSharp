@@ -16,7 +16,6 @@ namespace CQRSharp.Sample.Management.Menu;
 public class MenuManager
 {
     private readonly CancellationManager _cancellationManager;
-    private readonly IRequestDispatcher _requestDispatcher;
 
     private readonly ILogger<MenuManager> _logger;
 
@@ -24,6 +23,8 @@ public class MenuManager
     ///     A dictionary mapping each <see cref="MenuState" /> to a list of commands and their priorities.
     /// </summary>
     private readonly Dictionary<MenuState, List<(Type commandType, int priority)>> _menus = new();
+
+    private readonly IRequestDispatcher _requestDispatcher;
 
     private readonly MenuStateMachine _stateMachine;
 

@@ -1,6 +1,5 @@
 ﻿using CQRSharp.Core.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Sample.Management.Menu;
-using CQRSharp.Shared.Data.Interfaces.Context;
 
 namespace CQRSharp.Sample.Context;
 

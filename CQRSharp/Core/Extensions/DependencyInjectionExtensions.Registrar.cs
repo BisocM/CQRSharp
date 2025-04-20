@@ -11,7 +11,10 @@ public static partial class DependencyInjectionExtensions
     ///     The implemented logic for handler registration is sourced from the generated code.
     /// </summary>
     /// <param name="services">The service collection to which the handlers will be registered.</param>
-    private static void AddGeneratedHandlers(this IServiceCollection services) => Registrar.HandlerRegistrar?.RegisterData(services);
+    private static void AddGeneratedHandlers(this IServiceCollection services)
+    {
+        Registrar.HandlerRegistrar?.RegisterData(services);
+    }
 
     /// <summary>
     ///     An extension method that uses the <see cref="Registrar" /> to register the IRequestRegistry within the DI
@@ -19,7 +22,10 @@ public static partial class DependencyInjectionExtensions
     ///     All implementation logic for the IRequestRegistry is within the source generator code.
     /// </summary>
     /// <param name="services">The service collection to which the handlers will be registered.</param>
-    private static void AddGeneratedRequestRegistry(this IServiceCollection services) => Registrar.RequestRegistryRegistrar?.RegisterData(services);
+    private static void AddGeneratedRequestRegistry(this IServiceCollection services)
+    {
+        Registrar.RequestRegistryRegistrar?.RegisterData(services);
+    }
 
     /// <summary>
     ///     An extension method that uses the <see cref="Registrar" /> to register handler registries to the
@@ -27,19 +33,28 @@ public static partial class DependencyInjectionExtensions
     ///     The implemented logic for registry registration is sourced from the generated code.
     /// </summary>
     /// <param name="services">The service collection to which the handler registries will be registered.</param>
-    private static void AddGeneratedHandlerRegistry(this IServiceCollection services) => Registrar.HandlerRegistryRegistrar?.RegisterData(services);
+    private static void AddGeneratedHandlerRegistry(this IServiceCollection services)
+    {
+        Registrar.HandlerRegistryRegistrar?.RegisterData(services);
+    }
 
     /// <summary>
     ///     Registers the pipeline registry using generated pipeline builders.
     ///     Looks for a generated type in the known namespace and uses it if available.
     /// </summary>
     /// <param name="services">The service collection to which the handler registries will be registered.</param>
-    private static void AddGeneratedPipelineRegistry(this IServiceCollection services) => Registrar.PipelineRegistryRegistrar?.RegisterData(services);
+    private static void AddGeneratedPipelineRegistry(this IServiceCollection services)
+    {
+        Registrar.PipelineRegistryRegistrar?.RegisterData(services);
+    }
 
     /// <summary>
     ///     Registers the context factory registry using generated context factories.
     ///     Looks for a generated type in the known namespace and uses it if available.
     /// </summary>
     /// <param name="services">The service collection to which the handler registries will be registered.</param>
-    private static void AddGeneratedFactories(this IServiceCollection services) => Registrar.ContextFactoryRegistryRegistrar?.RegisterData(services);
+    private static void AddGeneratedFactories(this IServiceCollection services)
+    {
+        Registrar.ContextFactoryRegistryRegistrar?.RegisterData(services);
+    }
 }

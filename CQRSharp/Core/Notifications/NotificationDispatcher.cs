@@ -1,42 +1,40 @@
 ﻿using CQRSharp.Shared.Data.Interfaces.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Core.Notifications
+namespace CQRSharp.Core.Notifications;
+
+/// <summary>
+///     Dispatches notifications to all registered <see cref="INotificationHandler{TNotification}" /> implementations.
+/// </summary>
+public sealed class NotificationDispatcher : INotificationDispatcher
 {
+    private readonly IServiceScopeFactory _scopeFactory;
+
     /// <summary>
-    /// Dispatches notifications to all registered <see cref="INotificationHandler{TNotification}"/> implementations.
-    /// Ensures that handler exceptions do not bubble back to the caller.
+    ///     Constructs a new dispatcher.
     /// </summary>
-    public sealed class NotificationDispatcher : INotificationDispatcher
+    /// <param name="scopeFactory">Used to create a new DI scope per notification publish.</param>
+    public NotificationDispatcher(IServiceScopeFactory scopeFactory)
     {
-        private readonly IServiceScopeFactory _scopeFactory;
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+    }
 
-        /// <summary>
-        /// Constructs a new dispatcher.
-        /// </summary>
-        /// <param name="scopeFactory">Used to create a new DI scope per notification publish.</param>
-        public NotificationDispatcher(IServiceScopeFactory scopeFactory)
-        {
-            _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        }
+    /// <inheritdoc />
+    public async Task Publish<TNotification>(
+        TNotification notification,
+        CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        using var scope = _scopeFactory.CreateScope();
 
-        /// <inheritdoc/>
-        public async Task Publish<TNotification>(
-            TNotification notification,
-            CancellationToken cancellationToken = default)
-            where TNotification : INotification
-        {
-            using var scope = _scopeFactory.CreateScope();
+        var handlers = scope
+            .ServiceProvider
+            .GetServices<INotificationHandler<TNotification>>();
 
-            var handlers = scope
-                .ServiceProvider
-                .GetServices<INotificationHandler<TNotification>>();
+        var tasks = handlers
+            .Select(h => h.Handle(notification, cancellationToken));
 
-            var tasks = handlers
-                .Select(h => h.Handle(notification, cancellationToken));
-
-            //Let ANY exception (other than cancellation) bubble out as an AggregateException
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-        }
+        //Let ANY exception (other than cancellation) bubble out as an AggregateException
+        await Task.WhenAll(tasks).ConfigureAwait(false);
     }
 }
