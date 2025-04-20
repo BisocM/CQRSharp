@@ -46,8 +46,6 @@ namespace CQRSharp.Tests
                 Capacity         = capacity,
                 FullMode         = fullMode,
                 ConsumerCount    = 1,
-                DequeueBatchSize = 1
-                // CallbackChannelCapacity uses the default
             };
 
         private static IOptions<BackgroundTaskQueueOptions> Opts(BackgroundTaskQueueOptions o) =>
