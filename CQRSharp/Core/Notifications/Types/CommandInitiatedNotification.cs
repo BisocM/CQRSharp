@@ -6,7 +6,7 @@ namespace CQRSharp.Core.Notifications.Types;
 
 /// <summary>
 ///     Represents a notification that is published when a command is initiated.
-///     This notification is published by the Dispatcher automatically
+///     This notification is published by the RequestDispatcher automatically
 ///     right before the execution of the command is initiated.
 /// </summary>
 public sealed class CommandInitiatedNotification : INotification

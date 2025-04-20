@@ -25,19 +25,15 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.5</Version>
+        <Version>2.2.6</Version>
         <Description>Contains shared abstractions and common types for CQRSharp. This library underpins the rest of the CQRSharp framework.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>
-            🚀 Release Notes for 2.2.5
+            🚀 Release Notes for 2.2.6
 
             🔧 Changes
-            - Added multi-context support per application. Now, you can register multiple IRequestContextFactory that can handle any given context generation, with automatic mapping by the Dispatcher!
-            - Additional configurability for the BackgroundTaskQueue. You can now add callback handling if the system is overloaded, configure the system limits, and so on!
-            - Additional bottleneck optimizations for BackgroundTaskQueue.
 
             📂 Breaking Changes?
-            - Complete restructure of CQRSharp.Shared - if any types/interfaces/classes were used directly, this will break.
         </PackageReleaseNotes>
     </PropertyGroup>
 

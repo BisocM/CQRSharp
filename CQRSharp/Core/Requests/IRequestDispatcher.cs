@@ -8,7 +8,7 @@ namespace CQRSharp.Core.Requests;
 /// <summary>
 ///     Defines a dispatcher interface for sending commands to their respective handlers.
 /// </summary>
-public interface IDispatcher
+public interface IRequestDispatcher
 {
     /// <summary>
     ///     Sends a command without expecting a result.

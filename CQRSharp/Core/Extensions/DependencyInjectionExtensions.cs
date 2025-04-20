@@ -36,7 +36,7 @@ namespace CQRSharp.Core.Extensions
                 configureQueue?.Invoke(opts));
             
             //Register core CQRS services
-            services.AddSingleton<IDispatcher, Dispatcher>();
+            services.AddSingleton<IRequestDispatcher, RequestDispatcher>();
             services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
             services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
             

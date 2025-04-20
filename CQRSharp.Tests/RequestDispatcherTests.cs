@@ -126,7 +126,7 @@ namespace CQRSharp.Tests
         public void StopApplication() => _cts.Cancel();
     }
 
-    public class DispatcherTests
+    public class RequestDispatcherTests
     {
         private readonly DummyPreHandler        _pre          = new();
         private readonly DummyPostHandler       _post         = new();
@@ -139,7 +139,7 @@ namespace CQRSharp.Tests
         private readonly IBackgroundTaskQueue   _queue;
         private readonly ServiceProvider        _syncProvider;
 
-        public DispatcherTests()
+        public RequestDispatcherTests()
         {
             var services = new ServiceCollection();
 
@@ -221,17 +221,17 @@ namespace CQRSharp.Tests
             services.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
             services.AddTransient<DummyQueryHandler>(_ => _qryHandler);
 
-            // Dispatcher
-            services.AddSingleton<IDispatcher, Dispatcher>();
+            // RequestDispatcher
+            services.AddSingleton<IRequestDispatcher, RequestDispatcher>();
 
             // Build final service provider
             _syncProvider = services.BuildServiceProvider();
         }
 
-        private IDispatcher BuildDispatcher(RunMode mode)
+        private IRequestDispatcher BuildDispatcher(RunMode mode)
         {
             if (mode == RunMode.Sync)
-                return _syncProvider.GetRequiredService<IDispatcher>();
+                return _syncProvider.GetRequiredService<IRequestDispatcher>();
 
             // Async container
             var asyncServices = new ServiceCollection();
@@ -252,10 +252,10 @@ namespace CQRSharp.Tests
             asyncServices.AddSingleton<INotificationHandler<QueryInitiatedNotification<int>>>(_ => _qryInitNotif);
             asyncServices.AddSingleton<INotificationHandler<QueryCompletedNotification<int>>>(_ => _qryDoneNotif);
             asyncServices.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
-            asyncServices.AddSingleton<IDispatcher, Dispatcher>();
+            asyncServices.AddSingleton<IRequestDispatcher, RequestDispatcher>();
 
             var asyncProvider = asyncServices.BuildServiceProvider();
-            return asyncProvider.GetRequiredService<IDispatcher>();
+            return asyncProvider.GetRequiredService<IRequestDispatcher>();
         }
 
         [Fact(DisplayName = "Sync Command dispatches command, handlers, attributes, and notifications")]
