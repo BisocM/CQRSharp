@@ -5,112 +5,123 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Core.BackgroundTasks;
-
-/// <summary>
-///     Hosted‑service that drains a <see cref="BackgroundTaskQueue" /> and
-///     executes work items with bounded concurrency.
-/// </summary>
-internal sealed class BackgroundTaskQueueConsumer : BackgroundService
+namespace CQRSharp.Core.BackgroundTasks
 {
-    private readonly SemaphoreSlim _concurrency;
-    private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
-    private readonly ChannelReader<QueuedTask> _reader;
-    private readonly TimeSpan _shutdownTimeout;
-
-    /// <inheritdoc />
-    public BackgroundTaskQueueConsumer(
-        IBackgroundTaskQueue taskQueue,
-        ILogger<BackgroundTaskQueueConsumer> logger,
-        IOptions<BackgroundTaskQueueOptions> options)
+    /// <summary>
+    /// Hosted service that drains a <see cref="BackgroundTaskQueue"/> and executes work items
+    /// with bounded concurrency.
+    /// </summary>
+    internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     {
-        _reader = taskQueue.Reader
-                  ?? throw new ArgumentNullException(nameof(taskQueue));
+        private readonly SemaphoreSlim                         _concurrency;
+        private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
+        private readonly ChannelReader<QueuedTask>            _reader;
+        private readonly TimeSpan                             _shutdownTimeout;
+        private readonly BackgroundTaskQueue                  _queue;
 
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-
-        var opts = options.Value
-                   ?? throw new ArgumentNullException(nameof(options));
-
-        var maxConc = opts.ConsumerCount > 0
-            ? opts.ConsumerCount
-            : Environment.ProcessorCount;
-
-        _concurrency = new SemaphoreSlim(maxConc, maxConc);
-        _shutdownTimeout = opts.ShutdownTimeout;
-    }
-
-    /// <inheritdoc />
-    public override async Task StartAsync(CancellationToken token)
-    {
-        _logger.LogInformation(
-            "BackgroundTaskQueueConsumer starting.  MaxConcurrency = {MC}.",
-            _concurrency.CurrentCount);
-        await base.StartAsync(token).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        try
+        /// <summary>
+        /// Initializes a new instance of <see cref="BackgroundTaskQueueConsumer"/>.
+        /// </summary>
+        public BackgroundTaskQueueConsumer(
+            IBackgroundTaskQueue                   taskQueue,
+            ILogger<BackgroundTaskQueueConsumer>   logger,
+            IOptions<BackgroundTaskQueueOptions>   options)
         {
-            while (!stoppingToken.IsCancellationRequested)
+            _reader = taskQueue.Reader
+                      ?? throw new ArgumentNullException(nameof(taskQueue));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+            var opts = options.Value
+                       ?? throw new ArgumentNullException(nameof(options));
+
+            var maxConcurrency = opts.ConsumerCount > 0
+                                 ? opts.ConsumerCount
+                                 : Environment.ProcessorCount;
+
+            _concurrency     = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+            _shutdownTimeout = opts.ShutdownTimeout;
+
+            if (taskQueue is not BackgroundTaskQueue concrete)
             {
-                await _reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false);
+                throw new ArgumentException(
+                    "Cannot obtain concrete BackgroundTaskQueue instance",
+                    nameof(taskQueue));
+            }
+            _queue = concrete;
+        }
 
-                while (_reader.TryRead(out var qt))
+        /// <inheritdoc/>
+        public override async Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation(
+                "BackgroundTaskQueueConsumer starting.  MaxConcurrency = {Max}.",
+                _concurrency.CurrentCount);
+
+            await base.StartAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc/>
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            try
+            {
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    await _concurrency.WaitAsync(stoppingToken).ConfigureAwait(false);
+                    await _reader.WaitToReadAsync(stoppingToken)
+                                 .ConfigureAwait(false);
 
-                    _ = ProcessWorkItemAsync(qt, stoppingToken).ContinueWith(
-                        static (_, state) =>
-                        {
-                            var sem = (SemaphoreSlim)state!;
-                            sem.Release();
-                        }, _concurrency, TaskScheduler.Default);
+                    while (_reader.TryRead(out var queuedTask))
+                    {
+                        await _concurrency.WaitAsync(stoppingToken)
+                                          .ConfigureAwait(false);
+
+                        _ = ProcessWorkItemAsync(queuedTask, stoppingToken)
+                              .ContinueWith(
+                                  _ => _concurrency.Release(),
+                                  TaskScheduler.Default);
+                    }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                //shutdown
+            }
+            finally
+            {
+                _logger.LogInformation(
+                    "BackgroundTaskQueueConsumer execute loop ending.");
+            }
         }
-        catch (OperationCanceledException)
-        {
-            /* graceful shutdown */
-        }
-        finally
-        {
-            _logger.LogInformation("BackgroundTaskQueueConsumer execute loop ending.");
-        }
-    }
 
-    /// <inheritdoc />
-    public override async Task StopAsync(CancellationToken token)
-    {
-        _logger.LogInformation(
-            "Consumer stopping; waiting up to {TO} for tasks to finish.",
-            _shutdownTimeout);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-        cts.CancelAfter(_shutdownTimeout);
-
-        await base.StopAsync(cts.Token).ConfigureAwait(false);
-        _logger.LogInformation("BackgroundTaskQueueConsumer stopped.");
-    }
-
-    /// <summary>Runs a single work item and handles completion / fault accounting.</summary>
-    private static async Task ProcessWorkItemAsync(
-        QueuedTask qt,
-        CancellationToken token)
-    {
-        try
+        /// <inheritdoc/>
+        public override async Task StopAsync(CancellationToken cancellationToken)
         {
-            await qt.WorkItem(token).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Consumer stopping; waiting up to {Timeout} for tasks to finish.",
+                _shutdownTimeout);
+
+            using var cts = CancellationTokenSource
+                                .CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(_shutdownTimeout);
+
+            await base.StopAsync(cts.Token).ConfigureAwait(false);
+            _logger.LogInformation("BackgroundTaskQueueConsumer stopped.");
         }
-        catch (Exception ex)
+
+        private async Task ProcessWorkItemAsync(
+            QueuedTask queuedTask,
+            CancellationToken cancellationToken)
         {
-            BackgroundTaskQueue.SignalTaskException(qt.QueueId, qt.SequenceNumber, ex);
-        }
-        finally
-        {
-            BackgroundTaskQueue.CompleteTaskAsRan(qt.QueueId, qt.SequenceNumber);
+            try
+            {
+                await queuedTask.WorkItem(cancellationToken)
+                                .ConfigureAwait(false);
+                _queue.CompleteTaskAsRan(queuedTask.SequenceNumber);
+            }
+            catch (Exception ex)
+            {
+                _queue.SignalTaskException(queuedTask.SequenceNumber, ex);
+            }
         }
     }
 }

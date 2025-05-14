@@ -15,21 +15,6 @@ public interface IBackgroundTaskQueue
     internal ChannelReader<QueuedTask> Reader { get; }
 
     /// <summary>
-    ///     Total number of items ever enqueued (including those later dropped).
-    /// </summary>
-    long TotalItemsEnqueued { get; }
-
-    /// <summary>
-    ///     Total number of items dropped under DropNewest or DropWrite policies.
-    /// </summary>
-    long TotalDroppedNewest { get; }
-
-    /// <summary>
-    ///     Total number of items dropped under the DropOldest policy.
-    /// </summary>
-    long TotalDroppedOldest { get; }
-
-    /// <summary>
     ///     Queues a background work item to be processed asynchronously.
     /// </summary>
     internal Task<QueueWriteResult> QueueBackgroundWorkItemAsync(

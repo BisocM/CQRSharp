@@ -173,7 +173,7 @@ public sealed class RequestDispatcher : IRequestDispatcher
                         }
                         catch (OperationCanceledException)
                         {
-                            tcs.TrySetCanceled();
+                            tcs.TrySetCanceled(ct);
                         }
                         catch (Exception ex)
                         {

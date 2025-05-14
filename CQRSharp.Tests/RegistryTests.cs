@@ -2,7 +2,6 @@
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Shared.Data.Attributes.Pipelines;
 using CQRSharp.Shared.Data.Interfaces.Markers.Command;
 using CQRSharp.Shared.Data.Models.Requests;
 
@@ -92,7 +91,7 @@ public class RequestRegistryTests
             handlerType,
             [],
             [],
-            null,
+            [],
             [],
             null,
             null
@@ -121,10 +120,10 @@ public class RequestRegistryTests
         var metadata = new RequestMetadata(
             requestType,
             typeof(TestCommandHandler),
-            Array.Empty<IPreHandlerAttribute>(),
-            Array.Empty<IPostHandlerAttribute>(),
-            null,
-            Array.Empty<PropertySensitivity>(),
+            [],
+            [],
+            [],
+            [],
             null,
             null
         );
