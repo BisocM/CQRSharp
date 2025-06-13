@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Collections.Generic;
 using CQRSharp.Shared.Data.Models.Requests;
 
 namespace CQRSharp.Core.Caching.Requests;
@@ -9,7 +9,7 @@ namespace CQRSharp.Core.Caching.Requests;
 ///     This allows for dynamic retrieval of handler types based on the request type received.
 ///     HandlerMappings are populated in the source code generator.
 /// </summary>
-public sealed class RequestRegistry(ConcurrentDictionary<Type, RequestMetadata> handlerMappings) : IRequestRegistry
+public sealed class RequestRegistry(IReadOnlyDictionary<Type, RequestMetadata> handlerMappings) : IRequestRegistry
 {
     /// <inheritdoc />
     public Type? TryGetHandlerType(Type requestType)

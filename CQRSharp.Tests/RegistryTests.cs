@@ -14,7 +14,7 @@ public class HandlerRegistryTests
     [Fact]
     public void TryGetHandlerDelegate_ReturnsTrue_WhenHandlerExists()
     {
-        var map = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();
+        var map = new Dictionary<Type, HandlerInvokerDelegate>();
         var dummyType = typeof(string); // Just a random type
         map[dummyType] = (handler, request, ct) => Task.FromResult<object>("test");
 
@@ -28,7 +28,7 @@ public class HandlerRegistryTests
     [Fact]
     public void TryGetHandlerDelegate_ReturnsFalse_WhenHandlerNotFound()
     {
-        var map = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();
+        var map = new Dictionary<Type, HandlerInvokerDelegate>();
         var registry = new HandlerRegistry(map);
 
         var found = registry.TryGetHandlerDelegate(typeof(int), out var invoker);
@@ -46,7 +46,7 @@ public class PipelineRegistryTests
     [Fact]
     public void GetPipelineBuilder_ReturnsExpectedDelegate()
     {
-        var dic = new ConcurrentDictionary<Type, PipelineBuilderDelegate>();
+        var dic = new Dictionary<Type, PipelineBuilderDelegate>();
         var key = typeof(string);
         PipelineBuilderDelegate builder = (services, request, finalHandler, token) =>
         {
@@ -65,7 +65,7 @@ public class PipelineRegistryTests
     [Fact]
     public void GetPipelineBuilder_ReturnsNullForMissingKey()
     {
-        var dic = new ConcurrentDictionary<Type, PipelineBuilderDelegate>();
+        var dic = new Dictionary<Type, PipelineBuilderDelegate>();
         var registry = new PipelineRegistry(dic);
 
         var builder = registry.GetPipelineBuilder(typeof(int));
@@ -82,7 +82,7 @@ public class RequestRegistryTests
     [Fact]
     public void TryGetHandlerType_ReturnsHandlerType_WhenExists()
     {
-        var map = new ConcurrentDictionary<Type, RequestMetadata>();
+        var map = new Dictionary<Type, RequestMetadata>();
         var requestType = typeof(TestCommand);
         var handlerType = typeof(TestCommandHandler);
 
@@ -107,7 +107,7 @@ public class RequestRegistryTests
     [Fact]
     public void TryGetHandlerType_ReturnsNull_WhenNotFound()
     {
-        var registry = new RequestRegistry(new ConcurrentDictionary<Type, RequestMetadata>());
+        var registry = new RequestRegistry(new Dictionary<Type, RequestMetadata>());
         var actual = registry.TryGetHandlerType(typeof(TestCommand));
         Assert.Null(actual);
     }
@@ -115,7 +115,7 @@ public class RequestRegistryTests
     [Fact]
     public void TryGetRequestMetadata_ReturnsMetadata_WhenExists()
     {
-        var map = new ConcurrentDictionary<Type, RequestMetadata>();
+        var map = new Dictionary<Type, RequestMetadata>();
         var requestType = typeof(TestCommand);
         var metadata = new RequestMetadata(
             requestType,
@@ -140,7 +140,7 @@ public class RequestRegistryTests
     [Fact]
     public void TryGetRequestMetadata_ReturnsFalse_WhenNotFound()
     {
-        var registry = new RequestRegistry(new ConcurrentDictionary<Type, RequestMetadata>());
+        var registry = new RequestRegistry(new Dictionary<Type, RequestMetadata>());
         var found = registry.TryGetRequestMetadata(typeof(TestCommand), out var result);
         Assert.False(found);
         Assert.Null(result);

@@ -199,7 +199,7 @@ namespace CQRSharp.Tests
             services.AddSingleton(_queue);
 
             // Request registry
-            var reqMap = new ConcurrentDictionary<Type, RequestMetadata>
+            var reqMap = new Dictionary<Type, RequestMetadata>
             {
                 [typeof(DummyCommand)] = new(
                     typeof(DummyCommand),
@@ -225,7 +225,7 @@ namespace CQRSharp.Tests
             services.AddSingleton<IRequestRegistry>(new RequestRegistry(reqMap));
 
             // Handler registry
-            var handlerMap = new ConcurrentDictionary<Type, HandlerInvokerDelegate>
+            var handlerMap = new Dictionary<Type, HandlerInvokerDelegate>
             {
                 [typeof(DummyCommand)] = (_, req, ct) =>
                     _cmdHandler.Handle((DummyCommand)req, ct).ContinueWith<object>(t => t.Result, ct),
@@ -236,11 +236,11 @@ namespace CQRSharp.Tests
 
             // Pipeline registry (empty)
             services.AddSingleton<IPipelineRegistry>(
-                new PipelineRegistry(new ConcurrentDictionary<Type, PipelineBuilderDelegate>()));
+                new PipelineRegistry(new Dictionary<Type, PipelineBuilderDelegate>()));
 
             // Context factory registry and factory
             services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(
-                new ConcurrentDictionary<Type, Func<IServiceProvider, object>>
+                new Dictionary<Type, Func<IServiceProvider, object>>
                 {
                     [typeof(RequestContextBase)] = sp => sp.GetRequiredService<IRequestContextFactory>()
                 }));

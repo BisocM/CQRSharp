@@ -153,7 +153,7 @@ public sealed class HandlerRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public sealed class GeneratedHandlerRegistryRegistrar : IDataRegistrar");
         sb.AppendLine("    {");
-        sb.AppendLine("        private readonly ConcurrentDictionary<Type, HandlerInvokerDelegate> _handlerMap;");
+        sb.AppendLine("        private readonly Dictionary<Type, HandlerInvokerDelegate> _handlerMap;");
         sb.AppendLine();
         sb.AppendLine("        /// <summary>");
         sb.AppendLine(
@@ -161,18 +161,19 @@ public sealed class HandlerRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        /// </summary>");
         sb.AppendLine("        public GeneratedHandlerRegistryRegistrar()");
         sb.AppendLine("        {");
-        sb.AppendLine("            _handlerMap = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();");
+        sb.AppendLine("            _handlerMap = new Dictionary<Type, HandlerInvokerDelegate>();");
 
         var distinctRegs = registrations.Distinct();
         foreach (var reg in distinctRegs)
         {
             sb.AppendLine();
             sb.AppendLine($"            //Registration for {reg.RequestType}");
-            sb.AppendLine($"            _handlerMap.TryAdd(typeof({reg.RequestType}), (handler, request, ct) =>");
+            sb.AppendLine($"            _handlerMap[typeof({reg.RequestType})] = async (handler, request, ct) =>");
             sb.AppendLine("            {");
-            sb.AppendLine($"                return (({reg.HandlerInterface})handler)");
+            sb.AppendLine($"                var result = await (({reg.HandlerInterface})handler)");
             sb.AppendLine($"                    .Handle(({reg.RequestType})request, ct)");
-            sb.AppendLine("                    .ContinueWith(t => (object)t.Result, ct);");
+            sb.AppendLine("                    .ConfigureAwait(false);");
+            sb.AppendLine("                return (object)result;");
             sb.AppendLine("            });");
         }
 

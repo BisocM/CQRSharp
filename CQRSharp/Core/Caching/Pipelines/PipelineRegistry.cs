@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Collections.Generic;
 
 namespace CQRSharp.Core.Caching.Pipelines;
 
@@ -7,7 +7,7 @@ namespace CQRSharp.Core.Caching.Pipelines;
 ///     mapped to specific request types. The creation of the concurrent dictionary happens in the source code generation
 ///     part of the library.
 /// </summary>
-public class PipelineRegistry(ConcurrentDictionary<Type, PipelineBuilderDelegate> pipelineMappings) : IPipelineRegistry
+public class PipelineRegistry(IReadOnlyDictionary<Type, PipelineBuilderDelegate> pipelineMappings) : IPipelineRegistry
 {
     /// <inheritdoc />
     public PipelineBuilderDelegate? GetPipelineBuilder(Type requestType)

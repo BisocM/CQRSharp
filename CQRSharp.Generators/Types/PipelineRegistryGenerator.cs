@@ -201,18 +201,18 @@ public sealed class PipelineRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public sealed class GeneratedPipelineRegistrar : IDataRegistrar");
         sb.AppendLine("    {");
-        sb.AppendLine("        private readonly ConcurrentDictionary<Type, PipelineBuilderDelegate> _pipelineMap;");
+        sb.AppendLine("        private readonly Dictionary<Type, PipelineBuilderDelegate> _pipelineMap;");
         sb.AppendLine();
         sb.AppendLine("        public GeneratedPipelineRegistrar()");
         sb.AppendLine("        {");
-        sb.AppendLine("            _pipelineMap = new ConcurrentDictionary<Type, PipelineBuilderDelegate>();");
+        sb.AppendLine("            _pipelineMap = new Dictionary<Type, PipelineBuilderDelegate>();");
         sb.AppendLine();
 
         var distinctEntries = entries.Distinct().ToArray();
         foreach (var (requestType, resultType, behaviors) in distinctEntries)
         {
             sb.AppendLine(
-                $"            _pipelineMap.TryAdd(typeof({requestType}), (services, requestObj, finalHandler, ct) =>");
+                $"            _pipelineMap[typeof({requestType})] = async (services, requestObj, finalHandler, ct) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                //Compose pipeline behaviors for {requestType} -> {resultType}");
 
@@ -231,25 +231,24 @@ public sealed class PipelineRegistryGenerator : IIncrementalGenerator
             }
 
             sb.AppendLine();
-            sb.AppendLine("                //Final handler delegate");
-            sb.AppendLine(
-                $"                Func<{requestType}, CancellationToken, Task<{resultType}>> pipeline = async (req, token) =>");
-            sb.AppendLine("                {");
-            sb.AppendLine("                    var rawResult = await finalHandler(token).ConfigureAwait(false);");
-            sb.AppendLine($"                    return ({resultType}) rawResult;");
-            sb.AppendLine("                };");
-            sb.AppendLine();
-            sb.AppendLine("                //Compose behaviors in reverse order so that each wraps the next.");
-            sb.AppendLine("                for (int i = behaviors.Length - 1; i >= 0; i--)");
-            sb.AppendLine("                {");
-            sb.AppendLine("                    var next = pipeline;");
-            sb.AppendLine("                    var behavior = behaviors[i];");
-            sb.AppendLine(
-                "                    pipeline = (req, token) => behavior.Handle(req, x => next(req, x), token);");
-            sb.AppendLine("                }");
-            sb.AppendLine();
-            sb.AppendLine("                return pipeline((requestObj as " + requestType +
-                          ")!, ct).ContinueWith(t => (object)t.Result, ct);");
+        sb.AppendLine("                //Final handler delegate");
+        sb.AppendLine(
+            $"                Func<CancellationToken, Task<{resultType}>> pipeline = async token =>");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var rawResult = await finalHandler(token).ConfigureAwait(false);");
+        sb.AppendLine($"                    return ({resultType}) rawResult;");
+        sb.AppendLine("                };");
+        sb.AppendLine();
+        sb.AppendLine("                //Compose behaviors in reverse order so that each wraps the next.");
+        sb.AppendLine("                for (int i = behaviors.Length - 1; i >= 0; i--)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var next = pipeline;");
+        sb.AppendLine("                    var behavior = behaviors[i];");
+        sb.AppendLine(
+            "                    pipeline = token => behavior.Handle((" + requestType + ")requestObj, next, token);");
+        sb.AppendLine("                }");
+        sb.AppendLine();
+        sb.AppendLine("                return (object) await pipeline(ct).ConfigureAwait(false);");
             sb.AppendLine("            });");
             sb.AppendLine();
         }
