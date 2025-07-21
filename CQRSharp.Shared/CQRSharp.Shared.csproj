@@ -11,7 +11,7 @@
         <EnableAotAnalyzer>true</EnableAotAnalyzer>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <PackageOutputPath>..\NuGetPackages</PackageOutputPath>
+        <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
     </PropertyGroup>
 
     <!-- NuGet Package Metadata -->
@@ -25,7 +25,7 @@
         <RepositoryType>git</RepositoryType>
         <PackageTags>CQRS</PackageTags>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.6</Version>
+        <Version>2.2.7</Version>
         <Description>Contains shared abstractions and common types for CQRSharp. This library underpins the rest of the CQRSharp framework.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageReleaseNotes>

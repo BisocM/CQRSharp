@@ -1,7 +1,9 @@
-﻿using CQRSharp.Core.Options;
+﻿using CQRSharp.Core.Factories;
+using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Core.Pipelines.Types;
 using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Shared.Data.Interfaces.Transactions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Extensions;
@@ -18,11 +20,7 @@ public static partial class DependencyInjectionExtensions
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Resilience configuration must be provided.");
 
-        services.Configure<ResilienceOptions>(options =>
-        {
-            //Apply the delegate if it is provided.
-            configureOptions?.Invoke(options);
-        });
+        services.Configure<ResilienceOptions>(configureOptions.Invoke);
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
 
@@ -39,11 +37,7 @@ public static partial class DependencyInjectionExtensions
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Timeout configuration must be provided.");
 
-        services.Configure<TimeoutOptions>(options =>
-        {
-            //Apply the delegate if it is provided.
-            configureOptions?.Invoke(options);
-        });
+        services.Configure<TimeoutOptions>(configureOptions.Invoke);
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
 
@@ -67,7 +61,7 @@ public static partial class DependencyInjectionExtensions
                     $"Rate limiting configuration is invalid. {nameof(options.MaxTokens)} and {nameof(options.ReplenishRatePerSecond)} must be greater than zero.");
 
             //Apply the delegate if it is provided.
-            configureOptions?.Invoke(options);
+            configureOptions.Invoke(options);
         });
 
         services.AddSingleton<RateLimiter>();

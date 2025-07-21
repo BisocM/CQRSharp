@@ -38,8 +38,8 @@ public sealed record RequestMetadata(
     Type? HandlerType,
     IPreHandlerAttribute[] PreHandlers,
     IPostHandlerAttribute[] PostHandlers,
-    Type[] PipelineExemptions,
-    Type[] SensitiveProperties,
+    PipelineExemptionAttribute[] PipelineExemptions,
+    PropertySensitivity[] SensitiveProperties,
     Type? ResultType,
     Type? ContextType
 );

@@ -21,7 +21,7 @@ public class Program
     public static async Task Main(string[] args)
     {
         var host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices((context, services) =>
+            .ConfigureServices((_, services) =>
             {
                 //Add CQRSharp to the services, scanning the current assembly for handlers and attributes
                 services.AddCqrs(options =>
@@ -29,6 +29,7 @@ public class Program
                         //Synchronous run mode so we can observe results directly
                         options.RunMode = RunMode.Sync;
                     })
+                    .AddGenerated()
                     .AddRateLimiting(options =>
                     {
                         options.MaxTokens = 5;

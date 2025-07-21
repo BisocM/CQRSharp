@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp\CQRSharp.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
     </ItemGroup>
 
 </Project>

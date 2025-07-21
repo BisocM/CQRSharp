@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp", "CQRSharp\CQRSharp.csproj", "{F17728F7-5DFA-4EF1-8347-166A1BF7DD75}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Core", "CQRSharp.Core\CQRSharp.Core.csproj", "{F17728F7-5DFA-4EF1-8347-166A1BF7DD75}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Sample", "CQRSharp.Sample\CQRSharp.Sample.csproj", "{2F79B54B-DC8D-4B73-AFC0-FE58EAFE76C6}"
 EndProject
@@ -12,6 +12,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Shared", "CQRSharp.Shared\CQRSharp.Shared.csproj", "{1E69C86C-93B7-43E1-968C-A3CDDA9793AA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Generators", "CQRSharp.Generators\CQRSharp.Generators.csproj", "{C4AE00CD-B399-44B0-975F-924C96E4B678}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp", "CQRSharp\CQRSharp.csproj", "{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -43,6 +45,10 @@ Global
 		{C4AE00CD-B399-44B0-975F-924C96E4B678}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4AE00CD-B399-44B0-975F-924C96E4B678}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4AE00CD-B399-44B0-975F-924C96E4B678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

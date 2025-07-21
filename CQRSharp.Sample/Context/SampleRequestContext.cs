@@ -11,7 +11,8 @@ public class SampleRequestContext(object requestId, object userId, DateTime crea
     /// </summary>
     public MenuState? NextState { get; set; }
 
+    public DateTime CreatedAt { get; } = createdAt;
+
     public object RequestId { get; set; } = requestId;
     public object UserId { get; set; } = userId;
-    public DateTime CreatedAt { get; } = createdAt;
 }

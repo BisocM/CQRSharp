@@ -1,4 +1,4 @@
-﻿namespace System.Runtime.CompilerServices;
+﻿namespace CQRSharp.Shared;
 
 /// <summary>
 ///     This class is required to support init-only setters and record types in C# 9.
