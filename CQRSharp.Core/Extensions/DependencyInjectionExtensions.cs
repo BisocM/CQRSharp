@@ -12,7 +12,7 @@ namespace CQRSharp.Core.Extensions;
 /// <summary>
 ///     Provides extension methods for registering CQRSharp services with the dependency injection container.
 /// </summary>
-public static partial class DependencyInjectionExtensions
+public static class DependencyInjectionExtensions
 {
     /// <summary>
     ///     Registers the core services required for the CQRSharp library to function.

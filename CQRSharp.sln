@@ -9,11 +9,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CQRSharp.Sample", "CQRSharp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Tests", "CQRSharp.Tests\CQRSharp.Tests.csproj", "{EBA2F116-DA4F-45DA-80F1-1BA709992629}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Shared", "CQRSharp.Shared\CQRSharp.Shared.csproj", "{1E69C86C-93B7-43E1-968C-A3CDDA9793AA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Abstractions", "CQRSharp.Abstractions\CQRSharp.Abstractions.csproj", "{1E69C86C-93B7-43E1-968C-A3CDDA9793AA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Generators", "CQRSharp.Generators\CQRSharp.Generators.csproj", "{C4AE00CD-B399-44B0-975F-924C96E4B678}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp", "CQRSharp\CQRSharp.csproj", "{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CQRSharp.Pipelines", "CQRSharp.Pipelines\CQRSharp.Pipelines.csproj", "{1B8F3989-56B5-42A8-AEF4-D01DE74E9324}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -49,6 +51,10 @@ Global
 		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E3AA1986-CE80-43EB-8EEE-0AE35094FD45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1B8F3989-56B5-42A8-AEF4-D01DE74E9324}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B8F3989-56B5-42A8-AEF4-D01DE74E9324}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B8F3989-56B5-42A8-AEF4-D01DE74E9324}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B8F3989-56B5-42A8-AEF4-D01DE74E9324}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,10 +1,10 @@
 ﻿using System.Reflection;
 using System.Text.RegularExpressions;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Core.Requests;
 using CQRSharp.Sample.Attributes.Menu;
 using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Cancellation;
-using CQRSharp.Shared.Data.Interfaces.Markers.Command;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

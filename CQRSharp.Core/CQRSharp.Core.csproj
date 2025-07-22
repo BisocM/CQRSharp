@@ -6,7 +6,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-
+        <PackageId>CQRSharp.Core</PackageId>
+        
         <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</EnableAotAnalyzer>
         <RunAOTCompilation Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</RunAOTCompilation>
         <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
@@ -61,7 +62,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj" />
     </ItemGroup>
 
     <ItemGroup>

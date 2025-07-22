@@ -4,7 +4,7 @@ using CQRSharp.Core.BackgroundTasks.Telemetry;
 using CQRSharp.Core.BackgroundTasks.Types;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
-using CQRSharp.Shared.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

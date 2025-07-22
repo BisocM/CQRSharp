@@ -2,8 +2,8 @@
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
 using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Shared.Data.Interfaces.Markers.Command;
-using CQRSharp.Shared.Data.Models.Requests;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Models.Requests;
 
 namespace CQRSharp.Tests;
 

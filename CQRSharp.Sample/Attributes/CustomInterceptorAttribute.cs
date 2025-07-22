@@ -1,5 +1,5 @@
-﻿using CQRSharp.Shared.Data.Attributes.Pipelines;
-using CQRSharp.Shared.Data.Interfaces.Markers.Request;
+﻿using CQRSharp.Abstractions.Data.Attributes.Pipelines;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

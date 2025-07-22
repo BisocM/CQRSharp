@@ -9,11 +9,11 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Shared.Data.Interfaces.Context;
-using CQRSharp.Shared.Data.Interfaces.Markers.Command;
-using CQRSharp.Shared.Data.Interfaces.Markers.Query;
-using CQRSharp.Shared.Data.Interfaces.Markers.Request;
-using CQRSharp.Shared.Data.Models.Commands;
+using CQRSharp.Abstractions.Data.Interfaces.Context;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 

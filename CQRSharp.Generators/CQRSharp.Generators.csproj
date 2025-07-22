@@ -24,11 +24,11 @@
 
     <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
-        <None Include="$(MSBuildThisFileDirectory)..\CQRSharp.Shared\bin\$(Configuration)\netstandard2.0\CQRSharp.Shared.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)..\CQRSharp.Abstractions\bin\$(Configuration)\netstandard2.0\CQRSharp.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Shared\CQRSharp.Shared.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

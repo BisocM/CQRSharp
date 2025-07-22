@@ -6,9 +6,9 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
 
         <PackageId>CQRSharp</PackageId>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <NoWarn>$(NoWarn);CS2008;NU5128</NoWarn>
 
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
     </PropertyGroup>
 
@@ -29,7 +29,7 @@
 
     <ItemGroup>
         <None Include="..\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-        <None Include="..\CQRSharp.Shared\bin\$(Configuration)\netstandard2.0\CQRSharp.Shared.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+        <None Include="..\CQRSharp.Abstractions\bin\$(Configuration)\netstandard2.0\CQRSharp.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     </ItemGroup>
 
 </Project>

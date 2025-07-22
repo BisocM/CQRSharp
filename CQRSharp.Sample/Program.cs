@@ -1,7 +1,8 @@
 ﻿using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipelines.Types.RateLimiting;
+using CQRSharp.Pipelines.Extensions;
+using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Data;
 using CQRSharp.Sample.Factories;

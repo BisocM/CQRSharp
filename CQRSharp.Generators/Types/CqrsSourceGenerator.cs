@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Shared.Data.Attributes.Pipelines;
-using CQRSharp.Shared.Data.Models.Commands;
-using CQRSharp.Shared.Data.Models.Requests;
+using CQRSharp.Abstractions.Data.Attributes.Pipelines;
+using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Data.Models.Requests;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -81,9 +81,9 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.Factories;");
         sb.AppendLine("using CQRSharp.Core.Pipelines;");
-        sb.AppendLine("using CQRSharp.Shared.Data.Attributes.Pipelines;");
-        sb.AppendLine("using CQRSharp.Shared.Data.Models.Commands;");
-        sb.AppendLine("using CQRSharp.Shared.Data.Models.Requests;");
+        sb.AppendLine("using CQRSharp.Abstractions.Data.Attributes.Pipelines;");
+        sb.AppendLine("using CQRSharp.Abstractions.Data.Models.Commands;");
+        sb.AppendLine("using CQRSharp.Abstractions.Data.Models.Requests;");
         sb.AppendLine();
 
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
@@ -117,7 +117,7 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("            // Registering Handler Services");
 
-        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Requests.HandlerTypeAttribute");
+        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Requests.HandlerTypeAttribute");
         if (handlerTypeAttributeSymbol is null) return;
 
         var registrations = new List<(string InterfaceType, string ImplementationType)>();
@@ -145,10 +145,10 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            // Registering Request Registry");
         sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, RequestMetadata>();");
 
-        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Requests.HandlerTypeAttribute");
-        var preHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Pipelines.IPreHandlerAttribute");
-        var postHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Pipelines.IPostHandlerAttribute");
-        var pipelineExemptionAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Pipelines.PipelineExemptionAttribute");
+        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Requests.HandlerTypeAttribute");
+        var preHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Pipelines.IPreHandlerAttribute");
+        var postHandlerInterfaceSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Pipelines.IPostHandlerAttribute");
+        var pipelineExemptionAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelineExemptionAttribute");
         if (handlerTypeAttributeSymbol is null || preHandlerInterfaceSymbol is null || postHandlerInterfaceSymbol is null || pipelineExemptionAttributeSymbol is null) return;
 
         foreach (var candidate in candidateClasses.Distinct(SymbolEqualityComparer.Default).OfType<INamedTypeSymbol>())
@@ -164,11 +164,11 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
                 var handlerInterfaceName = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
                 var preHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, preHandlerInterfaceSymbol,
-                    "global::CQRSharp.Shared.Data.Attributes.Pipelines.IPreHandlerAttribute");
+                    "global::CQRSharp.Abstractions.Data.Attributes.Pipelines.IPreHandlerAttribute");
                 var postHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, postHandlerInterfaceSymbol,
-                    "global::CQRSharp.Shared.Data.Attributes.Pipelines.IPostHandlerAttribute");
+                    "global::CQRSharp.Abstractions.Data.Attributes.Pipelines.IPostHandlerAttribute");
                 var pipelineExemptionsCode = GenerateAttributeArrayCode(requestTypeSymbol, pipelineExemptionAttributeSymbol,
-                    "global::CQRSharp.Shared.Data.Attributes.Pipelines.PipelineExemptionAttribute");
+                    "global::CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelineExemptionAttribute");
                 var sensitivePropertiesCode = GenerateSensitivePropertiesCode(requestTypeSymbol);
 
                 var isQuery = iface.Name.StartsWith("IQueryHandler", StringComparison.Ordinal);
@@ -176,7 +176,7 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
                     ? $"typeof({iface.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
                     : "null";
 
-                var contextTypeSymbol = GetRequestContextType(requestTypeSymbol) ?? compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Interfaces.Context.RequestContextBase");
+                var contextTypeSymbol = GetRequestContextType(requestTypeSymbol) ?? compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Interfaces.Context.RequestContextBase");
                 var contextTypeName = contextTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "object";
 
                 sb.AppendLine($"            requestMetadataMappings.TryAdd(typeof({requestTypeName}),");
@@ -207,7 +207,7 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            // Registering Handler Registry");
         sb.AppendLine("            var handlerInvokerMappings = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();");
 
-        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Requests.HandlerTypeAttribute");
+        var handlerTypeAttributeSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Requests.HandlerTypeAttribute");
         if (handlerTypeAttributeSymbol is null) return;
 
         foreach (var iface in candidateClasses.SelectMany(c => c.AllInterfaces)
@@ -223,14 +223,14 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
             if (iface.Name.StartsWith("ICommandHandler", StringComparison.Ordinal))
             {
                 requestType = genericArgs[0];
-                handlerInterface = $"global::CQRSharp.Shared.Data.Interfaces.Handlers.ICommandHandler<{string.Join(", ", genericArgs)}>";
+                handlerInterface = $"global::CQRSharp.Abstractions.Data.Interfaces.Handlers.ICommandHandler<{string.Join(", ", genericArgs)}>";
                 sb.AppendLine(
                     $"            handlerInvokerMappings.TryAdd(typeof({requestType}), (handler, request, ct) => (({handlerInterface})handler).Handle(({requestType})request, ct).ContinueWith(t => (object)t.Result, TaskContinuationOptions.ExecuteSynchronously));");
             }
             else if (iface.Name.StartsWith("IQueryHandler", StringComparison.Ordinal) && genericArgs.Length >= 2)
             {
                 requestType = genericArgs[0];
-                handlerInterface = $"global::CQRSharp.Shared.Data.Interfaces.Handlers.IQueryHandler<{string.Join(", ", genericArgs)}>";
+                handlerInterface = $"global::CQRSharp.Abstractions.Data.Interfaces.Handlers.IQueryHandler<{string.Join(", ", genericArgs)}>";
                 sb.AppendLine(
                     $"            handlerInvokerMappings.TryAdd(typeof({requestType}), (handler, request, ct) => (({handlerInterface})handler).Handle(({requestType})request, ct).ContinueWith(t => (object)t.Result, TaskContinuationOptions.ExecuteSynchronously));");
             }
@@ -284,10 +284,10 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            // Registering Pipeline Registry");
         sb.AppendLine("            var pipelineMap = new ConcurrentDictionary<Type, PipelineBuilderDelegate>();");
 
-        var iCommandSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Interfaces.Markers.Command.ICommand");
-        var iQuerySymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Interfaces.Markers.Query.IQuery`1");
+        var iCommandSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Interfaces.Markers.Command.ICommand");
+        var iQuerySymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Interfaces.Markers.Query.IQuery`1");
         var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName("CQRSharp.Core.Pipelines.IPipelineBehavior`2");
-        var priorityAttrSymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Attributes.Pipelines.PipelinePriorityAttribute");
+        var priorityAttrSymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelinePriorityAttribute");
 
         if (iCommandSymbol is null || iQuerySymbol is null || pipelineBehaviorSymbol is null || priorityAttrSymbol is null) return;
 
@@ -355,11 +355,11 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
     /// </summary>
     private static ITypeSymbol InferResultTypeSymbol(Compilation compilation, INamedTypeSymbol requestSymbol)
     {
-        var iQuerySymbol = compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Interfaces.Markers.Query.IQuery`1");
+        var iQuerySymbol = compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Interfaces.Markers.Query.IQuery`1");
         var iQuery = requestSymbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Equals(iQuerySymbol, SymbolEqualityComparer.Default));
         if (iQuery != null) return iQuery.TypeArguments[0];
 
-        return compilation.GetTypeByMetadataName("CQRSharp.Shared.Data.Models.Commands.CommandResult")!;
+        return compilation.GetTypeByMetadataName("CQRSharp.Abstractions.Data.Models.Commands.CommandResult")!;
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
         while (current != null)
         {
             if (current.IsGenericType && current.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ==
-                "global::CQRSharp.Shared.Data.Interfaces.Markers.Request.RequestBase<TContext>")
+                "global::CQRSharp.Abstractions.Data.Interfaces.Markers.Request.RequestBase<TContext>")
                 return current.TypeArguments[0];
 
             current = current.BaseType;
@@ -409,7 +409,7 @@ public sealed class CqrsSourceGenerator : IIncrementalGenerator
     /// </summary>
     private static string GenerateSensitivePropertiesCode(ITypeSymbol requestTypeSymbol)
     {
-        var propertySensitivityFullyQualifiedName = "global::CQRSharp.Shared.Data.Models.Requests.PropertySensitivity";
+        var propertySensitivityFullyQualifiedName = "global::CQRSharp.Abstractions.Data.Models.Requests.PropertySensitivity";
         var sensitiveProps = requestTypeSymbol.GetMembers()
             .OfType<IPropertySymbol>()
             .Where(prop => prop.GetAttributes().Any(attr => attr.AttributeClass?.Name == nameof(SensitiveDataAttribute)))

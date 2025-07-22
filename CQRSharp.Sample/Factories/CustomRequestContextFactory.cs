@@ -1,6 +1,6 @@
-﻿using CQRSharp.Core.Factories;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Core.Factories;
 using CQRSharp.Sample.Context;
-using CQRSharp.Shared.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Sample.Factories;
 

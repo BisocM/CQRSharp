@@ -14,9 +14,7 @@
 
     <ItemGroup>
         <PackageReference Include="CQRSharp" Version="2.2.7" />
-    </ItemGroup>
-
-    <ItemGroup>
+        <PackageReference Include="CQRSharp.Pipelines" Version="2.2.7" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
     </ItemGroup>
 

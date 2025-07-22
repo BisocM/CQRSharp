@@ -1,5 +1,5 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.Shared.Data.Models.Requests;
+using CQRSharp.Abstractions.Data.Models.Requests;
 
 namespace CQRSharp.Core.Caching.Requests;
 
