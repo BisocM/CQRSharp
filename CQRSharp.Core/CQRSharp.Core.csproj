@@ -1,68 +1,50 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <PackageId>CQRSharp.Core</PackageId>
-        
-        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</EnableAotAnalyzer>
-        <RunAOTCompilation Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</RunAOTCompilation>
-        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net7.0'))">true</IsAotCompatible>
-
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
+
+        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup>
-        <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
-        <Authors>$(AssemblyName)</Authors>
+        <Version>2.2.7</Version>
+        <Authors>BisocM</Authors>
         <Company>BisocM</Company>
-        <PackageProjectUrl>cqrsharp.bisocm.org</PackageProjectUrl>
-        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+        <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
+        <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
+        <Description>The core implementation of the CQRSharp framework, providing request dispatching, background queuing, and Native AOT support.</Description>
+        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
-        <PackageTags>CQRS;Native AoT</PackageTags>
-        <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.7</Version>
-        <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications, with complete Native AoT support.</Description>
+        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <PackageReleaseNotes>
-            <![CDATA[
-            Version 2.2.6 (2025-04-20)
-            ... (release notes truncated for brevity)
-            ]]>
+            Updated to version 2.2.7.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
-        <None Include="..\CQRSharp_Icon.png">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
-        <None Include="..\LICENSE">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-            <Link>LICENSE</Link>
-        </None>
-        <None Include="..\README.md">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
+        <None Include="..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
+        <None Include="..\LICENSE" Pack="true" PackagePath="\"/>
+        <None Include="..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.2"/>
         <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -71,7 +53,4 @@
         </AssemblyAttribute>
     </ItemGroup>
 
-    <Target Name="CleanPackages" BeforeTargets="Pack">
-        <Delete Files="$(PackageOutputPath)\*.nupkg" ContinueOnError="true"/>
-    </Target>
 </Project>
