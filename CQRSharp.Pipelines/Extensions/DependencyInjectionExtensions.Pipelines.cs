@@ -1,10 +1,10 @@
-﻿using CQRSharp.Core.Options;
-using CQRSharp.Core.Pipelines;
+﻿using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Types;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Pipelines.Types.Resilience;
-using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using CQRSharp.Pipelines.Types.Transactions;
+using CQRSharp.Pipelines.Types.Transactions.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Pipelines.Extensions;
@@ -70,13 +70,14 @@ public static class DependencyInjectionExtensions
 
         return services;
     }
-    
+
     /// <summary>
     /// Adds the Unit of Work behavior to the CQRS pipeline in an AoT-compatible way.
     /// </summary>
     /// <typeparam name="TUnitOfWork">Your concrete implementation of IUnitOfWork (e.g., an EF Core specific UoW).</typeparam>
     /// <param name="services">The service collection.</param>
     /// <param name="implementationFactory">An AoT-safe factory delegate to create an instance of your TUnitOfWork.</param>
+    /// <param name="configureOptions">Options for UoW configuration.</param>
     /// <returns>The service collection to allow chaining.</returns>
     /// <example>
     /// <code>
@@ -86,9 +87,16 @@ public static class DependencyInjectionExtensions
     /// </example>
     public static IServiceCollection AddUnitOfWorkBehavior<TUnitOfWork>(
         this IServiceCollection services, 
-        Func<IServiceProvider, TUnitOfWork> implementationFactory)
+        Func<IServiceProvider, TUnitOfWork> implementationFactory,
+        Action<UnitOfWorkOptions>? configureOptions = null)
         where TUnitOfWork : class, IUnitOfWork
     {
+        // Add configuration for UnitOfWorkOptions
+        services.Configure<UnitOfWorkOptions>(opts =>
+        {
+            configureOptions?.Invoke(opts);
+        });
+        
         // Register the concrete UoW using a factory delegate. This is AoT-safe
         // as it gives the compiler a static reference to the constructor.
         services.AddScoped<IUnitOfWork>(implementationFactory);

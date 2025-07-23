@@ -1,6 +1,7 @@
 ﻿using System.Data;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 
-namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+namespace CQRSharp.Pipelines.Types.Transactions.Interfaces;
 
 /// <summary>
 /// Marks a command as requiring a transaction. Any command implementing this interface

@@ -1,6 +1,7 @@
 ﻿using System.Data;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 
-namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+namespace CQRSharp.Pipelines.Types.Transactions.Interfaces;
 
 /// <summary>
 /// A non-generic marker interface that identifies a query as requiring a transaction.
@@ -12,6 +13,11 @@ public interface ITransactionalQuery
     /// Gets the desired isolation level for the transaction.
     /// </summary>
     IsolationLevel IsolationLevel { get; set; }
+    
+    /// <summary>
+    /// Property to signal a read-only intent
+    /// </summary>
+    bool IsReadOnly => true; 
 }
 
 /// <summary>

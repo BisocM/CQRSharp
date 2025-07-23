@@ -1,7 +1,9 @@
-﻿using CQRSharp.Core.Pipelines;
+﻿using System.Diagnostics;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -22,13 +24,19 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
+        // Creates a trace activity that spans the entire resilience operation.
+        using var activity = PipelineTelemetry.StartActivity("Resilience.Operation", request);
+        activity?.SetTag("resilience.max_retries", options.Value.MaxRetries);
+
         var retries = 0;
 
         while (true)
             try
             {
                 //Attempt to execute the next delegate in the pipeline.
-                return await next(cancellationToken);
+                var result = await next(cancellationToken);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+                return result;
             }
             catch (RateLimitExceededException rateLimitException)
             {
@@ -36,6 +44,9 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 logger.LogError(rateLimitException,
                     "Rate limit exceeded for request {RequestName}. No retries will be attempted.",
                     typeof(TRequest).Name);
+
+                // Mark the activity as failed before re-throwing the exception.
+                activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
                 throw;
             }
             catch (Exception ex) when (retries < options.Value.MaxRetries)
@@ -44,6 +55,10 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 retries++;
                 logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}",
                     typeof(TRequest).Name, retries, options.Value.MaxRetries);
+
+                // Records each retry attempt as an event within the activity's timeline.
+                var eventTags = new ActivityTagsCollection { { "exception.type", ex.GetType().Name } };
+                activity?.AddEvent(new ActivityEvent($"RetryAttempt-{retries}", tags: eventTags));
 
                 //TODO: Says this is "optional", never implements the option to DispatcherOptions. Based?
                 //Add a delay before retrying. This is optional and can be configured in DispatcherOptions.
@@ -54,6 +69,9 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
             {
                 // If we get here, we've run out of retries or encountered a non-rate-limited exception with no retries left.
                 logger.LogError(ex, "All retries exhausted for request {RequestName}.", typeof(TRequest).Name);
+
+                // Mark the activity as failed, indicating all retries were exhausted.
+                activity?.SetStatus(ActivityStatusCode.Error, "All retries exhausted.");
                 throw;
             }
     }

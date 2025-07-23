@@ -1,7 +1,9 @@
-﻿using CQRSharp.Core.Pipelines;
+﻿using System.Diagnostics;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Pipelines.Types.RateLimiting;
@@ -36,21 +38,31 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
+        // Creates a trace activity for the rate limiting check.
+        using var activity = PipelineTelemetry.StartActivity("RateLimiting.Check", request);
+
         //Ensure the request can be cast to RequestBase for identifier extraction
         if (request.Context is not IRateLimitedContext baseRequest)
         {
             logger.LogError(
                 "Rate limiting failed: request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
+            // Mark the activity as failed due to a configuration error.
+            activity?.SetStatus(ActivityStatusCode.Error, "Invalid request context for rate limiting.");
             throw new InvalidOperationException(
                 "Request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
         }
 
-        if (baseRequest.UserId == null)
+        if (baseRequest.UserId == null || baseRequest.RequestId == null)
         {
-            logger.LogWarning("User identifier could not be determined for request {RequestId}.",
-                baseRequest.RequestId);
-            throw new InvalidOperationException("User identifier could not be determined for rate limiting.");
+            logger.LogWarning("User or Request identifier could not be determined for request.");
+            // Mark the activity as failed due to missing identifiers.
+            activity?.SetStatus(ActivityStatusCode.Error, "User or Request identifier not found in context.");
+            throw new InvalidOperationException("User or Request identifier could not be determined for rate limiting.");
         }
+
+        // Add identifiers to the activity trace for correlation.
+        activity?.SetTag("ratelimit.user_id", baseRequest.UserId);
+        activity?.SetTag("ratelimit.request_id", baseRequest.RequestId);
 
         logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.",
             baseRequest.UserId,
@@ -66,12 +78,18 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
                 baseRequest.UserId, baseRequest.RequestId, baseRequest.GetType().Name);
+
+            // Record that the request was throttled and mark the activity as failed.
+            activity?.AddEvent(new ActivityEvent("RequestThrottled"));
+            activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
             throw new RateLimitExceededException(baseRequest, "Rate limit exceeded for user.");
         }
 
         logger.LogInformation("Request {RequestId} for user {Identifier} passed rate limiting check.",
             baseRequest.RequestId, baseRequest.UserId);
 
+        // Mark the activity as successful before proceeding.
+        activity?.SetStatus(ActivityStatusCode.Ok);
         return await next(cancellationToken);
     }
 }

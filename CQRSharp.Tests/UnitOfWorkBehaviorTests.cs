@@ -1,10 +1,12 @@
 ﻿using System.Data;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Transactions;
 using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Pipelines.Types;
+using CQRSharp.Pipelines.Options;
+using CQRSharp.Pipelines.Types.Transactions;
+using CQRSharp.Pipelines.Types.Transactions.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace CQRSharp.Tests;
@@ -13,12 +15,14 @@ public class UnitOfWorkBehaviorTests
 {
     private readonly Mock<ILogger<UnitOfWorkBehavior<ICommand, CommandResult>>> _mockLogger;
     private readonly Mock<IUnitOfWork> _mockUoW;
+    private readonly IOptions<UnitOfWorkOptions> _options;
     private readonly IServiceProvider _serviceProvider;
 
     public UnitOfWorkBehaviorTests()
     {
         _mockLogger = new Mock<ILogger<UnitOfWorkBehavior<ICommand, CommandResult>>>();
         _mockUoW = new Mock<IUnitOfWork>();
+        _options = Options.Create(new UnitOfWorkOptions { DefaultIsolationLevel = IsolationLevel.ReadCommitted });
 
         // Set up a service provider that can resolve our mock IUnitOfWork within a scope.
         // This is a robust way to test behavior that depends on DI scopes.
@@ -46,7 +50,7 @@ public class UnitOfWorkBehaviorTests
     public async Task Handle_ShouldCommitUoW_WhenHandlerSucceeds()
     {
         // Arrange
-        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider);
+        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider, _options);
         var command = new TransactionalCommand();
         var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
         nextDelegate.Setup(next => next(It.IsAny<CancellationToken>()))
@@ -69,7 +73,7 @@ public class UnitOfWorkBehaviorTests
     public async Task Handle_ShouldRollbackUoW_WhenHandlerFails()
     {
         // Arrange
-        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider);
+        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider, _options);
         var command = new TransactionalCommand();
         var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
         var exception = new InvalidOperationException("Handler failed");
@@ -95,7 +99,7 @@ public class UnitOfWorkBehaviorTests
     public async Task Handle_ShouldBypassUoW_ForNonTransactionalRequest()
     {
         // Arrange
-        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider);
+        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _serviceProvider, _options);
         var command = new NonTransactionalCommand();
         var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
         
