@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using CQRSharp.Core.Options;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.Options;
 

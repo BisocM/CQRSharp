@@ -1,6 +1,6 @@
 ﻿using System.Threading.Channels;
 
-namespace CQRSharp.Core.BackgroundTasks.Types;
+namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
 ///     Wraps a channel reader so that each successful read decrements

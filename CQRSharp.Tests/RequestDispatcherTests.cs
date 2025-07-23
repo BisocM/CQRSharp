@@ -1,6 +1,15 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.BackgroundTasks.Telemetry;
+using CQRSharp.Abstractions.Data.Attributes.Pipelines;
+using CQRSharp.Abstractions.Data.Interfaces.Context;
+using CQRSharp.Abstractions.Data.Interfaces.Handlers;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Data.Models.Requests;
+using CQRSharp.Core.Background.TaskQueue;
+using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
@@ -11,15 +20,6 @@ using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Requests;
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Abstractions.Data.Models.Requests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,7 +27,9 @@ using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Tests;
 
-// Dummy command and handler
+// Dummy command with attributes for testing the full pipeline
+[DummyPreHandler]
+[DummyPostHandler]
 public class DummyCommand : CommandBase
 {
 }
@@ -60,9 +62,9 @@ public class DummyQueryHandler : IQueryHandler<DummyQuery, int>
 }
 
 // Pre- and post-handler attributes
-internal class DummyPreHandler : IPreHandlerAttribute
+internal sealed class DummyPreHandler : Attribute, IPreHandlerAttribute
 {
-    public bool Invoked { get; private set; }
+    public bool Invoked { get; set; }
     public int PreHandlerExecutionPriority => 0;
 
     public Task OnBeforeHandle(IRequest req, IServiceProvider sp, CancellationToken ct)
@@ -72,9 +74,9 @@ internal class DummyPreHandler : IPreHandlerAttribute
     }
 }
 
-internal class DummyPostHandler : IPostHandlerAttribute
+internal sealed class DummyPostHandler : Attribute, IPostHandlerAttribute
 {
-    public bool Invoked { get; private set; }
+    public bool Invoked { get; set; }
     public int PostHandlerExecutionPriority => 0;
 
     public Task OnAfterHandle(IRequest req, IServiceProvider sp, CancellationToken ct)
@@ -143,52 +145,62 @@ internal class TestHostApplicationLifetime : IHostApplicationLifetime
 
 public class RequestDispatcherTests
 {
-    private readonly CommandCompletedHandler _cmdDoneNotif = new();
-    private readonly DummyCommandHandler _cmdHandler = new();
-    private readonly CommandInitiatedHandler _cmdInitNotif = new();
-    private readonly DummyPostHandler _post = new();
-    private readonly DummyPreHandler _pre = new();
-    private readonly QueryCompletedHandler _qryDoneNotif = new();
-    private readonly DummyQueryHandler _qryHandler = new();
-    private readonly QueryInitiatedHandler _qryInitNotif = new();
+    private readonly CommandCompletedHandler _cmdDoneNotif;
+    private readonly DummyCommandHandler _cmdHandler;
+    private readonly CommandInitiatedHandler _cmdInitNotif;
+    private readonly DummyPostHandler _post;
+    private readonly DummyPreHandler _pre;
+    private readonly QueryCompletedHandler _qryDoneNotif;
+    private readonly DummyQueryHandler _qryHandler;
+    private readonly QueryInitiatedHandler _qryInitNotif;
     private readonly IBackgroundTaskQueue _queue;
-    private readonly ServiceProvider _syncProvider;
+    private readonly ServiceProvider _serviceProvider;
 
     public RequestDispatcherTests()
     {
+        _cmdHandler = new DummyCommandHandler();
+        _cmdInitNotif = new CommandInitiatedHandler();
+        _cmdDoneNotif = new CommandCompletedHandler();
+        _qryHandler = new DummyQueryHandler();
+        _qryInitNotif = new QueryInitiatedHandler();
+        _qryDoneNotif = new QueryCompletedHandler();
+        _pre = new DummyPreHandler();
+        _post = new DummyPostHandler();
+
         var services = new ServiceCollection();
 
         // Logging
         services.AddSingleton<ILoggerFactory>(_ => LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.None)));
         services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
 
-        // Host lifetime (needed for BackgroundTaskQueue)
-        services.AddSingleton<IHostApplicationLifetime, TestHostApplicationLifetime>();
+        // Host lifetime
+        var lifetime = new TestHostApplicationLifetime();
+        services.AddSingleton<IHostApplicationLifetime>(lifetime);
 
         // Options
-        services.AddSingleton<IOptions<DispatcherOptions>>(_ =>
-            Options.Create(new DispatcherOptions { RunMode = RunMode.Sync }));
-        services.AddSingleton<IOptions<BackgroundTaskQueueOptions>>(_ =>
-            Options.Create(new BackgroundTaskQueueOptions()));
+        services.AddSingleton<IOptions<DispatcherOptions>>(_ => Options.Create(new DispatcherOptions()));
+        services.AddSingleton<IOptions<BackgroundTaskQueueOptions>>(_ => Options.Create(new BackgroundTaskQueueOptions()));
+        services.AddSingleton<IOptions<OutboxOptions>>(_ => Options.Create(new OutboxOptions()));
 
-        // Notification dispatcher and handlers (also needed by queue)
-        services.AddSingleton<INotificationDispatcher, NotificationDispatcher>();
+        // The main dispatcher is scoped and decides routing; the direct dispatcher is a singleton for immediate execution.
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddSingleton<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
+
+        // Notification handlers
         services.AddSingleton<INotificationHandler<CommandInitiatedNotification>>(_ => _cmdInitNotif);
         services.AddSingleton<INotificationHandler<CommandCompletedNotification>>(_ => _cmdDoneNotif);
         services.AddSingleton<INotificationHandler<QueryInitiatedNotification<int>>>(_ => _qryInitNotif);
         services.AddSingleton<INotificationHandler<QueryCompletedNotification<int>>>(_ => _qryDoneNotif);
 
-        // Build an interim provider to resolve queue dependencies
-        var interimProvider = services.BuildServiceProvider();
+        // Manually create the direct dispatcher for the queue, as its notifications should never be outboxed.
+        var directDispatcher = new DirectNotificationDispatcher(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>());
 
-        // Create queue with no-op metrics reporter
-        var metrics = new NoOpMetricsReporter();
         _queue = new BackgroundTaskQueue(
-            interimProvider.GetRequiredService<IOptions<BackgroundTaskQueueOptions>>(),
-            interimProvider.GetRequiredService<INotificationDispatcher>(),
-            interimProvider.GetRequiredService<IHostApplicationLifetime>(),
-            metrics,
-            interimProvider.GetRequiredService<ILogger<BackgroundTaskQueue>>()
+            Options.Create(new BackgroundTaskQueueOptions()),
+            directDispatcher,
+            lifetime,
+            new NoOpMetricsReporter(),
+            new Logger<BackgroundTaskQueue>(new LoggerFactory())
         );
         services.AddSingleton(_queue);
 
@@ -200,18 +212,18 @@ public class RequestDispatcherTests
                 typeof(DummyCommandHandler),
                 [_pre],
                 [_post],
-                [],
-                [],
-                null,
+                Array.Empty<PipelineExemptionAttribute>(),
+                Array.Empty<PropertySensitivity>(),
+                typeof(CommandResult),
                 typeof(RequestContextBase)
             ),
             [typeof(DummyQuery)] = new(
                 typeof(DummyQuery),
                 typeof(DummyQueryHandler),
-                [],
-                [],
-                [],
-                [],
+                Array.Empty<IPreHandlerAttribute>(),
+                Array.Empty<IPostHandlerAttribute>(),
+                Array.Empty<PipelineExemptionAttribute>(),
+                Array.Empty<PropertySensitivity>(),
                 typeof(int),
                 typeof(RequestContextBase)
             )
@@ -221,10 +233,10 @@ public class RequestDispatcherTests
         // Handler registry
         var handlerMap = new ConcurrentDictionary<Type, HandlerInvokerDelegate>
         {
-            [typeof(DummyCommand)] = (_, req, ct) =>
-                _cmdHandler.Handle((DummyCommand)req, ct).ContinueWith<object>(t => t.Result, ct),
-            [typeof(DummyQuery)] = (_, req, ct) =>
-                _qryHandler.Handle((DummyQuery)req, ct).ContinueWith<object>(t => t.Result, ct)
+            [typeof(DummyCommand)] = (handler, req, ct) =>
+                ((DummyCommandHandler)handler).Handle((DummyCommand)req, ct).ContinueWith<object>(t => t.Result, ct),
+            [typeof(DummyQuery)] = (handler, req, ct) =>
+                ((DummyQueryHandler)handler).Handle((DummyQuery)req, ct).ContinueWith<object>(t => t.Result, ct)
         };
         services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerMap));
 
@@ -233,10 +245,11 @@ public class RequestDispatcherTests
             new PipelineRegistry(new ConcurrentDictionary<Type, PipelineBuilderDelegate>()));
 
         // Context factory registry and factory
+        var contextFactory = new DefaultRequestContextFactory();
         services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(
             new ConcurrentDictionary<Type, Func<IServiceProvider, object>>
             {
-                [typeof(RequestContextBase)] = sp => sp.GetRequiredService<IRequestContextFactory>()
+                [typeof(RequestContextBase)] = _ => contextFactory
             }));
         services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
 
@@ -244,40 +257,23 @@ public class RequestDispatcherTests
         services.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
         services.AddTransient<DummyQueryHandler>(_ => _qryHandler);
 
-        // RequestDispatcher
-        services.AddSingleton<IRequestDispatcher, RequestDispatcher>();
+        // The main dispatcher should be resolved from a scope.
+        services.AddScoped<IRequestDispatcher, RequestDispatcher>();
 
         // Build final service provider
-        _syncProvider = services.BuildServiceProvider();
+        _serviceProvider = services.BuildServiceProvider();
     }
 
     private IRequestDispatcher BuildDispatcher(RunMode mode)
     {
-        if (mode == RunMode.Sync)
-            return _syncProvider.GetRequiredService<IRequestDispatcher>();
+        // Create a scope from the main provider to correctly resolve scoped services.
+        var scope = _serviceProvider.CreateScope();
 
-        // Async container
-        var asyncServices = new ServiceCollection();
-        asyncServices.AddSingleton<IOptions<DispatcherOptions>>(_ =>
-            Options.Create(new DispatcherOptions { RunMode = RunMode.Async }));
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IOptions<BackgroundTaskQueueOptions>>());
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IHostApplicationLifetime>());
-        asyncServices.AddSingleton(_queue);
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IRequestRegistry>());
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IHandlerRegistry>());
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IPipelineRegistry>());
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<IContextFactoryRegistry>());
-        asyncServices.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
-        asyncServices.AddSingleton(_syncProvider.GetRequiredService<INotificationDispatcher>());
-        asyncServices.AddSingleton<INotificationHandler<CommandInitiatedNotification>>(_ => _cmdInitNotif);
-        asyncServices.AddSingleton<INotificationHandler<CommandCompletedNotification>>(_ => _cmdDoneNotif);
-        asyncServices.AddSingleton<INotificationHandler<QueryInitiatedNotification<int>>>(_ => _qryInitNotif);
-        asyncServices.AddSingleton<INotificationHandler<QueryCompletedNotification<int>>>(_ => _qryDoneNotif);
-        asyncServices.AddTransient<DummyCommandHandler>(_ => _cmdHandler);
-        asyncServices.AddSingleton<IRequestDispatcher, RequestDispatcher>();
+        // Manually set the run mode for the specific test scenario.
+        var dispatcherOptions = scope.ServiceProvider.GetRequiredService<IOptions<DispatcherOptions>>();
+        dispatcherOptions.Value.RunMode = mode;
 
-        var asyncProvider = asyncServices.BuildServiceProvider();
-        return asyncProvider.GetRequiredService<IRequestDispatcher>();
+        return scope.ServiceProvider.GetRequiredService<IRequestDispatcher>();
     }
 
     [Fact(DisplayName = "Sync Command dispatches command, handlers, attributes, and notifications")]
@@ -312,7 +308,7 @@ public class RequestDispatcherTests
     }
 
     [Fact(DisplayName = "Async Command enqueues and executes in background, firing all handlers and notifications")]
-    public async Task AsyncCommand_FireAndForget()
+    public async Task AsyncCommand_EnqueuesAndExecutes()
     {
         var dispatcher = BuildDispatcher(RunMode.Async);
         var cmd = new DummyCommand();
@@ -335,7 +331,7 @@ public class RequestDispatcherTests
         Assert.True(_cmdDoneNotif.Invoked, "Expected CommandCompletedNotification in background");
     }
 
-    // No-op metrics reporter to satisfy new BackgroundTaskQueue constructor
+    // No-op metrics reporter to satisfy BackgroundTaskQueue constructor
     private class NoOpMetricsReporter : IQueueMetricsReporter
     {
         public void ItemEnqueued()
@@ -350,7 +346,7 @@ public class RequestDispatcherTests
         {
         }
 
-        public long CurrentCount { get; }
+        public long CurrentCount => 0;
 
         public void RecordLatency(TimeSpan latency)
         {

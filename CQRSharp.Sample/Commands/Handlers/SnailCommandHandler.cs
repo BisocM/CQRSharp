@@ -1,8 +1,8 @@
-﻿using CQRSharp.Sample.Commands.Types;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Handlers;
+using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Sample.Commands.Types;
 using CQRSharp.Sample.Context;
 using CQRSharp.Sample.Management.Menu;
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Models.Commands;
 
 namespace CQRSharp.Sample.Commands.Handlers;
 

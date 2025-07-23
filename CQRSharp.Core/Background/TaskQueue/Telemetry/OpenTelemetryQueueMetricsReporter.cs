@@ -1,6 +1,6 @@
 ﻿using System.Diagnostics.Metrics;
 
-namespace CQRSharp.Core.BackgroundTasks.Telemetry;
+namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 
 /// <summary>
 ///     Uses System.Diagnostics.Metrics to emit counters, gauges, and histograms,

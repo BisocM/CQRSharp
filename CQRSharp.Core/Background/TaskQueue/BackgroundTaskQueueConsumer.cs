@@ -1,11 +1,11 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks.Types;
+using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Core.BackgroundTasks;
+namespace CQRSharp.Core.Background.TaskQueue;
 
 /// <summary>
 ///     Hosted service that drains a <see cref="BackgroundTaskQueue" /> and executes work items

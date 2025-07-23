@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.BackgroundTasks.Telemetry;
+﻿namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 
 /// <summary>
 ///     Reports queue metrics such as enqueue counts, drop counts, current length,

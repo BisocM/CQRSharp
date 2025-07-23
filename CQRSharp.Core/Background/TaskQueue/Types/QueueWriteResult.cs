@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.BackgroundTasks.Types;
+﻿namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
 ///     Result of an <c>Enqueue/Write</c> attempt.

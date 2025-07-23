@@ -1,16 +1,16 @@
 ﻿using System.Collections.Concurrent;
 using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks.Telemetry;
-using CQRSharp.Core.BackgroundTasks.Types;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Core.BackgroundTasks;
+namespace CQRSharp.Core.Background.TaskQueue;
 
 /// <summary>
 ///     A thread safe, bounded queue that executes background work items on a separate consumer.
@@ -18,7 +18,7 @@ namespace CQRSharp.Core.BackgroundTasks;
 internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IDisposable
 {
     private readonly Channel<QueuedTask> _channel;
-    private readonly INotificationDispatcher _dispatcher;
+    private readonly IDirectNotificationDispatcher _dispatcher;
     private readonly ILogger<BackgroundTaskQueue> _logger;
     private readonly IQueueMetricsReporter _metrics;
     private readonly Channel<INotification> _notificationChannel;
@@ -49,7 +49,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IDisposable
     /// </summary>
     public BackgroundTaskQueue(
         IOptions<BackgroundTaskQueueOptions> options,
-        INotificationDispatcher dispatcher,
+        IDirectNotificationDispatcher dispatcher,
         IHostApplicationLifetime lifetime,
         IQueueMetricsReporter metrics,
         ILogger<BackgroundTaskQueue> logger)

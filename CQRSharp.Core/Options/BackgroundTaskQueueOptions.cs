@@ -1,5 +1,5 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks;
+using CQRSharp.Core.Background.TaskQueue;
 
 namespace CQRSharp.Core.Options;
 

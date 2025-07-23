@@ -1,10 +1,10 @@
-﻿using CQRSharp.Core.Pipelines;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
-using CQRSharp.Pipelines.Types;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Pipelines.Types.Resilience;
+using CQRSharp.Pipelines.Types.Timeout;
 using CQRSharp.Pipelines.Types.Transactions;
-using CQRSharp.Pipelines.Types.Transactions.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Pipelines.Extensions;
@@ -72,7 +72,7 @@ public static class DependencyInjectionExtensions
     }
 
     /// <summary>
-    /// Adds the Unit of Work behavior to the CQRS pipeline in an AoT-compatible way.
+    ///     Adds the Unit of Work behavior to the CQRS pipeline in an AoT-compatible way.
     /// </summary>
     /// <typeparam name="TUnitOfWork">Your concrete implementation of IUnitOfWork (e.g., an EF Core specific UoW).</typeparam>
     /// <param name="services">The service collection.</param>
@@ -80,30 +80,27 @@ public static class DependencyInjectionExtensions
     /// <param name="configureOptions">Options for UoW configuration.</param>
     /// <returns>The service collection to allow chaining.</returns>
     /// <example>
-    /// <code>
+    ///     <code>
     /// services.AddUnitOfWorkBehavior&lt;MyEfCoreUnitOfWork&gt;(sp => 
     ///     new MyEfCoreUnitOfWork(sp.GetRequiredService&lt;MyDbContext&gt;()));
     /// </code>
     /// </example>
     public static IServiceCollection AddUnitOfWorkBehavior<TUnitOfWork>(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         Func<IServiceProvider, TUnitOfWork> implementationFactory,
         Action<UnitOfWorkOptions>? configureOptions = null)
         where TUnitOfWork : class, IUnitOfWork
     {
         // Add configuration for UnitOfWorkOptions
-        services.Configure<UnitOfWorkOptions>(opts =>
-        {
-            configureOptions?.Invoke(opts);
-        });
-        
+        services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
+
         // Register the concrete UoW using a factory delegate. This is AoT-safe
         // as it gives the compiler a static reference to the constructor.
         services.AddScoped<IUnitOfWork>(implementationFactory);
-        
+
         // Register the pipeline behavior.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
-        
+
         return services;
     }
 }

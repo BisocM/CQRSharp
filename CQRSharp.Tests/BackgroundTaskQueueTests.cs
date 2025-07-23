@@ -1,10 +1,10 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.BackgroundTasks.Telemetry;
-using CQRSharp.Core.BackgroundTasks.Types;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Core.Background.TaskQueue;
+using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -309,7 +309,7 @@ public class BackgroundTaskQueueTests
     }
 
     // A no-op notification dispatcher to satisfy dependencies
-    private class NoOpDispatcher : INotificationDispatcher
+    private class NoOpDispatcher : IDirectNotificationDispatcher
     {
         public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
             where TNotification : INotification

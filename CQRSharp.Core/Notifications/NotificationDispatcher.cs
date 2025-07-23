@@ -1,40 +1,75 @@
 ﻿using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Outbox;
+using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Notifications;
 
 /// <summary>
-///     Dispatches notifications to all registered <see cref="INotificationHandler{TNotification}" /> implementations.
+///     A sophisticated notification dispatcher that supports both direct, in-process dispatching
+///     and a deferred outbox pattern. Its behavior is determined by <see cref="OutboxOptions" />.
+///     This service should be registered with a scoped lifetime.
 /// </summary>
 public sealed class NotificationDispatcher : INotificationDispatcher
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IDirectNotificationDispatcher _directDispatcher;
+    private readonly OutboxOptions _outboxOptions;
+    private readonly IServiceProvider _provider;
 
     /// <summary>
-    ///     Constructs a new dispatcher.
+    ///     Initializes a new instance of the <see cref="NotificationDispatcher" /> class.
     /// </summary>
-    /// <param name="scopeFactory">Used to create a new DI scope per notification publish.</param>
-    public NotificationDispatcher(IServiceScopeFactory scopeFactory)
+    /// <param name="provider">The scoped service provider.</param>
+    /// <param name="outboxOptions">The configuration options for the outbox.</param>
+    /// <param name="directDispatcher">The dispatcher for sending notifications immediately.</param>
+    public NotificationDispatcher(
+        IServiceProvider provider,
+        IOptions<OutboxOptions> outboxOptions,
+        IDirectNotificationDispatcher directDispatcher)
     {
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        _outboxOptions = outboxOptions?.Value ?? throw new ArgumentNullException(nameof(outboxOptions));
+        _directDispatcher = directDispatcher ?? throw new ArgumentNullException(nameof(directDispatcher));
     }
 
-    /// <inheritdoc />
-    public async Task Publish<TNotification>(
-        TNotification notification,
-        CancellationToken cancellationToken = default)
+    /// <summary>
+    ///     Publishes a notification.
+    ///     Depending on the configured <see cref="OutboxMode" />, the notification will either be
+    ///     dispatched immediately to its handlers or added to a scoped <see cref="IOutbox" />
+    ///     for deferred processing.
+    /// </summary>
+    /// <typeparam name="TNotification">The type of the notification.</typeparam>
+    /// <param name="notification">The notification instance to publish.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task representing the completion of the dispatch action.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if the outbox is enabled but the required <see cref="IOutbox" /> service is not registered in the DI container.
+    /// </exception>
+    public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
         where TNotification : INotification
     {
-        using var scope = _scopeFactory.CreateScope();
+        var uow = _provider.GetService<IUnitOfWork>();
+        var explicitUow = uow as IExplicitUnitOfWork;
+        var isInTransaction = explicitUow?.HasActiveTransaction ?? false;
 
-        var handlers = scope
-            .ServiceProvider
-            .GetServices<INotificationHandler<TNotification>>();
+        var useOutbox = _outboxOptions.Mode switch
+        {
+            OutboxMode.Enabled => true,
+            OutboxMode.Disabled => false,
+            OutboxMode.Transactional => isInTransaction,
+            _ => false
+        };
 
-        var tasks = handlers
-            .Select(h => h.Handle(notification, cancellationToken));
-
-        //Let ANY exception (other than cancellation) bubble out as an AggregateException
-        await Task.WhenAll(tasks).ConfigureAwait(false);
+        if (!useOutbox) return _directDispatcher.Publish(notification, cancellationToken);
+        var outbox = _provider.GetService<IOutbox>();
+        if (outbox is null)
+            throw new InvalidOperationException(
+                "Outbox mode is active, but the IOutbox service is not registered. " +
+                "Ensure you have called a configuration method, such as AddUnitOfWorkBehavior(), that registers the outbox services.");
+        outbox.Add(notification);
+        return Task.CompletedTask;
     }
 }

@@ -1,5 +1,10 @@
-﻿using CQRSharp.Core.BackgroundTasks;
-using CQRSharp.Core.BackgroundTasks.Types;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Context;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Core.Background.TaskQueue;
+using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Pipelines;
@@ -9,11 +14,6 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Models.Commands;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 

@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.BackgroundTasks.Types;
+﻿namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
 ///     Holds the two callbacks required to

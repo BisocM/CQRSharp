@@ -29,7 +29,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
-        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj" />
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
     </ItemGroup>
 
 </Project>

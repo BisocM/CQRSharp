@@ -1,7 +1,7 @@
-﻿using CQRSharp.Core.Options.Enums;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Core.Options.Enums;
 
 namespace CQRSharp.Core.Requests;
 

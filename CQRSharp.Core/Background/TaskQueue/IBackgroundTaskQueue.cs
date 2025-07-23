@@ -1,7 +1,7 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Core.BackgroundTasks.Types;
+using CQRSharp.Core.Background.TaskQueue.Types;
 
-namespace CQRSharp.Core.BackgroundTasks;
+namespace CQRSharp.Core.Background.TaskQueue;
 
 /// <summary>
 ///     Defines a background‑task queue with detailed introspection and metrics.

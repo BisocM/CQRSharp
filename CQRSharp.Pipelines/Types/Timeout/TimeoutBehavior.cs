@@ -1,13 +1,12 @@
 ﻿using System.Diagnostics;
-using CQRSharp.Core.Options;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Types;
+namespace CQRSharp.Pipelines.Types.Timeout;
 
 /// <summary>
 ///     Represents a behavior that enforces a timeout on the execution of a pipeline request.

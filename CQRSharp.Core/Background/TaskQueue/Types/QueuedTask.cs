@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.BackgroundTasks.Types;
+﻿namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
 ///     Represents a work item enqueued for background execution.
