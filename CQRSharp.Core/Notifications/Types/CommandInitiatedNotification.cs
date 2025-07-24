@@ -1,4 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+﻿using CQRSharp.Abstractions.Data.Attributes.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
@@ -9,6 +10,7 @@ namespace CQRSharp.Core.Notifications.Types;
 ///     This notification is published by the RequestDispatcher automatically
 ///     right before the execution of the command is initiated.
 /// </summary>
+[NotificationName("cqrsharp.core.command.initiated")]
 public sealed class CommandInitiatedNotification : INotification
 {
     /// <summary>

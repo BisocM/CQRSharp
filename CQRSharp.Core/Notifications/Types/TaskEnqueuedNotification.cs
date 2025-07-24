@@ -1,10 +1,12 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+﻿using CQRSharp.Abstractions.Data.Attributes.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 
 /// <summary>
 ///     Notification published when a background work item is successfully queued.
 /// </summary>
+[NotificationName("cqrsharp.core.task.enqueued")]
 public sealed class TaskEnqueuedNotification : INotification
 {
     /// <summary>

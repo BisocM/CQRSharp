@@ -1,5 +1,4 @@
-﻿using CQRSharp.Abstractions.Data.Attributes.Requests;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 
@@ -7,5 +6,4 @@ namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 ///     Marker interface for commands that return a result of type <typeparamref name="TResult" />.
 /// </summary>
 /// <typeparam name="TResult">The type of the result returned by the query.</typeparam>
-[RequestMarker(RequestKind.Query)]
 public interface IQuery<out TResult> : IRequest;

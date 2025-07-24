@@ -1,4 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+﻿using CQRSharp.Abstractions.Data.Attributes.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Models.Commands;
@@ -10,6 +11,7 @@ namespace CQRSharp.Core.Notifications.Types;
 ///     It is used to signal that a command has finished executing and to provide the command's outcome by the dispatcher,
 ///     but directly before any post-execution attribute methods are executed.
 /// </summary>
+[NotificationName("cqrsharp.core.command.completed")]
 public sealed class CommandCompletedNotification : INotification
 {
     /// <summary>

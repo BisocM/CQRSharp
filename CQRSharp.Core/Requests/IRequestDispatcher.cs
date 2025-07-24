@@ -1,36 +1,20 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Core.Options.Enums;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Requests;
 
 /// <summary>
-///     Defines a dispatcher interface for sending commands to their respective handlers.
+///     Defines a dispatcher interface for sending requests to their respective handlers.
 /// </summary>
 public interface IRequestDispatcher
 {
     /// <summary>
-    ///     Sends a command without expecting a result.
+    ///     Asynchronously executes a request (command or query) and returns its result.
     /// </summary>
-    /// <param name="command">The command to send.</param>
+    /// <param name="request">The request object to execute.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task<CommandResult> ExecuteCommand(ICommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    ///     Executes a query and returns a result.
-    /// </summary>
-    /// <typeparam name="TResult">The type of the result expected.</typeparam>
-    /// <param name="query">The query to send.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>A task that represents the asynchronous operation and contains the result.</returns>
-    /// <remarks>
-    ///     Please pay attention to your application's run mode - synchronous or asynchronous.
-    ///     If your run mode is <see cref="RunMode.Async" />, the query will be executed asynchronously, meaning that this
-    ///     method will always return a <see cref="CommandResult" /> success value.
-    ///     In order to retrieve data from asynchronous queries, you must subscribe to the <see cref="IQuery{TResult}" />
-    ///     result event.
-    /// </remarks>
-    Task<TResult?> ExecuteQuery<TResult>(IQuery<TResult> query, CancellationToken cancellationToken = default);
+    /// <returns>
+    ///     A task that represents the asynchronous operation. The task result contains the output of the request,
+    ///     which may be a <c>CommandResult</c> for commands or a specific result type for queries.
+    /// </returns>
+    Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken);
 }

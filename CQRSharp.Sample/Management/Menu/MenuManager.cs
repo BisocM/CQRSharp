@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using System.Text.RegularExpressions;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Models.Commands;
 using CQRSharp.Core.Requests;
 using CQRSharp.Sample.Attributes.Menu;
 using CQRSharp.Sample.Context;
@@ -115,17 +116,19 @@ public class MenuManager
                     //Execute the command. Add the logging statement BEFORE the dispatcher call, since it is a blocking call.
                     //So saying "sent to dispatcher" after command executed already makes no sense!
                     _logger.LogInformation("Command successfully sent to the dispatcher.");
-                    var result = await _requestDispatcher.ExecuteCommand(command, _cancellationManager.Token);
+                    if (await _requestDispatcher.ExecuteAsync(command, _cancellationManager.Token) is CommandResult result)
+                    {
+                        // Now you can safely access the properties of the 'result'.
+                        if (!result.IsSuccess)
+                        {
+                            _logger.LogError(result.ErrorMessage,
+                                $"Command {selectedCommandType.Name} failed with error: {result.ErrorMessage}. Error Code: {result.ErrorCode}.");
+                            Console.WriteLine($"[red]{result.ErrorMessage}[/]");
+                        }
+                    }
 
                     //TODO: Bit of an annoying way of doing this, so maybe clean this up?
                     //Console.Clear();
-
-                    if (result is { IsSuccess: false })
-                    {
-                        _logger.LogError(result.ErrorMessage,
-                            $"Command {selectedCommandType.Name} failed with error: {result.ErrorMessage}. Error Code: {result.ErrorCode}.");
-                        Console.WriteLine($"[red]{result.ErrorMessage}[/]");
-                    }
 
                     //Transition to the next menu state based on the result.
                     _logger.LogInformation(

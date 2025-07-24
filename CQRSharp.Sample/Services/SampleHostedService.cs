@@ -22,7 +22,7 @@ public class SampleHostedService(IServiceProvider services, ILogger<SampleHosted
         SnailCommand command = new();
         await Task.Delay(1000);
         var dispatcher = services.GetRequiredService<IRequestDispatcher>();
-        await dispatcher.ExecuteCommand(command, stoppingToken);
+        await dispatcher.ExecuteAsync(command, stoppingToken);
         Console.Read();
 
         //The only responsibility of this hosted service is to run startup operations and then display our menu.

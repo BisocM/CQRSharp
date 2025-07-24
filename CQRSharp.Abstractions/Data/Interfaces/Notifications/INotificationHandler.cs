@@ -1,12 +1,10 @@
-﻿using CQRSharp.Abstractions.Data.Attributes.Requests;
-
+﻿
 namespace CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 /// <summary>
 ///     Interface for handling notifications.
 /// </summary>
 /// <typeparam name="TNotification">The type of the notification.</typeparam>
-[HandlerType(HandlerKind.Notification)]
 public interface INotificationHandler<in TNotification> where TNotification : INotification
 {
     /// <summary>

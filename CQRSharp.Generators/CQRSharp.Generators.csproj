@@ -22,7 +22,7 @@
 
     <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
-        <None Include="$(MSBuildThisFileDirectory)..\CQRSharp.Abstractions\bin\$(Configuration)\netstandard2.0\CQRSharp.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
+
     </ItemGroup>
 
     <ItemGroup>

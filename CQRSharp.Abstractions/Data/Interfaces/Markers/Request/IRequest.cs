@@ -1,5 +1,4 @@
-﻿using CQRSharp.Abstractions.Data.Attributes.Requests;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Context;
 using CQRSharp.Abstractions.Data.Models.Requests;
 
 namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
@@ -7,7 +6,6 @@ namespace CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 /// <summary>
 ///     Marker interface to indicate that a class is used to handle a request. Major inheritors are ICommand and IQuery.
 /// </summary>
-[RequestMarker(RequestKind.Unknown)]
 public interface IRequest
 {
     /// <summary>

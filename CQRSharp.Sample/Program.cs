@@ -1,6 +1,5 @@
 ﻿using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
-using CQRSharp.Core.Options.Enums;
 using CQRSharp.Pipelines.Extensions;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Sample.Context;
@@ -17,19 +16,13 @@ namespace CQRSharp.Sample;
 
 public class Program
 {
-    //Please beware that the current sample ONLY functions with non-AoT compilation, due to the presence of MenuManager.
-    //This sample is in place to showcase basic startup & usage, and does not display Native AoT compatibility.
     public static async Task Main(string[] args)
     {
         var host = Host.CreateDefaultBuilder(args)
             .ConfigureServices((_, services) =>
             {
                 //Add CQRSharp to the services, scanning the current assembly for handlers and attributes
-                services.AddCqrs(options =>
-                    {
-                        //Synchronous run mode so we can observe results directly
-                        options.RunMode = RunMode.Sync;
-                    })
+                services.AddCqrs()
                     .AddGenerated()
                     .AddRateLimiting(options =>
                     {
