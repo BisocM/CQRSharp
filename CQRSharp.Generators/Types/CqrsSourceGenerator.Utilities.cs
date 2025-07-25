@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using System.Collections.Generic;
 using System.Linq;
 using CQRSharp.Abstractions.SourceGeneration;
 
@@ -6,27 +7,81 @@ namespace CQRSharp.Generators.Types;
 
 public sealed partial class CqrsSourceGenerator
 {
+    private static IEnumerable<INamedTypeSymbol> GetInterfacesAndBaseInterfaces(ITypeSymbol typeSymbol)
+    {
+        var allInterfaces = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+        if (typeSymbol is null)
+        {
+            return allInterfaces;
+        }
+
+        var typesToProcess = new Queue<ITypeSymbol>();
+        typesToProcess.Enqueue(typeSymbol);
+
+        while (typesToProcess.Count > 0)
+        {
+            var currentType = typesToProcess.Dequeue();
+            if (currentType is null) continue;
+
+            foreach (var iface in currentType.Interfaces)
+            {
+                if (allInterfaces.Add(iface))
+                {
+                    typesToProcess.Enqueue(iface);
+                }
+            }
+
+            if (currentType.BaseType != null)
+            {
+                typesToProcess.Enqueue(currentType.BaseType);
+            }
+        }
+
+        return allInterfaces;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> GetAllKnownHandlerSymbols(Compilation compilation)
+    {
+        var commandHandlerSymbols = new[]
+        {
+            compilation.GetTypeByMetadataName(TypeStrings.ICommandHandler1),
+            compilation.GetTypeByMetadataName(TypeStrings.ICommandHandler2)
+        };
+
+        var queryHandlerSymbols = new[]
+        {
+            compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler2),
+            compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler3)
+        };
+
+        var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
+        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
+
+        return commandHandlerSymbols
+            .Concat(queryHandlerSymbols)
+            .Concat(new[] { notificationHandlerSymbol, pipelineBehaviorSymbol })
+            .Where(s => s is not null)
+            .Cast<INamedTypeSymbol>();
+    }
+
     private static ITypeSymbol InferResultTypeSymbol(Compilation compilation, INamedTypeSymbol requestSymbol)
     {
         var iQuerySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var iQuery = requestSymbol.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Equals(iQuerySymbol, SymbolEqualityComparer.Default));
+        var iQuery = GetInterfacesAndBaseInterfaces(requestSymbol).FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iQuerySymbol));
         return iQuery?.TypeArguments[0] ?? compilation.GetTypeByMetadataName(TypeStrings.CommandResult)!;
     }
 
     private static ITypeSymbol? GetRequestContextType(ITypeSymbol requestTypeSymbol, Compilation compilation)
     {
         var requestBaseSymbol = compilation.GetTypeByMetadataName(TypeStrings.RequestBaseGeneric);
-        if (requestBaseSymbol is null)
-        {
-            return null;
-        }
+        if (requestBaseSymbol is null) return null;
 
-        var current = requestTypeSymbol.BaseType;
+        var current = requestTypeSymbol;
         while (current != null)
         {
-            if (current.IsGenericType && SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, requestBaseSymbol))
+            if (current is INamedTypeSymbol namedType && namedType.IsGenericType && SymbolEqualityComparer.Default.Equals(namedType.OriginalDefinition, requestBaseSymbol))
             {
-                return current.TypeArguments[0];
+                return namedType.TypeArguments[0];
             }
 
             current = current.BaseType;
@@ -98,20 +153,7 @@ public sealed partial class CqrsSourceGenerator
 
     private static bool InheritsOrImplements(ITypeSymbol type, ITypeSymbol baseType)
     {
-        if (SymbolEqualityComparer.Default.Equals(type, baseType)) return true;
-        if (baseType.TypeKind == TypeKind.Interface &&
-            type.AllInterfaces.Any(iface => SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, baseType.OriginalDefinition)))
-        {
-            return true;
-        }
-
-        var current = type.BaseType;
-        while (current != null)
-        {
-            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, baseType.OriginalDefinition)) return true;
-            current = current.BaseType;
-        }
-
-        return false;
+        return GetInterfacesAndBaseInterfaces(type).Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, baseType.OriginalDefinition)) ||
+               (type.BaseType != null && InheritsOrImplements(type.BaseType, baseType));
     }
 }
