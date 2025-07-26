@@ -1,37 +1,33 @@
 ﻿namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
-///     Represents a work item enqueued for background execution.
+/// Represents a work item that has been enqueued for background processing.
 /// </summary>
 public readonly struct QueuedTask
 {
     /// <summary>
-    ///     Gets the identifier of the originating queue.
+    /// The ID of the queue instance that this task belongs to.
     /// </summary>
     public Guid QueueId { get; }
 
     /// <summary>
-    ///     Gets the time at which the task was enqueued.
-    /// </summary>
-    public DateTime EnqueueTime { get; }
-
-    /// <summary>
-    ///     Gets the sequence number assigned to this task.
+    /// The sequential number of this task, unique within its queue instance.
     /// </summary>
     public long SequenceNumber { get; }
 
     /// <summary>
-    ///     Gets the delegate encapsulating the work to perform.
+    /// The delegate representing the asynchronous work to be performed.
     /// </summary>
     public Func<CancellationToken, Task> WorkItem { get; }
 
     /// <summary>
-    ///     Initializes a new instance of <see cref="QueuedTask" />.
+    /// The UTC timestamp when the task was enqueued.
     /// </summary>
-    /// <param name="queueId">The unique identifier of the queue.</param>
-    /// <param name="sequenceNumber">The sequence number for this task.</param>
-    /// <param name="workItem">The work delegate.</param>
-    /// <param name="enqueueTime">The timestamp when the task was enqueued.</param>
+    public DateTime EnqueueTime { get; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="QueuedTask"/> struct.
+    /// </summary>
     public QueuedTask(
         Guid queueId,
         long sequenceNumber,

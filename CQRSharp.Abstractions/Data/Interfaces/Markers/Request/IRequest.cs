@@ -21,3 +21,5 @@ public interface IRequest
     /// </summary>
     public RequestMetadata? Metadata { get; set; }
 }
+
+public interface IRequest<out TResponse> : IRequest { }

@@ -1,53 +1,21 @@
-﻿namespace CQRSharp.Sample.Data;
+using System.Collections.Concurrent;
 
-/// <summary>
-///     Represents a custom in-memory store for managing user data.
-/// </summary>
+namespace CQRSharp.Sample.Data;
+
+public record User(string Name, Guid Id);
+
 public class CustomInMemoryUserStore
 {
-    private readonly List<User> _userStore = [];
+    private readonly ConcurrentDictionary<Guid, User> _userStore = new();
 
-    public CustomInMemoryUserStore()
+    public void AddUser(User user)
     {
-        _userStore.Add(new User("Papa", Guid.NewGuid().ToString()));
-        _userStore.Add(new User("Baba", Guid.NewGuid().ToString()));
-        _userStore.Add(new User("Mama", Guid.NewGuid().ToString()));
+        _userStore.TryAdd(user.Id, user);
     }
 
-    /// <summary>
-    ///     Retrieves the list of stored users from the in-memory user store.
-    /// </summary>
-    /// <returns>A list of users contained within the in-memory store.</returns>
-    public List<User> GetUsers()
+    public User? GetUserById(Guid id)
     {
-        return _userStore;
-    }
-
-
-    /// <summary>
-    ///     Retrieves a single user with the specified name from the in-memory user store.
-    /// </summary>
-    /// <param name="name">The name of the user to retrieve.</param>
-    /// <returns>The user that matches the specified name.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when no user with the specified name is found in the store.</exception>
-    public User GetUser(string name)
-    {
-        return _userStore.FirstOrDefault(x => x.Name == name) ?? throw new InvalidOperationException();
-    }
-
-    /// <summary>
-    ///     Deletes a user with the specified name from the in-memory user store.
-    /// </summary>
-    /// <param name="name">The name of the user to delete.</param>
-    /// <exception cref="InvalidOperationException">Thrown when no user with the specified name is found in the store.</exception>
-    public void DeleteUser(User userData)
-    {
-        _userStore.Remove(userData);
-    }
-
-    public class User(string name, string userId)
-    {
-        public string Name { get; set; } = name;
-        public string UserGuid { get; set; } = userId;
+        _userStore.TryGetValue(id, out var user);
+        return user;
     }
 }

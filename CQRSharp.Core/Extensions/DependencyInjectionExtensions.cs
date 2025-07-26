@@ -1,4 +1,6 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Outbox;
+﻿using System.Diagnostics.CodeAnalysis;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
@@ -34,6 +36,8 @@ public static class DependencyInjectionExtensions
         services.AddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
         services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
 
+        services.AddSingleton<IPipelineExecutor, PipelineExecutor>();
+        
         services.AddSingleton<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 
@@ -64,6 +68,20 @@ public static class DependencyInjectionExtensions
         services.Configure<OutboxProcessorOptions>(opts => { configureOptions?.Invoke(opts); });
 
         services.AddHostedService<OutboxProcessor>();
+        return services;
+    }
+    
+    /// <summary>
+    /// Registers a custom implementation of INotificationSerializer as a singleton.
+    /// This method is compatible with trimming and Native AOT.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add the service to.</param>
+    /// <typeparam name="TSerializer">The type of the concrete serializer implementation.</typeparam>
+    /// <returns>The IServiceCollection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddNotificationSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSerializer>(this IServiceCollection services)
+        where TSerializer : class, INotificationSerializer
+    {
+        services.AddSingleton<INotificationSerializer, TSerializer>();
         return services;
     }
 }

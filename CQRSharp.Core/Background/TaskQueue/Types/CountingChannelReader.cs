@@ -1,30 +1,46 @@
 ﻿using System.Threading.Channels;
+using CQRSharp.Core.Background.TaskQueue.Telemetry;
 
 namespace CQRSharp.Core.Background.TaskQueue.Types;
 
 /// <summary>
-///     Wraps a channel reader so that each successful read decrements
-///     the shared queue count and records time spent in queue.
+/// A decorator for <see cref="ChannelReader{T}"/> that updates queue metrics
+/// whenever a work item is successfully read.
 /// </summary>
 internal sealed class CountingChannelReader : ChannelReader<QueuedTask>
 {
     private readonly ChannelReader<QueuedTask> _inner;
-    private readonly BackgroundTaskQueue _parent;
+    private readonly IQueueMetricsReporter _metrics;
 
     /// <summary>
-    ///     Initializes a new instance of <see cref="CountingChannelReader" />.
+    /// Initializes a new instance of the <see cref="CountingChannelReader"/> class.
     /// </summary>
-    public CountingChannelReader(ChannelReader<QueuedTask> inner, BackgroundTaskQueue parent)
+    /// <param name="inner">The underlying channel reader to decorate.</param>
+    /// <param name="metrics">The metrics reporter to update.</param>
+    public CountingChannelReader(ChannelReader<QueuedTask> inner, IQueueMetricsReporter metrics)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _parent = parent ?? throw new ArgumentNullException(nameof(parent));
+        _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+    }
+
+    /// <summary>
+    /// Updates the metrics after a task has been successfully read from the channel.
+    /// </summary>
+    /// <param name="task">The task that was read.</param>
+    private void OnItemRead(QueuedTask task)
+    {
+        _metrics.ItemDequeued();
+        _metrics.RecordLatency(DateTime.UtcNow - task.EnqueueTime);
     }
 
     /// <inheritdoc />
     public override bool TryRead(out QueuedTask item)
     {
         var ok = _inner.TryRead(out item);
-        if (ok) _parent.DecrementCountAndRecordLatency(item);
+        if (ok)
+        {
+            OnItemRead(item);
+        }
         return ok;
     }
 
@@ -32,7 +48,7 @@ internal sealed class CountingChannelReader : ChannelReader<QueuedTask>
     public override async ValueTask<QueuedTask> ReadAsync(CancellationToken cancellationToken = default)
     {
         var task = await _inner.ReadAsync(cancellationToken).ConfigureAwait(false);
-        _parent.DecrementCountAndRecordLatency(task);
+        OnItemRead(task);
         return task;
     }
 

@@ -7,14 +7,14 @@ namespace CQRSharp.Generators.Types;
 
 public sealed partial class CqrsSourceGenerator
 {
+    /// <summary>
+    /// Traverses a type's hierarchy to find all unique interfaces it implements, including interfaces of its base types.
+    /// </summary>
+    /// <param name="typeSymbol">The type symbol to inspect.</param>
+    /// <returns>An enumeration of all unique implemented interfaces.</returns>
     private static IEnumerable<INamedTypeSymbol> GetInterfacesAndBaseInterfaces(ITypeSymbol typeSymbol)
     {
         var allInterfaces = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        if (typeSymbol is null)
-        {
-            return allInterfaces;
-        }
-
         var typesToProcess = new Queue<ITypeSymbol>();
         typesToProcess.Enqueue(typeSymbol);
 
@@ -23,22 +23,16 @@ public sealed partial class CqrsSourceGenerator
             var currentType = typesToProcess.Dequeue();
             if (currentType is null) continue;
 
-            foreach (var iface in currentType.Interfaces)
-            {
-                if (allInterfaces.Add(iface))
-                {
-                    typesToProcess.Enqueue(iface);
-                }
-            }
+            foreach (var iface in currentType.Interfaces.Where(iface => allInterfaces.Add(iface)))
+                typesToProcess.Enqueue(iface);
 
             if (currentType.BaseType != null)
-            {
                 typesToProcess.Enqueue(currentType.BaseType);
-            }
         }
 
         return allInterfaces;
     }
+
 
     private static IEnumerable<INamedTypeSymbol> GetAllKnownHandlerSymbols(Compilation compilation)
     {
@@ -59,16 +53,9 @@ public sealed partial class CqrsSourceGenerator
 
         return commandHandlerSymbols
             .Concat(queryHandlerSymbols)
-            .Concat(new[] { notificationHandlerSymbol, pipelineBehaviorSymbol })
+            .Concat([notificationHandlerSymbol, pipelineBehaviorSymbol])
             .Where(s => s is not null)
             .Cast<INamedTypeSymbol>();
-    }
-
-    private static ITypeSymbol InferResultTypeSymbol(Compilation compilation, INamedTypeSymbol requestSymbol)
-    {
-        var iQuerySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var iQuery = GetInterfacesAndBaseInterfaces(requestSymbol).FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iQuerySymbol));
-        return iQuery?.TypeArguments[0] ?? compilation.GetTypeByMetadataName(TypeStrings.CommandResult)!;
     }
 
     private static ITypeSymbol? GetRequestContextType(ITypeSymbol requestTypeSymbol, Compilation compilation)
@@ -79,7 +66,7 @@ public sealed partial class CqrsSourceGenerator
         var current = requestTypeSymbol;
         while (current != null)
         {
-            if (current is INamedTypeSymbol namedType && namedType.IsGenericType && SymbolEqualityComparer.Default.Equals(namedType.OriginalDefinition, requestBaseSymbol))
+            if (current is INamedTypeSymbol { IsGenericType: true } namedType && SymbolEqualityComparer.Default.Equals(namedType.OriginalDefinition, requestBaseSymbol))
             {
                 return namedType.TypeArguments[0];
             }
@@ -111,7 +98,7 @@ public sealed partial class CqrsSourceGenerator
     private static string GenerateSensitivePropertiesCode(ITypeSymbol requestTypeSymbol)
     {
         const string sensitiveDataAttributeName = "SensitiveDataAttribute";
-        var propertySensitivityFullyQualifiedName = $"global::{TypeStrings.PropertySensitivity}";
+        const string propertySensitivityFullyQualifiedName = $"global::{TypeStrings.PropertySensitivity}";
 
         var sensitiveProps = requestTypeSymbol.GetMembers()
             .OfType<IPropertySymbol>()
@@ -146,6 +133,8 @@ public sealed partial class CqrsSourceGenerator
                     : $"({enumType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}){value}";
             case TypedConstantKind.Type:
                 return $"typeof({((ITypeSymbol)value!).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})";
+            case TypedConstantKind.Error:
+            case TypedConstantKind.Array:
             default:
                 return "null";
         }

@@ -22,31 +22,21 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(compilationAndCandidates, (spc, source) =>
         {
             var (compilation, candidateClasses) = source;
-
-            // Generate DI registrations
+            
             try
             {
-                var sourceCode = GenerateRegistrations(compilation, candidateClasses!);
-                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
+                // Generate the DI registration helper
+                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!);
+                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
+
+                // Generate the AOT-safe dispatcher
+                var dispatcherSourceCode = GenerateDispatcher(compilation, candidateClasses!);
+                spc.AddSource("GeneratedRequestDispatcher.g.cs", SourceText.From(dispatcherSourceCode, Encoding.UTF8));
             }
             catch (Exception ex)
             {
                 spc.ReportDiagnostic(Diagnostic.Create(
                     new DiagnosticDescriptor("CQRGEN999", "Unhandled Exception in CqrsSourceGenerator",
-                        "Unhandled exception: {0}", "CQRSharp.Generators", DiagnosticSeverity.Error, true),
-                    Location.None, ex.ToString()));
-            }
-
-            // Generate the request dispatcher
-            try
-            {
-                var dispatcherSource = GenerateDispatcher(compilation, candidateClasses!);
-                spc.AddSource("GeneratedRequestDispatcher.g.cs", SourceText.From(dispatcherSource, Encoding.UTF8));
-            }
-            catch (Exception ex)
-            {
-                spc.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor("CQRGEN997", "Unhandled Exception in DispatcherGenerator",
                         "Unhandled exception: {0}", "CQRSharp.Generators", DiagnosticSeverity.Error, true),
                     Location.None, ex.ToString()));
             }

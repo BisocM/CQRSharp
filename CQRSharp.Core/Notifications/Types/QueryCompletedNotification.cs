@@ -1,5 +1,4 @@
-﻿using CQRSharp.Abstractions.Data.Attributes.Notifications;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
@@ -14,7 +13,6 @@ namespace CQRSharp.Core.Notifications.Types;
 ///     the query is meant to return, you must cast it to the type determined when the query was fired.
 /// </remarks>
 /// <typeparam name="TResult">The type of the result expected from the query.</typeparam>
-[NotificationName("cqrsharp.core.query.completed")]
 public sealed class QueryCompletedNotification<TResult> : INotification
 {
     /// <summary>

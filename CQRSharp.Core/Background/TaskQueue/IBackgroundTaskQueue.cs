@@ -1,28 +1,23 @@
-﻿using System.Threading.Channels;
+using System.Threading.Channels;
 using CQRSharp.Core.Background.TaskQueue.Types;
 
 namespace CQRSharp.Core.Background.TaskQueue;
 
 /// <summary>
-///     Defines a background‑task queue with detailed introspection and metrics.
-///     Notifications are now published via INotificationDispatcher.
+/// Defines the internal contract for the background task queue,
+/// exposing the necessary components for the consumer service.
 /// </summary>
-public interface IBackgroundTaskQueue
+/// <remarks>
+/// This interface should remain internal to the Core project. It is not intended
+/// for public use. Its purpose is to decouple the queue's implementation from its consumer,
+/// allowing the consumer to access only what it needs to function.
+/// The public-facing contract for enqueuing work is <see cref="IBackgroundTaskManager"/>.
+/// </remarks>
+internal interface IBackgroundTaskQueue
 {
     /// <summary>
-    ///     Provides access to the channel reader for high‑throughput batch dequeue patterns.
+    /// Gets the <see cref="ChannelReader{T}"/> for the queue.
+    /// This allows the consumer to efficiently and asynchronously dequeue work items.
     /// </summary>
     internal ChannelReader<QueuedTask> Reader { get; }
-
-    /// <summary>
-    ///     Queues a background work item to be processed asynchronously.
-    /// </summary>
-    internal Task<QueueWriteResult> QueueBackgroundWorkItemAsync(
-        Func<CancellationToken, Task> workItem,
-        CancellationToken cancellationToken);
-
-    /// <summary>
-    ///     Dequeues the next background work item, waiting asynchronously if none are available.
-    /// </summary>
-    internal ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken);
 }

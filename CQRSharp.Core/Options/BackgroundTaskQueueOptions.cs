@@ -4,7 +4,7 @@ using CQRSharp.Core.Background.TaskQueue;
 namespace CQRSharp.Core.Options;
 
 /// <summary>
-///     Configuration options for the <see cref="BackgroundTaskQueue" />.
+///     Configuration options for the <see cref="BackgroundTaskManager" />.
 /// </summary>
 public sealed class BackgroundTaskQueueOptions
 {

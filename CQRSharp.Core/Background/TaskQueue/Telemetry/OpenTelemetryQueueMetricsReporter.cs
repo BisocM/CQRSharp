@@ -3,8 +3,8 @@
 namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 
 /// <summary>
-///     Uses System.Diagnostics.Metrics to emit counters, gauges, and histograms,
-///     and exports them via the configured Prometheus exporter.
+/// An implementation of <see cref="IQueueMetricsReporter"/> that uses the .NET
+/// OpenTelemetry library to expose queue metrics.
 /// </summary>
 public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
 {
@@ -22,31 +22,31 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     private long _currentCount;
 
     /// <summary>
-    ///     Initializes a new instance of <see cref="OpenTelemetryQueueMetricsReporter" />.
+    /// Initializes a new instance of the <see cref="OpenTelemetryQueueMetricsReporter"/> class.
     /// </summary>
     public OpenTelemetryQueueMetricsReporter()
     {
         _enqueuedCounter = Meter.CreateCounter<long>(
-            "queue_items_enqueued_total",
+            "cqrsharp.queue.items.enqueued.total",
             description: "Total number of work items ever enqueued");
 
         _droppedNewestCounter = Meter.CreateCounter<long>(
-            "queue_items_dropped_newest_total",
-            description: "Total number of work items dropped via DropNewest policy");
+            "cqrsharp.queue.items.dropped.newest.total",
+            description: "Total number of work items dropped because the queue was full");
 
         _droppedOldestCounter = Meter.CreateCounter<long>(
-            "queue_items_dropped_oldest_total",
-            description: "Total number of work items dropped via DropOldest policy");
+            "cqrsharp.queue.items.dropped.oldest.total",
+            description: "Total number of work items dropped via DropOldest policy to make space");
 
         _currentGauge = Meter.CreateObservableGauge(
-            "queue_current_items",
+            "cqrsharp.queue.items.current",
             () => Interlocked.Read(ref _currentCount),
             description: "Current number of work items in the queue");
 
         _latencyHistogram = Meter.CreateHistogram<double>(
-            "queue_item_latency_seconds",
+            "cqrsharp.queue.item.latency.seconds",
             "s",
-            "Time items spend in queue before execution");
+            "Time items spend in queue before being processed");
     }
 
     /// <inheritdoc />
@@ -57,6 +57,12 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     {
         _enqueuedCounter.Add(1);
         Interlocked.Increment(ref _currentCount);
+    }
+    
+    /// <inheritdoc />
+    public void ItemDequeued()
+    {
+        Interlocked.Decrement(ref _currentCount);
     }
 
     /// <inheritdoc />
@@ -69,7 +75,7 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     public void ItemDroppedOldest()
     {
         _droppedOldestCounter.Add(1);
-        Interlocked.Decrement(ref _currentCount);
+        Interlocked.Decrement(ref _currentCount); // An old item is removed, so the count decreases.
     }
 
     /// <inheritdoc />
@@ -81,6 +87,6 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     /// <inheritdoc />
     public void Dispose()
     {
-        // No unmanaged resources to dispose
+        Meter.Dispose();
     }
 }

@@ -1,4 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+﻿using CQRSharp.Abstractions.Data.Interfaces.Outbox;
+using CQRSharp.Abstractions.Data.Interfaces.Transactions;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Types.RateLimiting;
@@ -97,7 +98,7 @@ public static class DependencyInjectionExtensions
         // Register the concrete UoW using a factory delegate. This is AoT-safe
         // as it gives the compiler a static reference to the constructor.
         services.AddScoped<IUnitOfWork>(implementationFactory);
-
+        
         // Register the pipeline behavior.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
 

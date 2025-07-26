@@ -13,7 +13,7 @@
 public sealed record OutboxMessage(
     Guid Id,
     string NotificationType,
-    string Payload,
+    byte[] Payload,
     DateTime CreatedAt,
     OutboxMessageStatus Status,
     DateTime? ProcessedAt,

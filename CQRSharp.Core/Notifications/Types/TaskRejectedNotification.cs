@@ -1,5 +1,4 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Abstractions.Data.Attributes.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
@@ -7,7 +6,6 @@ namespace CQRSharp.Core.Notifications.Types;
 /// <summary>
 ///     Notification published when a background work item is rejected due to back-pressure policy.
 /// </summary>
-[NotificationName("cqrsharp.core.task.rejected")]
 public sealed class TaskRejectedNotification : INotification
 {
     /// <summary>
