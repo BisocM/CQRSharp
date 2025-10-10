@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.Options;
+using System.Threading;
 
 namespace CQRSharp.Pipelines.Types.RateLimiting;
 
@@ -14,6 +15,9 @@ public sealed class RateLimiter : IDisposable
     private readonly ShardedLruCache<object, TokenBucket> _cache;
     private readonly Timer? _cleanupTimer;
     private readonly RateLimiterOptions _config;
+    private readonly bool _usesTimer;
+    private readonly long _cleanupCadenceTicks;
+    private long _lastCleanupCheckpoint;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="RateLimiter" /> class.
@@ -27,9 +31,17 @@ public sealed class RateLimiter : IDisposable
         //Initialize sharded LRU cache for concurrency
         var shardCount = Environment.ProcessorCount * 2;
         _cache = new ShardedLruCache<object, TokenBucket>(_config.MaxEntries, shardCount);
+        _usesTimer = _config.CleanupInterval > TimeSpan.Zero;
+
+        if (!_usesTimer && _config.MaxIdleTime > TimeSpan.Zero)
+        {
+            var cadence = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(1).Ticks, _config.MaxIdleTime.Ticks / 2));
+            _cleanupCadenceTicks = ToStopwatchTicks(cadence);
+            _lastCleanupCheckpoint = Stopwatch.GetTimestamp();
+        }
 
         //Schedule periodic cleanup if configured
-        if (_config.CleanupInterval > TimeSpan.Zero)
+        if (_usesTimer)
             _cleanupTimer = new Timer(
                 _ => CleanupStaleBuckets(),
                 null,
@@ -59,8 +71,7 @@ public sealed class RateLimiter : IDisposable
         if (string.IsNullOrWhiteSpace(commandName))
             throw new ArgumentNullException(nameof(commandName));
 
-        //Clean up stale buckets on each request
-        CleanupStaleBuckets();
+        CleanupStaleBucketsIfNeeded();
 
         //Determine key based on scope
         object key = _config.Scope == RateLimitScope.PerCommand
@@ -79,11 +90,9 @@ public sealed class RateLimiter : IDisposable
     /// </summary>
     private void CleanupStaleBuckets()
     {
-        if (_config.MaxIdleTime <= TimeSpan.Zero)
-            return; //No stale cleanup if not configured
-
+        if (_config.MaxIdleTime <= TimeSpan.Zero) return;
         var threshold = DateTime.UtcNow - _config.MaxIdleTime;
-        _cache.RemoveWhere(pair => pair.Value.LastAccessed < threshold);
+        CleanupStaleBuckets(threshold);
     }
 
     private static void ValidateConfiguration(RateLimiterOptions config)
@@ -100,6 +109,31 @@ public sealed class RateLimiter : IDisposable
     ///     Composite key for per-command rate limiting.
     /// </summary>
     private sealed record UserCommandKey(string UserIdentifier, string CommandName);
+
+    private void CleanupStaleBucketsIfNeeded()
+    {
+        if (_usesTimer || _config.MaxIdleTime <= TimeSpan.Zero) return;
+
+        var now = Stopwatch.GetTimestamp();
+        var last = Volatile.Read(ref _lastCleanupCheckpoint);
+        if (now - last < _cleanupCadenceTicks) return;
+        if (Interlocked.CompareExchange(ref _lastCleanupCheckpoint, now, last) != last) return;
+
+        var threshold = DateTime.UtcNow - _config.MaxIdleTime;
+        CleanupStaleBuckets(threshold);
+    }
+
+    private void CleanupStaleBuckets(DateTime threshold)
+    {
+        _cache.RemoveWhere(pair => pair.Value.LastAccessed < threshold);
+    }
+
+    private static long ToStopwatchTicks(TimeSpan span)
+    {
+        if (span <= TimeSpan.Zero) return 0;
+        var ticks = span.TotalSeconds * Stopwatch.Frequency;
+        return ticks <= 1 ? 1 : (long)ticks;
+    }
 }
 
 /// <summary>

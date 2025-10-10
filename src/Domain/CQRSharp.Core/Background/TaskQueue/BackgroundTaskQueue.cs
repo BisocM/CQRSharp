@@ -24,12 +24,11 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     private readonly Channel<INotification> _notificationChannel;
     private readonly SemaphoreSlim _notifSem;
     private readonly BackgroundTaskQueueOptions _options;
+    private readonly bool _metricsEnabled;
     private readonly Guid _queueId = Guid.NewGuid();
     private readonly CountingChannelReader _reader;
     private readonly CancellationToken _shutdownToken;
 
-    // A semaphore to ensure atomicity for the DropWrite policy.
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private long _sequenceCounter;
 
     /// <summary>
@@ -47,6 +46,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _shutdownToken = lifetime.ApplicationStopping;
+        _metricsEnabled = _options.EnableMetrics;
 
         if (_options.Capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(_options.Capacity), "Capacity must be greater than zero.");
@@ -59,7 +59,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             AllowSynchronousContinuations = false
         });
 
-        _reader = new CountingChannelReader(_channel.Reader, _metrics);
+        _reader = new CountingChannelReader(_channel.Reader, _metrics, _metricsEnabled);
 
         _notificationChannel = Channel.CreateBounded<INotification>(
             new BoundedChannelOptions(_options.CallbackChannelCapacity)
@@ -138,7 +138,6 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         _channel.Writer.TryComplete();
         _notificationChannel.Writer.TryComplete();
         _notifSem.Dispose();
-        _writeLock.Dispose();
         _metrics.Dispose();
     }
 
@@ -156,36 +155,13 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         switch (_options.FullMode)
         {
             case BoundedChannelFullMode.DropWrite:
-                // This is the robust, thread-safe solution. We use a lock to make the
-                // check-and-write operation atomic, eliminating the race condition.
-                await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-                try
+                if (writer.TryWrite(queuedTask))
                 {
-                    if (_channel.Reader.Count >= _options.Capacity)
-                    {
-                        _metrics.ItemDroppedNewest();
-                        PublishNotification(new TaskRejectedNotification(sequence, _options.FullMode));
-                        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
-                    }
+                    RecordEnqueue(sequence, workItem);
+                    return new QueueWriteResult(QueueWriteResultCode.Enqueued, sequence);
+                }
 
-                    // This should always succeed since we've checked the capacity inside the lock.
-                    if (writer.TryWrite(queuedTask))
-                    {
-                        RecordEnqueue(sequence, workItem);
-                        return new QueueWriteResult(QueueWriteResultCode.Enqueued, sequence);
-                    }
-                    else
-                    {
-                        // This case should theoretically not be hit, but is a safeguard.
-                        _metrics.ItemDroppedNewest();
-                        PublishNotification(new TaskRejectedNotification(sequence, _options.FullMode));
-                        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
-                    }
-                }
-                finally
-                {
-                    _writeLock.Release();
-                }
+                return HandleDropNewest(sequence);
 
             case BoundedChannelFullMode.Wait:
             case BoundedChannelFullMode.DropOldest:
@@ -193,7 +169,8 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
                 // For other modes, we can rely on WriteAsync, which is highly optimized and handles them correctly.
                 try
                 {
-                    if (_options.FullMode == BoundedChannelFullMode.DropOldest && _channel.Reader.Count >= _options.Capacity) _metrics.ItemDroppedOldest();
+                    if (_options.FullMode == BoundedChannelFullMode.DropOldest && _metricsEnabled && _metrics.CurrentCount >= _options.Capacity)
+                        _metrics.ItemDroppedOldest();
 
                     await writer.WriteAsync(queuedTask, cancellationToken).ConfigureAwait(false);
                     RecordEnqueue(sequence, workItem);
@@ -204,9 +181,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
                 }
                 catch (ChannelClosedException)
                 {
-                    _metrics.ItemDroppedNewest();
-                    PublishNotification(new TaskRejectedNotification(sequence, _options.FullMode));
-                    return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
+                    return HandleDropNewest(sequence);
                 }
 
             default:
@@ -216,8 +191,15 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
 
     private void RecordEnqueue(long sequence, Func<CancellationToken, Task> workItem)
     {
-        _metrics.ItemEnqueued();
+        if (_metricsEnabled) _metrics.ItemEnqueued();
         PublishNotification(new TaskEnqueuedNotification(sequence, workItem));
+    }
+
+    private QueueWriteResult HandleDropNewest(long sequence)
+    {
+        if (_metricsEnabled) _metrics.ItemDroppedNewest();
+        PublishNotification(new TaskRejectedNotification(sequence, _options.FullMode));
+        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
     }
 
     private void PublishNotification(INotification notification)

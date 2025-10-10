@@ -1,4 +1,8 @@
-﻿using CQRSharp.Abstractions.Data.Attributes.Pipelines;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Reflection;
+using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Context;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
@@ -29,6 +33,9 @@ public sealed class PipelineExecutor(
     IHandlerRegistry handlerRegistry,
     IContextFactoryRegistry contextFactoryRegistry) : IPipelineExecutor
 {
+    private static readonly ConcurrentDictionary<Type, int> BehaviorPriorityCache = new();
+    private static readonly ConcurrentDictionary<Type, IPreHandlerAttribute[]> SortedPreHandlerCache = new();
+    private static readonly ConcurrentDictionary<Type, IPostHandlerAttribute[]> SortedPostHandlerCache = new();
     /// <summary>
     ///     Executes the complete pipeline for a given query.
     ///     It initializes the request context, builds the pipeline by chaining behaviors,
@@ -110,23 +117,21 @@ public sealed class PipelineExecutor(
         object handler,
         IServiceProvider services) where TRequest : IRequest
     {
-        // Resolve all registered pipeline behavior INSTANCES from the current request's DI scope.
-        // This ensures that any scoped dependencies within the behaviors are correctly managed.
-        var behaviors = services.GetServices<IPipelineBehavior<TRequest, TResult>>()
-            // Order the resolved instances based on the PipelinePriorityAttribute. Lower numbers execute first.
-            .OrderBy(b => b.GetType().GetCustomAttributes(typeof(PipelinePriorityAttribute), true)
-                .Cast<PipelinePriorityAttribute>()
-                .FirstOrDefault()?.Priority ?? PipelinePriorityAttribute.DefaultPriority)
-            // The list is reversed to facilitate the Aggregate call, which builds the chain from the inside out.
-            .Reverse();
+        var behaviorList = services.GetServices<IPipelineBehavior<TRequest, TResult>>().ToList();
+        if (behaviorList.Count == 0)
+            return FinalAction;
 
-        // Chain the behaviors together using Aggregate.
-        // This creates a nested delegate structure (Chain of Responsibility pattern) where each behavior
-        // calls the 'next' one in the sequence, eventually calling the 'finalAction'.
-        var pipeline = behaviors.Aggregate(
-            (Func<TRequest, CancellationToken, Task<TResult>>)FinalAction,
-            (next, behavior) => (req, ct) => behavior.Handle(req, cancellationToken => next(req, cancellationToken), ct)
-        );
+        if (behaviorList.Count > 1)
+            behaviorList.Sort(BehaviorPriorityComparer<TRequest, TResult>.Instance);
+
+        var pipeline = (Func<TRequest, CancellationToken, Task<TResult>>)FinalAction;
+        var span = CollectionsMarshal.AsSpan(behaviorList);
+        for (var i = span.Length - 1; i >= 0; i--)
+        {
+            var behavior = span[i];
+            var next = pipeline;
+            pipeline = (req, ct) => behavior.Handle(req, cancellationToken => next(req, cancellationToken), ct);
+        }
 
         return pipeline;
 
@@ -198,8 +203,8 @@ public sealed class PipelineExecutor(
     private static async Task InvokePreHandleAttributes(IRequest request, IServiceProvider sp, CancellationToken ct)
     {
         if (request.Metadata is null) return;
-        // Attributes are executed in order of their specified priority.
-        foreach (var attr in request.Metadata.PreHandlers.OrderBy(p => p.PreHandlerExecutionPriority))
+
+        foreach (var attr in GetPreHandlers(request))
             await attr.OnBeforeHandle(request, sp, ct).ConfigureAwait(false);
     }
 
@@ -212,8 +217,8 @@ public sealed class PipelineExecutor(
     private static async Task InvokePostHandleAttributes(IRequest request, IServiceProvider sp, CancellationToken ct)
     {
         if (request.Metadata is null) return;
-        // Attributes are executed in order of their specified priority.
-        foreach (var attr in request.Metadata.PostHandlers.OrderBy(p => p.PostHandlerExecutionPriority))
+
+        foreach (var attr in GetPostHandlers(request))
             await attr.OnAfterHandle(request, sp, ct).ConfigureAwait(false);
     }
 
@@ -263,5 +268,112 @@ public sealed class PipelineExecutor(
 
         // Create and assign the context to the request.
         requestBase.Context = contextFactory.CreateContext(requestBase);
+    }
+
+    private static ReadOnlySpan<IPreHandlerAttribute> GetPreHandlers(IRequest request)
+    {
+        var metadata = request.Metadata;
+        if (metadata is null || metadata.PreHandlers.Length == 0)
+            return ReadOnlySpan<IPreHandlerAttribute>.Empty;
+
+        var handlers = metadata.PreHandlers;
+        if (handlers.Length <= 1)
+            return handlers;
+
+        var sorted = SortedPreHandlerCache.GetOrAdd(
+            request.GetType(),
+            static (_, source) =>
+            {
+                var clone = (IPreHandlerAttribute[])source.Clone();
+                Array.Sort(clone, PreHandlerPriorityComparer.Instance);
+                return clone;
+            },
+            handlers);
+
+        return sorted;
+    }
+
+    private static ReadOnlySpan<IPostHandlerAttribute> GetPostHandlers(IRequest request)
+    {
+        var metadata = request.Metadata;
+        if (metadata is null || metadata.PostHandlers.Length == 0)
+            return ReadOnlySpan<IPostHandlerAttribute>.Empty;
+
+        var handlers = metadata.PostHandlers;
+        if (handlers.Length <= 1)
+            return handlers;
+
+        var sorted = SortedPostHandlerCache.GetOrAdd(
+            request.GetType(),
+            static (_, source) =>
+            {
+                var clone = (IPostHandlerAttribute[])source.Clone();
+                Array.Sort(clone, PostHandlerPriorityComparer.Instance);
+                return clone;
+            },
+            handlers);
+
+        return sorted;
+    }
+
+    private static int GetBehaviorPriority(Type behaviorType)
+    {
+        return BehaviorPriorityCache.GetOrAdd(behaviorType, static type =>
+        {
+            var attribute = type.GetCustomAttribute<PipelinePriorityAttribute>();
+            return attribute?.Priority ?? PipelinePriorityAttribute.DefaultPriority;
+        });
+    }
+
+    private sealed class PreHandlerPriorityComparer : IComparer<IPreHandlerAttribute>
+    {
+        public static PreHandlerPriorityComparer Instance { get; } = new();
+        private PreHandlerPriorityComparer()
+        {
+        }
+
+        public int Compare(IPreHandlerAttribute? x, IPreHandlerAttribute? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return x.PreHandlerExecutionPriority.CompareTo(y.PreHandlerExecutionPriority);
+        }
+    }
+
+    private sealed class PostHandlerPriorityComparer : IComparer<IPostHandlerAttribute>
+    {
+        public static PostHandlerPriorityComparer Instance { get; } = new();
+        private PostHandlerPriorityComparer()
+        {
+        }
+
+        public int Compare(IPostHandlerAttribute? x, IPostHandlerAttribute? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            return x.PostHandlerExecutionPriority.CompareTo(y.PostHandlerExecutionPriority);
+        }
+    }
+
+    private sealed class BehaviorPriorityComparer<TRequest, TResult> : IComparer<IPipelineBehavior<TRequest, TResult>> where TRequest : IRequest
+    {
+        public static BehaviorPriorityComparer<TRequest, TResult> Instance { get; } = new();
+
+        private BehaviorPriorityComparer()
+        {
+        }
+
+        public int Compare(IPipelineBehavior<TRequest, TResult>? x, IPipelineBehavior<TRequest, TResult>? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+
+            var left = GetBehaviorPriority(x.GetType());
+            var right = GetBehaviorPriority(y.GetType());
+            return left.CompareTo(right);
+        }
     }
 }

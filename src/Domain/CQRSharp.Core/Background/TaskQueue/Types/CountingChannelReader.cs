@@ -11,16 +11,19 @@ internal sealed class CountingChannelReader : ChannelReader<QueuedTask>
 {
     private readonly ChannelReader<QueuedTask> _inner;
     private readonly IQueueMetricsReporter _metrics;
+    private readonly bool _metricsEnabled;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="CountingChannelReader" /> class.
     /// </summary>
     /// <param name="inner">The underlying channel reader to decorate.</param>
     /// <param name="metrics">The metrics reporter to update.</param>
-    public CountingChannelReader(ChannelReader<QueuedTask> inner, IQueueMetricsReporter metrics)
+    /// <param name="metricsEnabled">Indicates whether metric collection is enabled.</param>
+    public CountingChannelReader(ChannelReader<QueuedTask> inner, IQueueMetricsReporter metrics, bool metricsEnabled)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+        _metricsEnabled = metricsEnabled;
     }
 
     /// <summary>
@@ -29,6 +32,7 @@ internal sealed class CountingChannelReader : ChannelReader<QueuedTask>
     /// <param name="task">The task that was read.</param>
     private void OnItemRead(QueuedTask task)
     {
+        if (!_metricsEnabled) return;
         _metrics.ItemDequeued();
         _metrics.RecordLatency(DateTime.UtcNow - task.EnqueueTime);
     }
