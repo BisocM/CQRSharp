@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
+
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+
+        <PackageId>CQRSharp</PackageId>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <NoWarn>$(NoWarn);CS2008;NU5128</NoWarn>
+
+        <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
+        <Authors>CQRSharp</Authors>
+        <Company>BisocM</Company>
+        <PackageProjectUrl>cqrsharp.bisocm.org</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+        <Version>2.2.7</Version>
+        <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications, with complete Native AoT support. This is the main meta-package.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"/>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+</Project>
