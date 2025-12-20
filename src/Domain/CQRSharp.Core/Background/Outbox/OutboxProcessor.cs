@@ -79,7 +79,7 @@ internal sealed class OutboxProcessor : BackgroundService
         var outboxMessages = messages as OutboxMessage[] ?? messages.ToArray();
         if (outboxMessages.Length == 0) return;
 
-        _logger.LogInformation("Fetched {Count} messages from the outbox to process.", outboxMessages.Count());
+        _logger.LogInformation("Fetched {Count} messages from the outbox to process.", outboxMessages.Length);
 
         foreach (var message in outboxMessages)
         {
@@ -88,6 +88,20 @@ internal sealed class OutboxProcessor : BackgroundService
             try
             {
                 var notification = serializer.Deserialize(message.NotificationType, message.Payload);
+                if (notification is null)
+                {
+                    await outboxStore.MarkAsFailedAsync(
+                        message.Id,
+                        $"Failed to deserialize notification '{message.NotificationType}'.",
+                        stoppingToken);
+                    _retryTracker.TryRemove(message.Id, out _);
+                    _logger.LogError(
+                        "Failed to deserialize notification {NotificationType} (ID: {MessageId}). Marked as failed.",
+                        message.NotificationType,
+                        message.Id);
+                    continue;
+                }
+
                 await dispatcher.Publish(notification, stoppingToken);
                 await outboxStore.MarkAsProcessedAsync(message.Id, stoppingToken);
                 _retryTracker.TryRemove(message.Id, out _);

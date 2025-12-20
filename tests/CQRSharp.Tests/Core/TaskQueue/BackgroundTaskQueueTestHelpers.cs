@@ -27,6 +27,9 @@ public class ControllableDispatcher : IDirectNotificationDispatcher
     public List<INotification> PublishedNotifications { get; } = new();
     public int CallCount => _currentCallCount;
 
+    public Task Publish(INotification notification, CancellationToken token = default) =>
+        Publish<INotification>(notification, token);
+
     public Task Publish<TNotification>(TNotification notification, CancellationToken token) where TNotification : INotification
     {
         Interlocked.Increment(ref _currentCallCount);

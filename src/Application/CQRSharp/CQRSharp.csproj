@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net10.0;net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>net8.0</TargetFrameworks>
 
         <IncludeBuildOutput>false</IncludeBuildOutput>
 
@@ -10,6 +10,14 @@
         <NoWarn>$(NoWarn);CS2008;NU5128</NoWarn>
 
         <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     </PropertyGroup>
 
     <PropertyGroup>

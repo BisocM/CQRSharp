@@ -6,10 +6,18 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Sample</RootNamespace>
         <LangVersion>default</LangVersion>
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <TargetFrameworks>net8.0</TargetFrameworks>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <PublishAot>true</PublishAot>
         <RunAnalyzers>true</RunAnalyzers>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     </PropertyGroup>
 
     <ItemGroup>

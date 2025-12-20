@@ -21,6 +21,9 @@ public static class TypeStrings
     public const string INotification = "CQRSharp.Abstractions.Data.Interfaces.Notifications.INotification";
     public const string INotificationHandler = "CQRSharp.Abstractions.Data.Interfaces.Notifications.INotificationHandler`1";
 
+    // Abstractions - Validation
+    public const string IRequestValidator1 = "CQRSharp.Abstractions.Data.Interfaces.Validation.IRequestValidator`1";
+
     // Abstractions - Attributes
     public const string HandlerTypeAttribute = "CQRSharp.Abstractions.Data.Attributes.Requests.HandlerTypeAttribute";
     public const string IPreHandlerAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.IPreHandlerAttribute";

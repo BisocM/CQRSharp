@@ -1,8 +1,5 @@
 using System.Data;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
-using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Abstractions.Data.Interfaces.Transactions;
-using CQRSharp.Abstractions.Data.Models.Outbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -34,35 +31,10 @@ public sealed class InMemoryUnitOfWork(ILogger<InMemoryUnitOfWork> logger, IServ
         await Task.CompletedTask;
     }
 
-    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken)
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("--- UoW: Saving changes... ---");
-        var outbox = serviceProvider.GetService<IOutbox>();
-        if (outbox is null) return 0;
-
-        var notifications = outbox.GetNotifications();
-        if (!notifications.Any())
-        {
-            logger.LogInformation("--- UoW: No notifications in outbox to save. ---");
-            return 0;
-        }
-
-        logger.LogInformation("--- UoW: Found {Count} notifications in the outbox. Storing them... ---", notifications.Count);
-
-        var outboxStore = serviceProvider.GetRequiredService<IOutboxStore>();
-        var serializer = serviceProvider.GetRequiredService<INotificationSerializer>();
-
-        var messages = notifications.Select(n => new OutboxMessage(
-            Guid.NewGuid(),
-            serializer.GetNotificationName(n.GetType()),
-            serializer.Serialize(n),
-            DateTime.UtcNow,
-            OutboxMessageStatus.Pending, null, null
-        ));
-
-        await outboxStore.StoreAsync(messages, cancellationToken);
-        logger.LogInformation("--- UoW: Notifications saved to outbox store. ---");
-        return notifications.Count;
+        return Task.FromResult(0);
     }
 
     public Task CreateSavepointAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;

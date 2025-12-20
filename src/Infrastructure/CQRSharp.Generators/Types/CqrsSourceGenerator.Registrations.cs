@@ -38,7 +38,9 @@ public sealed partial class CqrsSourceGenerator
         GenerateContextFactoryRegistry(sb, compilation, candidateClasses);
 
         sb.AppendLine();
-        sb.AppendLine("            // Registering the generated dispatcher.");
+        sb.AppendLine("            // Registering the generated dispatchers.");
+        sb.AppendLine(
+            "            services.AddSingleton<global::CQRSharp.Core.Notifications.IDirectNotificationDispatcher, global::CQRSharp.Core.Notifications.Generated.GeneratedDirectNotificationDispatcher>();");
         sb.AppendLine(
             "            services.AddSingleton<global::CQRSharp.Core.Pipelines.IRequestDispatcher, global::CQRSharp.Core.Requests.Generated.GeneratedRequestDispatcher>();");
         sb.AppendLine();
@@ -102,9 +104,10 @@ public sealed partial class CqrsSourceGenerator
             .SelectMany(GetInterfacesAndBaseInterfaces)
             .Where(i => i.IsGenericType && (SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, commandHandlerDef) ||
                                             SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, queryHandlerDef)))
-            .Distinct(SymbolEqualityComparer.Default);
+            .Distinct(SymbolEqualityComparer.Default)
+            .Cast<INamedTypeSymbol>();
 
-        foreach (INamedTypeSymbol handlerInterface in handlerInterfaces)
+        foreach (var handlerInterface in handlerInterfaces)
         {
             var requestTypeSymbol = handlerInterface.TypeArguments[0];
             var handlerImplementation =
@@ -148,9 +151,10 @@ public sealed partial class CqrsSourceGenerator
             .SelectMany(GetInterfacesAndBaseInterfaces)
             .Where(i => i.IsGenericType && (SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, commandHandlerDef) ||
                                             SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, queryHandlerDef)))
-            .Distinct(SymbolEqualityComparer.Default);
+            .Distinct(SymbolEqualityComparer.Default)
+            .Cast<INamedTypeSymbol>();
 
-        foreach (INamedTypeSymbol iface in handlerInterfaces)
+        foreach (var iface in handlerInterfaces)
         {
             var requestType = iface.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var handlerInterface = iface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -175,9 +179,10 @@ public sealed partial class CqrsSourceGenerator
             .SelectMany(c => GetInterfacesAndBaseInterfaces(c).Where(i => i.OriginalDefinition.Equals(factoryInterfaceSymbol.OriginalDefinition, SymbolEqualityComparer.Default)))
             .Select(i => i.TypeArguments.FirstOrDefault())
             .Where(t => t is not null)
-            .Distinct(SymbolEqualityComparer.Default);
+            .Distinct(SymbolEqualityComparer.Default)
+            .Cast<ITypeSymbol>();
 
-        foreach (ITypeSymbol tContext in contextTypes)
+        foreach (var tContext in contextTypes)
         {
             var contextTypeName = tContext.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             sb.AppendLine($"            factoryMappings.TryAdd(typeof({contextTypeName}), sp => sp.GetRequiredService<IRequestContextFactory<{contextTypeName}>>());");

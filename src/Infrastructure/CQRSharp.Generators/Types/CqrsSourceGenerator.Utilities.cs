@@ -49,11 +49,12 @@ public sealed partial class CqrsSourceGenerator
         };
 
         var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
+        var requestValidatorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestValidator1);
         var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
 
         return commandHandlerSymbols
             .Concat(queryHandlerSymbols)
-            .Concat([notificationHandlerSymbol, pipelineBehaviorSymbol])
+            .Concat([notificationHandlerSymbol, requestValidatorSymbol, pipelineBehaviorSymbol])
             .Where(s => s is not null)
             .Cast<INamedTypeSymbol>();
     }

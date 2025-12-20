@@ -17,8 +17,16 @@ public interface IOutbox
     void Add(INotification notification);
 
     /// <summary>
-    ///     Retrieves all notifications currently in the outbox.
+    ///     Retrieves all notifications currently in the outbox without mutating the outbox.
+    ///     Prefer <see cref="Drain" /> when persisting to an <see cref="IOutboxStore" /> to avoid duplicates.
     /// </summary>
     /// <returns>A read-only list of notifications.</returns>
     IReadOnlyList<INotification> GetNotifications();
+
+    /// <summary>
+    ///     Retrieves all notifications currently in the outbox and clears the outbox.
+    ///     This is intended to be used by a single, centralized persistence step (e.g., a Unit of Work pipeline behavior).
+    /// </summary>
+    /// <returns>A read-only list containing the drained notifications.</returns>
+    IReadOnlyList<INotification> Drain();
 }

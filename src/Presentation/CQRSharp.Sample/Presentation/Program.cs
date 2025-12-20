@@ -1,12 +1,13 @@
 // CQRSharp.Sample/Program.cs
 
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Factories;
-using CQRSharp.Core.Options.Enums;
-using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Extensions;
-using CQRSharp.Pipelines.Types.RateLimiting;
-using CQRSharp.Sample.Application.Contexts;
+	using CQRSharp.Core.Extensions;
+	using CQRSharp.Core.Factories;
+	using CQRSharp.Abstractions.Data.Interfaces.Outbox;
+	using CQRSharp.Core.Options.Enums;
+	using CQRSharp.Core.Pipelines;
+	using CQRSharp.Pipelines.Extensions;
+	using CQRSharp.Pipelines.Types.RateLimiting;
+	using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Application.Pipelines;
 using CQRSharp.Sample.Infrastructure.Factories;
 using CQRSharp.Sample.Infrastructure.Persistence;
@@ -32,9 +33,9 @@ public class Program
                     .AddGenerated() // Adds source-generated handlers, requests, pipelines etc.
                     .AddNotificationSerializer<CustomJsonSerializer>();
 
-                // Register singleton data stores for the sample
-                services.AddSingleton<CustomInMemoryUserStore>();
-                services.AddSingleton<InMemoryOutboxStore>();
+	                // Register singleton data stores for the sample
+	                services.AddSingleton<CustomInMemoryUserStore>();
+	                services.AddSingleton<IOutboxStore, InMemoryOutboxStore>();
 
                 // --- PIPELINE BEHAVIORS ---
                 services
@@ -46,11 +47,11 @@ public class Program
                         provider))
                     // 3. Rate Limiting
                     .AddRateLimiting(options =>
-                    {
-                        options.MaxTokens = 2;
-                        options.ReplenishRatePerSecond = 1;
-                        options.Scope = RateLimitScope.Global;
-                    })
+	                    {
+	                        options.MaxTokens = 2;
+	                        options.ReplenishRatePerSecond = 1;
+	                        options.Scope = RateLimitScope.PerCommand;
+	                    })
                     // 4. Timeout
                     .AddTimeoutBehavior(o => { o.Timeout = TimeSpan.FromSeconds(2); })
                     // 5. Resilience (retries)

@@ -21,6 +21,16 @@ public sealed class DirectNotificationDispatcher : IDirectNotificationDispatcher
     }
 
     /// <inheritdoc />
+    public Task Publish(INotification notification, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        throw new NotSupportedException(
+            "Untyped notification dispatch requires the CQRSharp source generator. " +
+            "Ensure you call services.AddGenerated() during startup so an AOT-safe dispatcher is registered.");
+    }
+
+    /// <inheritdoc />
     public async Task Publish<TNotification>(
         TNotification notification,
         CancellationToken cancellationToken = default)
@@ -32,8 +42,14 @@ public sealed class DirectNotificationDispatcher : IDirectNotificationDispatcher
             .ServiceProvider
             .GetServices<INotificationHandler<TNotification>>();
 
-        var tasks = handlers
-            .Select(h => h.Handle(notification, cancellationToken));
+        List<Task>? tasks = null;
+        foreach (var handler in handlers)
+        {
+            tasks ??= [];
+            tasks.Add(handler.Handle(notification, cancellationToken));
+        }
+
+        if (tasks is null) return;
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
     }

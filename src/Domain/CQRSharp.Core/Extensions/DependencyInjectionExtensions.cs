@@ -2,6 +2,7 @@
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Core.Background.Outbox;
+using CQRSharp.Core.Background.Outbox.Types;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Factories;
@@ -9,7 +10,7 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CQRSharp.Core.Extensions;
 
@@ -33,22 +34,22 @@ public static class DependencyInjectionExtensions
         services.Configure<BackgroundTaskQueueOptions>(opts => configureQueue?.Invoke(opts));
         services.Configure<OutboxOptions>(opts => configureOutbox?.Invoke(opts));
 
-        services.AddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
-        services.AddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
+        services.TryAddScoped<IOutbox, Outbox>();
 
-        services.AddSingleton<IPipelineExecutor, PipelineExecutor>();
+        services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
+        services.TryAddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
 
-        services.AddSingleton<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
-        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.TryAddSingleton<IPipelineExecutor, PipelineExecutor>();
 
-        services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+        services.TryAddSingleton<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
+        services.TryAddScoped<INotificationDispatcher, NotificationDispatcher>();
+
+        services.TryAddSingleton<BackgroundTaskQueue>();
+        services.TryAddSingleton<IBackgroundTaskQueue>(sp => sp.GetRequiredService<BackgroundTaskQueue>());
+        services.TryAddSingleton<IBackgroundTaskManager>(sp => sp.GetRequiredService<BackgroundTaskQueue>());
         services.AddHostedService<BackgroundTaskQueueConsumer>();
 
-        services.AddLogging(lb =>
-        {
-            lb.AddConsole();
-            lb.SetMinimumLevel(LogLevel.Information);
-        });
+        services.AddLogging();
 
         return services;
     }

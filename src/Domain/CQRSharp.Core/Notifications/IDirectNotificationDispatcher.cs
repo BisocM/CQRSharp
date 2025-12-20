@@ -9,6 +9,16 @@ namespace CQRSharp.Core.Notifications;
 public interface IDirectNotificationDispatcher
 {
     /// <summary>
+    ///     Publishes a notification to all its registered handlers immediately, using the notification's runtime type.
+    ///     This overload exists for scenarios where the compile-time type is only <see cref="INotification" />
+    ///     (e.g., outbox deserialization).
+    /// </summary>
+    /// <param name="notification">The notification object.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task that represents the asynchronous publish operation. The task completes when all handlers have been awaited.</returns>
+    Task Publish(INotification notification, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Publishes a notification to all its registered handlers immediately.
     /// </summary>
     /// <typeparam name="TNotification">The type of notification being published.</typeparam>

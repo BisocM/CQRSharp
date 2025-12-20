@@ -60,10 +60,11 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 var eventTags = new ActivityTagsCollection { { "exception.type", ex.GetType().Name } };
                 activity?.AddEvent(new ActivityEvent($"RetryAttempt-{retries}", tags: eventTags));
 
-                //TODO: Says this is "optional", never implements the option to DispatcherOptions. Based?
-                //Add a delay before retrying. This is optional and can be configured in DispatcherOptions.
-                const int delayMs = 1000;
-                await Task.Delay(delayMs, cancellationToken);
+                var delay = ComputeRetryDelay(options.Value, retries);
+                activity?.SetTag("resilience.retry_delay_ms", delay.TotalMilliseconds);
+
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -74,5 +75,28 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 activity?.SetStatus(ActivityStatusCode.Error, "All retries exhausted.");
                 throw;
             }
+    }
+
+    private static TimeSpan ComputeRetryDelay(ResilienceOptions config, int retryAttempt)
+    {
+        if (retryAttempt <= 0) return TimeSpan.Zero;
+
+        var baseDelay = config.BaseDelay;
+        if (baseDelay <= TimeSpan.Zero) return TimeSpan.Zero;
+
+        var backoffMultiplier = config.BackoffMultiplier;
+        if (double.IsNaN(backoffMultiplier) || double.IsInfinity(backoffMultiplier) || backoffMultiplier < 1.0)
+            backoffMultiplier = 1.0;
+
+        var delayMs = baseDelay.TotalMilliseconds * Math.Pow(backoffMultiplier, retryAttempt - 1);
+
+        var maxDelay = config.MaxDelay;
+        if (maxDelay > TimeSpan.Zero)
+            delayMs = Math.Min(delayMs, maxDelay.TotalMilliseconds);
+
+        if (double.IsNaN(delayMs) || double.IsInfinity(delayMs) || delayMs <= 0)
+            return baseDelay;
+
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 }

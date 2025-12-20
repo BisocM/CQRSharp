@@ -17,7 +17,7 @@ namespace CQRSharp.Core.Background.TaskQueue;
 /// </summary>
 internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTaskManager, IDisposable
 {
-    private readonly Channel<QueuedTask> _channel;
+    private readonly object _gate = new();
     private readonly IDirectNotificationDispatcher _dispatcher;
     private readonly ILogger<BackgroundTaskQueue> _logger;
     private readonly IQueueMetricsReporter _metrics;
@@ -26,10 +26,39 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     private readonly BackgroundTaskQueueOptions _options;
     private readonly bool _metricsEnabled;
     private readonly Guid _queueId = Guid.NewGuid();
-    private readonly CountingChannelReader _reader;
+    private readonly SemaphoreSlim _itemsAvailable;
+    private readonly SemaphoreSlim? _freeSlots;
+    private readonly CancellationTokenSource _completion = new();
     private readonly CancellationToken _shutdownToken;
 
     private long _sequenceCounter;
+    private int _disposed;
+    private bool _isCompleted;
+
+    private readonly QueueEntry[] _buffer;
+    private int _head;
+    private int _tail;
+    private int _count;
+
+    private readonly struct QueueEntry
+    {
+        public QueueEntry(
+            QueuedTask task,
+            Action<Exception>? setException,
+            Action<CancellationToken>? setCanceled)
+        {
+            Task = task;
+            SetException = setException;
+            SetCanceled = setCanceled;
+        }
+
+        public QueuedTask Task { get; }
+        public Action<Exception>? SetException { get; }
+        public Action<CancellationToken>? SetCanceled { get; }
+
+        public void Reject(Exception exception) => SetException?.Invoke(exception);
+        public void Cancel(CancellationToken cancellationToken) => SetCanceled?.Invoke(cancellationToken);
+    }
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="BackgroundTaskQueue" /> class.
@@ -51,15 +80,12 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         if (_options.Capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(_options.Capacity), "Capacity must be greater than zero.");
 
-        _channel = Channel.CreateBounded<QueuedTask>(new BoundedChannelOptions(_options.Capacity)
-        {
-            FullMode = _options.FullMode,
-            SingleReader = true, // Optimized for a single consumer
-            SingleWriter = false,
-            AllowSynchronousContinuations = false
-        });
+        _buffer = new QueueEntry[_options.Capacity];
+        _itemsAvailable = new SemaphoreSlim(0, _options.Capacity);
 
-        _reader = new CountingChannelReader(_channel.Reader, _metrics, _metricsEnabled);
+        _freeSlots = _options.FullMode == BoundedChannelFullMode.Wait
+            ? new SemaphoreSlim(_options.Capacity, _options.Capacity)
+            : null;
 
         _notificationChannel = Channel.CreateBounded<INotification>(
             new BoundedChannelOptions(_options.CallbackChannelCapacity)
@@ -81,25 +107,8 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _ = QueueBackgroundWorkItemAsync(Wrapper, cancellationToken);
+        _ = EnqueueInternalAsync(tcs, workItem, cancellationToken);
         return tcs.Task;
-
-        async Task Wrapper(CancellationToken ct)
-        {
-            try
-            {
-                await workItem(ct).ConfigureAwait(false);
-                tcs.SetResult();
-            }
-            catch (OperationCanceledException ex)
-            {
-                tcs.SetCanceled(ex.CancellationToken);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        }
     }
 
     /// <inheritdoc />
@@ -107,99 +116,436 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     {
         var tcs = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _ = QueueBackgroundWorkItemAsync(Wrapper, cancellationToken);
+        _ = EnqueueInternalAsync(tcs, workItem, cancellationToken);
         return tcs.Task;
-
-        async Task Wrapper(CancellationToken ct)
-        {
-            try
-            {
-                var result = await workItem(ct).ConfigureAwait(false);
-                tcs.SetResult(result);
-            }
-            catch (OperationCanceledException ex)
-            {
-                tcs.SetCanceled(ex.CancellationToken);
-            }
-            catch (Exception ex)
-            {
-                tcs.SetException(ex);
-            }
-        }
     }
 
-    ChannelReader<QueuedTask> IBackgroundTaskQueue.Reader => _reader;
+    ValueTask<QueuedTask> IBackgroundTaskQueue.DequeueAsync(CancellationToken cancellationToken) =>
+        DequeueAsync(cancellationToken);
 
     /// <summary>
     ///     Disposes resources used by the queue, such as completing the channels and disposing the semaphore.
     /// </summary>
     public void Dispose()
     {
-        _channel.Writer.TryComplete();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        Complete();
+        DrainAndCancelPending();
+
         _notificationChannel.Writer.TryComplete();
         _notifSem.Dispose();
+        _itemsAvailable.Dispose();
+        _freeSlots?.Dispose();
+        _completion.Dispose();
         _metrics.Dispose();
     }
 
     /// <summary>
     ///     Internal method to queue a work item. It handles different full-mode behaviors and reports metrics.
     /// </summary>
-    internal async Task<QueueWriteResult> QueueBackgroundWorkItemAsync(Func<CancellationToken, Task> workItem, CancellationToken cancellationToken)
+    internal Task<QueueWriteResult> QueueBackgroundWorkItemAsync(Func<CancellationToken, Task> workItem, CancellationToken cancellationToken) =>
+        QueueBackgroundWorkItemAsync(workItem, cancellationToken, null, null);
+
+    internal async Task<QueueWriteResult> QueueBackgroundWorkItemAsync(
+        Func<CancellationToken, Task> workItem,
+        CancellationToken cancellationToken,
+        Action<Exception>? setException,
+        Action<CancellationToken>? setCanceled)
     {
         ArgumentNullException.ThrowIfNull(workItem);
 
         var sequence = Interlocked.Increment(ref _sequenceCounter);
-        var writer = _channel.Writer;
         var queuedTask = new QueuedTask(_queueId, sequence, workItem, DateTime.UtcNow);
+        var entry = new QueueEntry(queuedTask, setException, setCanceled);
+
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            entry.Reject(new ObjectDisposedException(nameof(BackgroundTaskQueue)));
+            return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
+        }
 
         switch (_options.FullMode)
         {
             case BoundedChannelFullMode.DropWrite:
-                if (writer.TryWrite(queuedTask))
-                {
-                    RecordEnqueue(sequence, workItem);
-                    return new QueueWriteResult(QueueWriteResultCode.Enqueued, sequence);
-                }
-
-                return HandleDropNewest(sequence);
+                return TryEnqueueDropWrite(entry);
 
             case BoundedChannelFullMode.Wait:
+                return await EnqueueWaitAsync(entry, cancellationToken).ConfigureAwait(false);
+
             case BoundedChannelFullMode.DropOldest:
+                return TryEnqueueDropOldest(entry);
+
             case BoundedChannelFullMode.DropNewest:
-                // For other modes, we can rely on WriteAsync, which is highly optimized and handles them correctly.
-                try
-                {
-                    if (_options.FullMode == BoundedChannelFullMode.DropOldest && _metricsEnabled && _metrics.CurrentCount >= _options.Capacity)
-                        _metrics.ItemDroppedOldest();
-
-                    await writer.WriteAsync(queuedTask, cancellationToken).ConfigureAwait(false);
-                    RecordEnqueue(sequence, workItem);
-
-                    // Note: WriteAsync doesn't give a direct result code. We determine it based on context.
-                    // For simplicity, we can consider it Enqueued or Waited. Enqueued is sufficient.
-                    return new QueueWriteResult(QueueWriteResultCode.Enqueued, sequence);
-                }
-                catch (ChannelClosedException)
-                {
-                    return HandleDropNewest(sequence);
-                }
+                return TryEnqueueDropNewest(entry);
 
             default:
                 throw new NotSupportedException($"Unsupported BoundedChannelFullMode: {_options.FullMode}");
         }
     }
 
+    private async Task EnqueueInternalAsync(
+        TaskCompletionSource tcs,
+        Func<CancellationToken, Task> workItem,
+        CancellationToken cancellationToken)
+    {
+        async Task Wrapper(CancellationToken ct)
+        {
+            try
+            {
+                await workItem(ct).ConfigureAwait(false);
+                tcs.TrySetResult();
+            }
+            catch (OperationCanceledException ex)
+            {
+                tcs.TrySetCanceled(ex.CancellationToken);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }
+
+        try
+        {
+            var result = await QueueBackgroundWorkItemAsync(
+                Wrapper,
+                cancellationToken,
+                ex => tcs.TrySetException(ex),
+                token => tcs.TrySetCanceled(token)).ConfigureAwait(false);
+
+            if (result.Result is not (QueueWriteResultCode.Enqueued or QueueWriteResultCode.Waited))
+                tcs.TrySetException(new ChannelClosedException());
+        }
+        catch (OperationCanceledException ex)
+        {
+            tcs.TrySetCanceled(ex.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            tcs.TrySetException(ex);
+        }
+    }
+
+    private async Task EnqueueInternalAsync<TResult>(
+        TaskCompletionSource<TResult> tcs,
+        Func<CancellationToken, Task<TResult>> workItem,
+        CancellationToken cancellationToken)
+    {
+        async Task Wrapper(CancellationToken ct)
+        {
+            try
+            {
+                var result = await workItem(ct).ConfigureAwait(false);
+                tcs.TrySetResult(result);
+            }
+            catch (OperationCanceledException ex)
+            {
+                tcs.TrySetCanceled(ex.CancellationToken);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }
+
+        try
+        {
+            var result = await QueueBackgroundWorkItemAsync(
+                Wrapper,
+                cancellationToken,
+                ex => tcs.TrySetException(ex),
+                token => tcs.TrySetCanceled(token)).ConfigureAwait(false);
+
+            if (result.Result is not (QueueWriteResultCode.Enqueued or QueueWriteResultCode.Waited))
+                tcs.TrySetException(new ChannelClosedException());
+        }
+        catch (OperationCanceledException ex)
+        {
+            tcs.TrySetCanceled(ex.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            tcs.TrySetException(ex);
+        }
+    }
+
+    private QueueWriteResult TryEnqueueDropWrite(QueueEntry entry)
+    {
+        lock (_gate)
+        {
+            if (_isCompleted)
+                return RejectWrite(entry);
+
+            if (_count >= _buffer.Length)
+                return RejectWrite(entry);
+
+            EnqueueLocked(entry);
+        }
+
+        _itemsAvailable.Release();
+        RecordEnqueue(entry.Task.SequenceNumber, entry.Task.WorkItem);
+        return new QueueWriteResult(QueueWriteResultCode.Enqueued, entry.Task.SequenceNumber);
+    }
+
+    private QueueWriteResult TryEnqueueDropOldest(QueueEntry entry)
+    {
+        QueueEntry? evicted = null;
+        var shouldSignal = false;
+
+        lock (_gate)
+        {
+            if (_isCompleted)
+                return RejectWrite(entry);
+
+            if (_count >= _buffer.Length)
+            {
+                evicted = DequeueLocked();
+                if (_metricsEnabled) _metrics.ItemDroppedOldest();
+                shouldSignal = false;
+            }
+            else
+            {
+                shouldSignal = true;
+            }
+
+            EnqueueLocked(entry);
+        }
+
+        if (evicted.HasValue)
+            evicted.Value.Reject(new ChannelClosedException());
+
+        if (shouldSignal)
+            _itemsAvailable.Release();
+
+        RecordEnqueue(entry.Task.SequenceNumber, entry.Task.WorkItem);
+        return new QueueWriteResult(QueueWriteResultCode.Enqueued, entry.Task.SequenceNumber);
+    }
+
+    private QueueWriteResult TryEnqueueDropNewest(QueueEntry entry)
+    {
+        QueueEntry? evicted = null;
+        var shouldSignal = false;
+
+        lock (_gate)
+        {
+            if (_isCompleted)
+                return RejectWrite(entry);
+
+            if (_count >= _buffer.Length)
+            {
+                evicted = RemoveNewestLocked();
+                if (_metricsEnabled) _metrics.ItemDroppedNewest();
+                shouldSignal = false;
+            }
+            else
+            {
+                shouldSignal = true;
+            }
+
+            EnqueueLocked(entry);
+        }
+
+        if (evicted.HasValue)
+            evicted.Value.Reject(new ChannelClosedException());
+
+        if (shouldSignal)
+            _itemsAvailable.Release();
+
+        RecordEnqueue(entry.Task.SequenceNumber, entry.Task.WorkItem);
+        return new QueueWriteResult(QueueWriteResultCode.Enqueued, entry.Task.SequenceNumber);
+    }
+
+    private async Task<QueueWriteResult> EnqueueWaitAsync(QueueEntry entry, CancellationToken cancellationToken)
+    {
+        if (_freeSlots is null)
+            throw new InvalidOperationException("Queue was not configured for Wait mode.");
+
+        var waited = !_freeSlots.Wait(0);
+        if (waited)
+        {
+            CancellationTokenSource? linkedCts = null;
+            try
+            {
+                var waitToken = cancellationToken;
+                if (cancellationToken.CanBeCanceled)
+                {
+                    linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _completion.Token);
+                    waitToken = linkedCts.Token;
+                }
+                else
+                {
+                    waitToken = _completion.Token;
+                }
+
+                await _freeSlots.WaitAsync(waitToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return RejectWrite(entry);
+            }
+            finally
+            {
+                linkedCts?.Dispose();
+            }
+        }
+
+        lock (_gate)
+        {
+            if (_isCompleted)
+            {
+                _freeSlots.Release();
+                return RejectWrite(entry);
+            }
+
+            EnqueueLocked(entry);
+        }
+
+        _itemsAvailable.Release();
+        RecordEnqueue(entry.Task.SequenceNumber, entry.Task.WorkItem);
+        return new QueueWriteResult(waited ? QueueWriteResultCode.Waited : QueueWriteResultCode.Enqueued, entry.Task.SequenceNumber);
+    }
+
+    private QueueWriteResult RejectWrite(QueueEntry entry)
+    {
+        entry.Reject(new ChannelClosedException());
+        if (_metricsEnabled) _metrics.ItemDroppedNewest();
+        PublishNotification(new TaskRejectedNotification(entry.Task.SequenceNumber, _options.FullMode));
+        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, entry.Task.SequenceNumber);
+    }
+
+    private ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken)
+    {
+        return new ValueTask<QueuedTask>(DequeueCoreAsync(cancellationToken));
+    }
+
+    private async Task<QueuedTask> DequeueCoreAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            await WaitForItemPermitAsync(cancellationToken).ConfigureAwait(false);
+
+            QueueEntry dequeued;
+            lock (_gate)
+            {
+                if (_count <= 0)
+                    continue;
+
+                dequeued = DequeueLocked();
+            }
+
+            _freeSlots?.Release();
+
+            if (_metricsEnabled)
+            {
+                _metrics.ItemDequeued();
+                _metrics.RecordLatency(DateTime.UtcNow - dequeued.Task.EnqueueTime);
+            }
+
+            return dequeued.Task;
+        }
+    }
+
+    private async ValueTask WaitForItemPermitAsync(CancellationToken cancellationToken)
+    {
+        CancellationTokenSource? linkedCts = null;
+        try
+        {
+            var waitToken = cancellationToken;
+            if (cancellationToken.CanBeCanceled)
+            {
+                linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _completion.Token);
+                waitToken = linkedCts.Token;
+            }
+            else
+            {
+                waitToken = _completion.Token;
+            }
+
+            await _itemsAvailable.WaitAsync(waitToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            if (!_itemsAvailable.Wait(0))
+                throw new ChannelClosedException();
+        }
+        finally
+        {
+            linkedCts?.Dispose();
+        }
+    }
+
+    private void Complete()
+    {
+        lock (_gate)
+        {
+            if (_isCompleted) return;
+            _isCompleted = true;
+        }
+
+        _completion.Cancel();
+    }
+
+    private void DrainAndCancelPending()
+    {
+        QueueEntry[] pending;
+        int pendingCount;
+
+        lock (_gate)
+        {
+            pendingCount = _count;
+            if (pendingCount == 0) return;
+
+            pending = new QueueEntry[pendingCount];
+            for (var i = 0; i < pendingCount; i++)
+            {
+                pending[i] = _buffer[_head];
+                _buffer[_head] = default;
+                _head = (_head + 1) % _buffer.Length;
+            }
+
+            _count = 0;
+            _head = 0;
+            _tail = 0;
+        }
+
+        while (_itemsAvailable.Wait(0))
+        {
+        }
+
+        for (var i = 0; i < pendingCount; i++)
+            pending[i].Cancel(_shutdownToken);
+    }
+
+    private void EnqueueLocked(QueueEntry entry)
+    {
+        _buffer[_tail] = entry;
+        _tail = (_tail + 1) % _buffer.Length;
+        _count++;
+    }
+
+    private QueueEntry DequeueLocked()
+    {
+        var entry = _buffer[_head];
+        _buffer[_head] = default;
+        _head = (_head + 1) % _buffer.Length;
+        _count--;
+        return entry;
+    }
+
+    private QueueEntry RemoveNewestLocked()
+    {
+        _tail = (_tail - 1 + _buffer.Length) % _buffer.Length;
+        var entry = _buffer[_tail];
+        _buffer[_tail] = default;
+        _count--;
+        return entry;
+    }
+
     private void RecordEnqueue(long sequence, Func<CancellationToken, Task> workItem)
     {
         if (_metricsEnabled) _metrics.ItemEnqueued();
         PublishNotification(new TaskEnqueuedNotification(sequence, workItem));
-    }
-
-    private QueueWriteResult HandleDropNewest(long sequence)
-    {
-        if (_metricsEnabled) _metrics.ItemDroppedNewest();
-        PublishNotification(new TaskRejectedNotification(sequence, _options.FullMode));
-        return new QueueWriteResult(QueueWriteResultCode.DroppedNewest, sequence);
     }
 
     private void PublishNotification(INotification notification)

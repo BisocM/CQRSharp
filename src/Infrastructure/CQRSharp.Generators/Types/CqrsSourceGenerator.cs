@@ -32,6 +32,11 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 // Generate the AOT-safe dispatcher
                 var dispatcherSourceCode = GenerateDispatcher(compilation, candidateClasses!);
                 spc.AddSource("GeneratedRequestDispatcher.g.cs", SourceText.From(dispatcherSourceCode, Encoding.UTF8));
+
+                // Generate the AOT-safe notification dispatcher
+                var notificationDispatcherSourceCode = GenerateNotificationDispatcher(compilation, candidateClasses!);
+                spc.AddSource("GeneratedDirectNotificationDispatcher.g.cs",
+                    SourceText.From(notificationDispatcherSourceCode, Encoding.UTF8));
             }
             catch (Exception ex)
             {

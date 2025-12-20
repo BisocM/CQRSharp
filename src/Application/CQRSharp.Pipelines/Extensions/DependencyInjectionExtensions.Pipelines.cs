@@ -5,6 +5,7 @@ using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Pipelines.Types.Resilience;
 using CQRSharp.Pipelines.Types.Timeout;
 using CQRSharp.Pipelines.Types.Transactions;
+using CQRSharp.Pipelines.Types.Validation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Pipelines.Extensions;
@@ -42,6 +43,16 @@ public static class DependencyInjectionExtensions
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
 
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the validation pipeline behavior in the service collection.
+    ///     This behavior executes all registered <c>IRequestValidator&lt;TRequest&gt;</c> implementations for a request.
+    /// </summary>
+    public static IServiceCollection AddValidationBehavior(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         return services;
     }
 

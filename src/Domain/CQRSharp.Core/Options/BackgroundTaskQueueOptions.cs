@@ -3,7 +3,7 @@
 namespace CQRSharp.Core.Options;
 
 /// <summary>
-///     Configuration options for the <see cref="BackgroundTaskManager" />.
+///     Configuration options for the background task queue (<see cref="CQRSharp.Core.Background.TaskQueue.IBackgroundTaskManager" />).
 /// </summary>
 public sealed class BackgroundTaskQueueOptions
 {
@@ -19,23 +19,27 @@ public sealed class BackgroundTaskQueueOptions
     public int Capacity { get; set; } = 1000;
 
     /// <summary>
-    ///     Policy to apply when <see cref="Capacity" /> is reached.
+///     Policy to apply when <see cref="Capacity" /> is reached.
     ///     <list type="bullet">
     ///         <item>
-    ///             <see cref="BoundedChannelFullMode.DropNewest" /> (default):
-    ///             immediately rejects the incoming work item.
+    ///             <see cref="BoundedChannelFullMode.Wait" /> (default):
+    ///             asynchronously waits until space becomes available.
     ///         </item>
     ///         <item>
     ///             <see cref="BoundedChannelFullMode.DropOldest" />:
     ///             removes the oldest queued item before enqueuing the new one.
     ///         </item>
     ///         <item>
-    ///             <see cref="BoundedChannelFullMode.Wait" />:
-    ///             asynchronously waits until space becomes available.
+    ///             <see cref="BoundedChannelFullMode.DropNewest" />:
+    ///             removes the newest queued item before enqueuing the new one.
+    ///         </item>
+    ///         <item>
+    ///             <see cref="BoundedChannelFullMode.DropWrite" />:
+    ///             rejects the incoming work item when full.
     ///         </item>
     ///     </list>
     /// </summary>
-    public BoundedChannelFullMode FullMode { get; set; } = BoundedChannelFullMode.DropNewest;
+    public BoundedChannelFullMode FullMode { get; set; } = BoundedChannelFullMode.Wait;
 
     /// <summary>
     ///     Number of parallel consumer loops to start.

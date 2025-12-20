@@ -13,9 +13,6 @@ public class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineB
 {
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
-        // Check if this pipeline should be skipped for the current request.
-        if (request.Metadata?.PipelineExemptions.Any(e => e.ExemptedPipeline == typeof(LoggingPipelineBehavior<TRequest, TResult>)) ?? false) return await next(cancellationToken);
-
         var requestName = typeof(TRequest).Name;
         var stopwatch = Stopwatch.StartNew();
 

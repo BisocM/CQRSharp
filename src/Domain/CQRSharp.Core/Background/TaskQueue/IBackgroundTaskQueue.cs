@@ -1,4 +1,3 @@
-using System.Threading.Channels;
 using CQRSharp.Core.Background.TaskQueue.Types;
 
 namespace CQRSharp.Core.Background.TaskQueue;
@@ -16,8 +15,7 @@ namespace CQRSharp.Core.Background.TaskQueue;
 internal interface IBackgroundTaskQueue
 {
     /// <summary>
-    ///     Gets the <see cref="ChannelReader{T}" /> for the queue.
-    ///     This allows the consumer to efficiently and asynchronously dequeue work items.
+    ///     Dequeues the next work item, waiting asynchronously until one is available.
     /// </summary>
-    internal ChannelReader<QueuedTask> Reader { get; }
+    internal ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken);
 }

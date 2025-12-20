@@ -30,6 +30,7 @@ public class BackgroundTaskManagerTests
         Capacity = capacity,
         FullMode = fullMode,
         ConsumerCount = 1,
+        EnableMetrics = true,
         NotificationMaxRetries = 3,
         NotificationRetryDelay = TimeSpan.FromMilliseconds(5),
         ShutdownTimeout = TimeSpan.FromSeconds(5)
@@ -62,10 +63,10 @@ public class BackgroundTaskManagerTests
             await queue.QueueBackgroundWorkItemAsync(workItem, CancellationToken.None);
 
         var drained = new List<Func<CancellationToken, Task>>();
-        var reader = ((IBackgroundTaskQueue)queue).Reader;
+        var taskQueue = (IBackgroundTaskQueue)queue;
         for (var i = 0; i < items.Count; i++)
         {
-            var queued = await reader.ReadAsync(CancellationToken.None);
+            var queued = await taskQueue.DequeueAsync(CancellationToken.None);
             drained.Add(queued.WorkItem);
         }
 
@@ -89,17 +90,17 @@ public class BackgroundTaskManagerTests
         await queue.QueueBackgroundWorkItemAsync(itemB, CancellationToken.None); // In queue, will be dropped
         var resultC = await queue.QueueBackgroundWorkItemAsync(itemC, CancellationToken.None); // In queue, displaces B
 
-        var reader = ((IBackgroundTaskQueue)queue).Reader;
+        var taskQueue = (IBackgroundTaskQueue)queue;
         var drainedItems = new[]
         {
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem,
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem,
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem
         };
 
         // Assert
         Assert.Equal(QueueWriteResultCode.Enqueued, resultC.Result);
         Assert.Equal(3, metrics.EnqueuedCount);
-        Assert.Equal(0, metrics.DroppedNewestCount); // DropNewest doesn't increment this metric
+        Assert.Equal(1, metrics.DroppedNewestCount);
         Assert.Contains(itemA, drainedItems);
         Assert.Contains(itemC, drainedItems);
         Assert.DoesNotContain(itemB, drainedItems);
@@ -126,15 +127,54 @@ public class BackgroundTaskManagerTests
         Assert.Equal(2, metrics.EnqueuedCount);
         Assert.Equal(1, metrics.DroppedNewestCount);
 
-        var reader = ((IBackgroundTaskQueue)queue).Reader;
+        var taskQueue = (IBackgroundTaskQueue)queue;
         var drainedItems = new[]
         {
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem,
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem,
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem
         };
         Assert.Contains(itemA, drainedItems);
         Assert.Contains(itemB, drainedItems);
         Assert.DoesNotContain(itemC, drainedItems);
+    }
+
+    [Fact(DisplayName = "Unit: DropWrite causes EnqueueAsync to fault (no hangs)")]
+    public async Task DropWrite_EnqueueAsyncFaultsWithoutHanging()
+    {
+        // Arrange
+        var opts = MakeOptions(1, BoundedChannelFullMode.DropWrite);
+        var (queue, _, _) = CreateTestSystem(opts);
+        await queue.QueueBackgroundWorkItemAsync(_ => CompletedTask, CancellationToken.None); // Fill capacity
+
+        // Act
+        var rejected = queue.EnqueueAsync(_ => CompletedTask);
+
+        // Assert
+        await Assert.ThrowsAsync<ChannelClosedException>(() => rejected.WaitAsync(TimeSpan.FromSeconds(1)));
+        queue.Dispose();
+    }
+
+    [Fact(DisplayName = "Unit: DropNewest eviction completes dropped awaiters (no hangs)")]
+    public async Task DropNewest_EvictionCompletesAwaitersWithoutHanging()
+    {
+        // Arrange
+        var opts = MakeOptions(1, BoundedChannelFullMode.DropNewest);
+        var (queue, _, _) = CreateTestSystem(opts);
+
+        var droppedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = await queue.QueueBackgroundWorkItemAsync(
+            _ => CompletedTask,
+            CancellationToken.None,
+            ex => droppedTcs.TrySetException(ex),
+            token => droppedTcs.TrySetCanceled(token));
+        Assert.Equal(QueueWriteResultCode.Enqueued, first.Result);
+
+        // Act - Evict the first item.
+        await queue.QueueBackgroundWorkItemAsync(_ => CompletedTask, CancellationToken.None);
+
+        // Assert - The dropped awaiter completes quickly.
+        await Assert.ThrowsAsync<ChannelClosedException>(() => droppedTcs.Task.WaitAsync(TimeSpan.FromSeconds(1)));
+        queue.Dispose();
     }
 
     [Fact(DisplayName = "Unit: DropOldest policy replaces oldest when full")]
@@ -157,13 +197,31 @@ public class BackgroundTaskManagerTests
         Assert.Equal(1, metrics.DroppedOldestCount);
         Assert.Equal(3, metrics.EnqueuedCount);
 
-        var reader = ((IBackgroundTaskQueue)queue).Reader;
+        var taskQueue = (IBackgroundTaskQueue)queue;
         var drainedItems = new[]
         {
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem,
-            (await reader.ReadAsync(CancellationToken.None)).WorkItem
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem,
+            (await taskQueue.DequeueAsync(CancellationToken.None)).WorkItem
         };
         Assert.Equal([second, third], drainedItems);
+    }
+
+    [Fact(DisplayName = "Unit: Wait-mode enqueue cancellation completes (no hangs)")]
+    public async Task Wait_EnqueueCancellationCompletesWithoutHanging()
+    {
+        // Arrange
+        var opts = MakeOptions(1, BoundedChannelFullMode.Wait);
+        var (queue, _, _) = CreateTestSystem(opts);
+        await queue.QueueBackgroundWorkItemAsync(_ => CompletedTask, CancellationToken.None); // Fill capacity
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        // Act
+        var pending = queue.EnqueueAsync(_ => CompletedTask, cts.Token);
+
+        // Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(TimeSpan.FromSeconds(1)));
+        queue.Dispose();
     }
 
     [Fact(DisplayName = "Integration: Wait policy is thread-safe with multiple producers and a real consumer")]

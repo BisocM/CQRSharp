@@ -14,6 +14,7 @@ internal sealed class Outbox : IOutbox
     /// <inheritdoc />
     public void Add(INotification notification)
     {
+        ArgumentNullException.ThrowIfNull(notification);
         _notifications.Add(notification);
     }
 
@@ -21,5 +22,15 @@ internal sealed class Outbox : IOutbox
     public IReadOnlyList<INotification> GetNotifications()
     {
         return _notifications;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<INotification> Drain()
+    {
+        if (_notifications.Count == 0) return Array.Empty<INotification>();
+
+        var drained = _notifications.ToArray();
+        _notifications.Clear();
+        return drained;
     }
 }

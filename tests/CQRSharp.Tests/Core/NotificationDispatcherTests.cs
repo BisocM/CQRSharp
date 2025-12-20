@@ -22,6 +22,9 @@ public class NotificationDispatcherTests
     private readonly Mock<IOutbox> _mockOutbox = new();
     private readonly Mock<IExplicitUnitOfWork> _mockUow = new();
     private readonly TestNotification _testNotification = new();
+    private readonly UnstableTestNotification _unstableNotification = new();
+
+    private sealed record UnstableTestNotification : INotification;
 
     /// <summary>
     ///     Builds a service provider with mocked dependencies for testing the dispatcher.
@@ -101,7 +104,7 @@ public class NotificationDispatcherTests
     }
 
     [Fact]
-    public void Publish_WhenOutboxEnabled_But_IOutboxNotRegistered_ThrowsException()
+    public async Task Publish_WhenOutboxEnabled_But_IOutboxNotRegistered_ThrowsException()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -114,7 +117,22 @@ public class NotificationDispatcherTests
         var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
 
         // Act & Assert
-        var ex = Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.Publish(_testNotification));
-        Assert.Contains("IOutbox service is not registered", ex.Result.Message);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.Publish(_testNotification));
+        Assert.Contains("IOutbox service is not registered", ex.Message);
+    }
+
+    [Fact]
+    public async Task Publish_WhenOutboxIsEnabled_ButNotificationHasNoStableName_DispatchesDirectly()
+    {
+        // Arrange
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false);
+        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+
+        // Act
+        await dispatcher.Publish(_unstableNotification, CancellationToken.None);
+
+        // Assert
+        _mockDirectDispatcher.Verify(d => d.Publish(_unstableNotification, It.IsAny<CancellationToken>()), Times.Once);
+        _mockOutbox.Verify(o => o.Add(It.IsAny<INotification>()), Times.Never);
     }
 }

@@ -25,7 +25,8 @@ public interface IQueueMetricsReporter : IDisposable
 
     /// <summary>
     ///     Reports that the newest work item was dropped because the queue was full,
-    ///     consistent with the <see cref="System.Threading.Channels.BoundedChannelFullMode.DropWrite" /> policy.
+    ///     consistent with the <see cref="System.Threading.Channels.BoundedChannelFullMode.DropWrite" /> or
+    ///     <see cref="System.Threading.Channels.BoundedChannelFullMode.DropNewest" /> policies.
     /// </summary>
     void ItemDroppedNewest();
 

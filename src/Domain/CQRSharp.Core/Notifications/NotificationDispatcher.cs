@@ -1,4 +1,7 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+﻿using System.Collections.Concurrent;
+using System.Reflection;
+using CQRSharp.Abstractions.Data.Attributes.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Abstractions.Data.Interfaces.Transactions;
 using CQRSharp.Core.Options;
@@ -15,6 +18,8 @@ namespace CQRSharp.Core.Notifications;
 /// </summary>
 public sealed class NotificationDispatcher : INotificationDispatcher
 {
+    private static readonly ConcurrentDictionary<Type, bool> HasStableNameCache = new();
+
     private readonly IDirectNotificationDispatcher _directDispatcher;
     private readonly OutboxOptions _outboxOptions;
     private readonly IServiceProvider _provider;
@@ -64,11 +69,19 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         };
 
         if (!useOutbox) return _directDispatcher.Publish(notification, cancellationToken);
+
+        // Durable storage requires a stable notification name. We treat this as the opt-in signal
+        // for the outbox (keeps internal/framework notifications in-process and avoids fragile serialization).
+        if (!HasStableNameCache.GetOrAdd(
+                notification.GetType(),
+                static t => t.GetCustomAttribute<NotificationNameAttribute>() is not null))
+            return _directDispatcher.Publish(notification, cancellationToken);
+
         var outbox = _provider.GetService<IOutbox>();
         if (outbox is null)
             throw new InvalidOperationException(
                 "Outbox mode is active, but the IOutbox service is not registered. " +
-                "Ensure you have called a configuration method, such as AddUnitOfWorkBehavior(), that registers the outbox services.");
+                "Ensure you have called services.AddCqrs() (or otherwise registered a scoped IOutbox).");
         outbox.Add(notification);
         return Task.CompletedTask;
     }

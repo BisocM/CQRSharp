@@ -15,6 +15,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 {
     private readonly SemaphoreSlim _concurrencyLimiter;
     private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
+    private readonly IBackgroundTaskQueue _taskQueue;
 
     /// <summary>
     ///     A collection of tasks that are currently being processed. Used to ensure graceful shutdown.
@@ -22,7 +23,6 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     /// </summary>
     private readonly List<Task> _processingTasks = new();
 
-    private readonly ChannelReader<QueuedTask> _reader;
     private readonly TimeSpan _shutdownTimeout;
 
     /// <summary>
@@ -36,7 +36,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
         ILogger<BackgroundTaskQueueConsumer> logger,
         IOptions<BackgroundTaskQueueOptions> options)
     {
-        _reader = taskQueue.Reader ?? throw new ArgumentNullException(nameof(taskQueue.Reader));
+        _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         var opts = options.Value ?? throw new ArgumentNullException(nameof(options));
@@ -59,11 +59,19 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 
         try
         {
-            // Continuously wait for items to become available in the channel.
-            while (await _reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
-                // Process all items currently in the channel.
-            while (_reader.TryRead(out var queuedTask))
+            while (!stoppingToken.IsCancellationRequested)
             {
+                QueuedTask queuedTask;
+                try
+                {
+                    queuedTask = await _taskQueue.DequeueAsync(stoppingToken).ConfigureAwait(false);
+                }
+                catch (ChannelClosedException)
+                {
+                    // The queue was completed/disposed.
+                    break;
+                }
+
                 // Wait for a concurrency slot to become available.
                 await _concurrencyLimiter.WaitAsync(stoppingToken).ConfigureAwait(false);
 

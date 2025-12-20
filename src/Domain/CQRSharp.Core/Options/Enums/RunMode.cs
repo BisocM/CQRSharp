@@ -26,15 +26,15 @@ public enum RunMode
 
     /// <summary>
     ///     Represents asynchronous execution of operations.
-    ///     The executing call does not await for task completion, thus, will always return a default result.
-    ///     In order to retrieve the results of asynchronous execution, you must subscribe to the
-    ///     <see cref="CommandCompletedNotification" />
-    ///     or the <see cref="QueryCompletedNotification{TResult}" />.
+    ///     The executing call schedules work onto the configured background task queue
+    ///     and returns a task that completes when the queued operation finishes.
+    ///     Notifications such as <see cref="CommandCompletedNotification" /> and <see cref="QueryCompletedNotification{TResult}" />
+    ///     are still published as part of normal pipeline execution.
     /// </summary>
     /// <remarks>
-    ///     In this mode, operations are executed asynchronously, meaning the initiating thread will not
-    ///     wait for the operation's completion before proceeding to the next instruction. This allows for
-    ///     non-blocking execution and can improve performance in applications where concurrency is beneficial.
+    ///     In this mode, operations are executed asynchronously on the background queue, meaning the initiating
+    ///     thread does not perform handler execution inline. This allows for centralized throttling/back-pressure
+    ///     and consistent scheduling via the queue consumer.
     /// </remarks>
     Async
 }

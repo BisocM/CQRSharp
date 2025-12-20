@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Reflection;
 using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Context;
@@ -8,13 +7,17 @@ using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Pipelines;
 
@@ -27,15 +30,24 @@ namespace CQRSharp.Core.Pipelines;
 /// <param name="requestRegistry">The registry for request metadata.</param>
 /// <param name="handlerRegistry">The registry for compiled handler invokers.</param>
 /// <param name="contextFactoryRegistry">The registry for request context factories.</param>
+/// <param name="dispatcherOptions">Configuration options controlling sync vs queued execution.</param>
+/// <param name="backgroundTaskManager">Background task queue used for queued execution.</param>
 public sealed class PipelineExecutor(
     IServiceProvider serviceProvider,
     IRequestRegistry requestRegistry,
     IHandlerRegistry handlerRegistry,
-    IContextFactoryRegistry contextFactoryRegistry) : IPipelineExecutor
+    IContextFactoryRegistry contextFactoryRegistry,
+    IOptions<DispatcherOptions> dispatcherOptions,
+    IBackgroundTaskManager backgroundTaskManager) : IPipelineExecutor
 {
     private static readonly ConcurrentDictionary<Type, int> BehaviorPriorityCache = new();
     private static readonly ConcurrentDictionary<Type, IPreHandlerAttribute[]> SortedPreHandlerCache = new();
     private static readonly ConcurrentDictionary<Type, IPostHandlerAttribute[]> SortedPostHandlerCache = new();
+
+    private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+    private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
+    private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
+
     /// <summary>
     ///     Executes the complete pipeline for a given query.
     ///     It initializes the request context, builds the pipeline by chaining behaviors,
@@ -46,7 +58,28 @@ public sealed class PipelineExecutor(
     /// <param name="query">The query object to be executed.</param>
     /// <param name="ct">A cancellation token for the operation.</param>
     /// <returns>A task that represents the asynchronous operation, containing the result of the query.</returns>
-    public async Task<TResult> ExecuteQueryAsync<TRequest, TResult>(
+    public Task<TResult> ExecuteQueryAsync<TRequest, TResult>(
+        TRequest query, CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
+        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
+        {
+            return _backgroundTaskManager.EnqueueAsync<TResult>(
+                async workerToken =>
+                {
+                    if (!ct.CanBeCanceled)
+                        return await ExecuteQueryImmediateAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
+
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
+                    return await ExecuteQueryImmediateAsync<TRequest, TResult>(query, linkedCts.Token).ConfigureAwait(false);
+                },
+                ct);
+        }
+
+        return ExecuteQueryImmediateAsync<TRequest, TResult>(query, ct);
+    }
+
+    private async Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
         TRequest query, CancellationToken ct)
         where TRequest : IQuery<TResult>
     {
@@ -54,18 +87,14 @@ public sealed class PipelineExecutor(
         InitializeRequestContext(query);
 
         // Create a new DI scope for the request to ensure services are scoped correctly (e.g., DbContext, UnitOfWork).
-        await using var scope = serviceProvider.CreateAsyncScope();
+        await using var scope = _scopeFactory.CreateAsyncScope();
         var provider = scope.ServiceProvider;
 
         // Resolve the specific handler for this request from the scoped provider.
         var handler = GetHandler(typeof(TRequest), provider);
 
-        // Construct the full pipeline of behaviors ending with the handler itself.
-        var pipeline = BuildPipeline<TRequest, TResult>(handler, provider);
-
-        // Execute the constructed pipeline.
-        var result = await pipeline(query, ct).ConfigureAwait(false);
-        return result;
+        // Execute the request through the resolved pipeline behaviors and handler.
+        return await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -77,7 +106,28 @@ public sealed class PipelineExecutor(
     /// <param name="command">The command object to be executed.</param>
     /// <param name="ct">A cancellation token for the operation.</param>
     /// <returns>A task that represents the asynchronous operation, containing the <see cref="CommandResult" />.</returns>
-    public async Task<CommandResult> ExecuteCommandAsync<TRequest>(
+    public Task<CommandResult> ExecuteCommandAsync<TRequest>(
+        TRequest command, CancellationToken ct)
+        where TRequest : ICommand
+    {
+        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
+        {
+            return _backgroundTaskManager.EnqueueAsync<CommandResult>(
+                async workerToken =>
+                {
+                    if (!ct.CanBeCanceled)
+                        return await ExecuteCommandImmediateAsync(command, workerToken).ConfigureAwait(false);
+
+                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
+                    return await ExecuteCommandImmediateAsync(command, linkedCts.Token).ConfigureAwait(false);
+                },
+                ct);
+        }
+
+        return ExecuteCommandImmediateAsync(command, ct);
+    }
+
+    private async Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
         TRequest command, CancellationToken ct)
         where TRequest : ICommand
     {
@@ -85,95 +135,138 @@ public sealed class PipelineExecutor(
         InitializeRequestContext(command);
 
         // Create a new DI scope for the request.
-        await using var scope = serviceProvider.CreateAsyncScope();
+        await using var scope = _scopeFactory.CreateAsyncScope();
         var provider = scope.ServiceProvider;
 
         // Resolve the specific handler for this request from the scoped provider.
         var handler = GetHandler(typeof(TRequest), provider);
 
-        // Construct the full pipeline of behaviors ending with the handler.
-        var pipeline = BuildPipeline<TRequest, CommandResult>(handler, provider);
+        // Execute the request through the resolved pipeline behaviors and handler.
+        return await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
+    }
 
-        // Execute the constructed pipeline.
-        var result = await pipeline(command, ct).ConfigureAwait(false);
-        return result;
+    private static bool IsExempted(Type behaviorType, ReadOnlySpan<PipelineExemptionAttribute> exemptions)
+    {
+        if (exemptions.Length == 0) return false;
+
+        var isBehaviorGeneric = behaviorType.IsGenericType;
+        var behaviorTypeDefinition = isBehaviorGeneric ? behaviorType.GetGenericTypeDefinition() : null;
+
+        foreach (var exemption in exemptions)
+        {
+            var exemptedType = exemption.ExemptedPipeline;
+
+            // Exact type match (e.g., typeof(MyBehavior<Foo, Bar>)).
+            if (exemptedType == behaviorType) return true;
+
+            // Open generic match (e.g., typeof(MyBehavior<,>)).
+            if (exemptedType.IsGenericTypeDefinition && isBehaviorGeneric && behaviorTypeDefinition == exemptedType)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>
-    ///     Constructs the request processing pipeline for a specific request type.
+    ///     Executes the request processing pipeline for a specific request type.
     ///     <para>
     ///         This method resolves all registered <see cref="IPipelineBehavior{TRequest, TResult}" /> instances
-    ///         directly from the current request's scoped service provider. It then sorts these instances in-memory
-    ///         based on the <see cref="PipelinePriorityAttribute" /> to establish the correct execution order.
-    ///         This approach is efficient and simplifies DI configuration, as behaviors only need to be registered once.
+    ///         directly from the current request's scoped service provider. It then applies request-level pipeline
+    ///         exemptions and executes the behaviors in order based on <see cref="PipelinePriorityAttribute" />.
     ///     </para>
     /// </summary>
     /// <typeparam name="TRequest">The type of the request entering the pipeline.</typeparam>
     /// <typeparam name="TResult">The result type of the request.</typeparam>
+    /// <param name="request">The request instance entering the pipeline.</param>
     /// <param name="handler">The resolved handler instance for the request.</param>
     /// <param name="services">The scoped service provider for resolving dependencies.</param>
-    /// <returns>A delegate representing the entire executable pipeline.</returns>
-    private Func<TRequest, CancellationToken, Task<TResult>> BuildPipeline<TRequest, TResult>(
+    /// <param name="cancellationToken">A cancellation token for the request.</param>
+    private Task<TResult> ExecutePipelineAsync<TRequest, TResult>(
+        TRequest request,
         object handler,
-        IServiceProvider services) where TRequest : IRequest
+        IServiceProvider services,
+        CancellationToken cancellationToken) where TRequest : IRequest
     {
-        var behaviorList = services.GetServices<IPipelineBehavior<TRequest, TResult>>().ToList();
-        if (behaviorList.Count == 0)
-            return FinalAction;
+        var resolved = services.GetServices<IPipelineBehavior<TRequest, TResult>>();
+        var behaviors = resolved as IPipelineBehavior<TRequest, TResult>[] ?? resolved.ToArray();
 
-        if (behaviorList.Count > 1)
-            behaviorList.Sort(BehaviorPriorityComparer<TRequest, TResult>.Instance);
-
-        var pipeline = (Func<TRequest, CancellationToken, Task<TResult>>)FinalAction;
-        var span = CollectionsMarshal.AsSpan(behaviorList);
-        for (var i = span.Length - 1; i >= 0; i--)
+        // Filter out behaviors that are exempted by request metadata (supports closed and open generic exemptions).
+        var exemptions = request.Metadata?.PipelineExemptions;
+        var behaviorCount = behaviors.Length;
+        if (exemptions is { Length: > 0 } && behaviorCount > 0)
         {
-            var behavior = span[i];
-            var next = pipeline;
-            pipeline = (req, ct) => behavior.Handle(req, cancellationToken => next(req, cancellationToken), ct);
-        }
-
-        return pipeline;
-
-        // This is the final action in the pipeline, responsible for executing the core business logic.
-        // It also handles invoking pre- / post-handler attributes and publishing start/completion notifications.
-        async Task<TResult> FinalAction(TRequest req, CancellationToken ct)
-        {
-            var notificationDispatcher = services.GetRequiredService<INotificationDispatcher>();
-
-            switch (req)
+            var write = 0;
+            for (var read = 0; read < behaviorCount; read++)
             {
-                // Publish notifications to signal the start of command/query handling.
-                case ICommand cmd:
-                    await notificationDispatcher.Publish(new CommandInitiatedNotification(cmd), ct);
-                    break;
-                case IQuery<TResult> qry:
-                    await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(qry), ct);
-                    break;
+                var behavior = behaviors[read];
+                if (IsExempted(behavior.GetType(), exemptions)) continue;
+                behaviors[write++] = behavior;
             }
 
-            // Execute any pre-handler logic defined via attributes on the request class.
-            await InvokePreHandleAttributes(req, services, ct);
-
-            // Invoke the actual handler to process the request.
-            var result = await HandleRequest<TResult>(req, handler, ct);
-
-            // Execute any post-handler logic defined via attributes.
-            await InvokePostHandleAttributes(req, services, ct);
-
-            switch (req)
-            {
-                // Publish notifications to signal the completion of command/query handling.
-                case ICommand cmdResult:
-                    await notificationDispatcher.Publish(new CommandCompletedNotification(cmdResult, (result as CommandResult)!), ct);
-                    break;
-                case IQuery<TResult> qryResult:
-                    await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(qryResult, result), ct);
-                    break;
-            }
-
-            return result;
+            behaviorCount = write;
         }
+
+        if (behaviorCount == 0)
+            return ExecuteFinalActionAsync<TRequest, TResult>(request, handler, services, cancellationToken);
+
+        if (behaviorCount > 1)
+            Array.Sort(behaviors, 0, behaviorCount, BehaviorPriorityComparer<TRequest, TResult>.Instance);
+
+        return InvokeBehavior(0, cancellationToken);
+
+        Task<TResult> InvokeBehavior(int index, CancellationToken ct)
+        {
+            if (index >= behaviorCount)
+                return ExecuteFinalActionAsync<TRequest, TResult>(request, handler, services, ct);
+
+            var behavior = behaviors[index];
+            return behavior.Handle(
+                request,
+                nextToken => InvokeBehavior(index + 1, nextToken),
+                ct);
+        }
+    }
+
+    private async Task<TResult> ExecuteFinalActionAsync<TRequest, TResult>(
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken) where TRequest : IRequest
+    {
+        var notificationDispatcher = services.GetRequiredService<INotificationDispatcher>();
+
+        switch (request)
+        {
+            // Publish notifications to signal the start of command/query handling.
+            case ICommand cmd:
+                await notificationDispatcher.Publish(new CommandInitiatedNotification(cmd), cancellationToken).ConfigureAwait(false);
+                break;
+            case IQuery<TResult> qry:
+                await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(qry), cancellationToken).ConfigureAwait(false);
+                break;
+        }
+
+        // Execute any pre-handler logic defined via attributes on the request class.
+        await InvokePreHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+
+        // Invoke the actual handler to process the request.
+        var result = await HandleRequest<TResult>(request, handler, cancellationToken).ConfigureAwait(false);
+
+        // Execute any post-handler logic defined via attributes.
+        await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+
+        switch (request)
+        {
+            // Publish notifications to signal the completion of command/query handling.
+            case ICommand cmdResult:
+                await notificationDispatcher.Publish(new CommandCompletedNotification(cmdResult, (result as CommandResult)!), cancellationToken).ConfigureAwait(false);
+                break;
+            case IQuery<TResult> qryResult:
+                await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(qryResult, result), cancellationToken).ConfigureAwait(false);
+                break;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -187,7 +280,7 @@ public sealed class PipelineExecutor(
     /// <exception cref="InvalidOperationException">Thrown if a handler delegate is not found for the request type.</exception>
     private async Task<TResult> HandleRequest<TResult>(object request, object handler, CancellationToken cancellationToken)
     {
-        if (!handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate))
+        if (!handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
             throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
 
         var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
@@ -204,8 +297,9 @@ public sealed class PipelineExecutor(
     {
         if (request.Metadata is null) return;
 
-        foreach (var attr in GetPreHandlers(request))
-            await attr.OnBeforeHandle(request, sp, ct).ConfigureAwait(false);
+        var preHandlers = GetPreHandlers(request);
+        for (var i = 0; i < preHandlers.Length; i++)
+            await preHandlers[i].OnBeforeHandle(request, sp, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -218,8 +312,9 @@ public sealed class PipelineExecutor(
     {
         if (request.Metadata is null) return;
 
-        foreach (var attr in GetPostHandlers(request))
-            await attr.OnAfterHandle(request, sp, ct).ConfigureAwait(false);
+        var postHandlers = GetPostHandlers(request);
+        for (var i = 0; i < postHandlers.Length; i++)
+            await postHandlers[i].OnAfterHandle(request, sp, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -270,11 +365,11 @@ public sealed class PipelineExecutor(
         requestBase.Context = contextFactory.CreateContext(requestBase);
     }
 
-    private static ReadOnlySpan<IPreHandlerAttribute> GetPreHandlers(IRequest request)
+    private static IPreHandlerAttribute[] GetPreHandlers(IRequest request)
     {
         var metadata = request.Metadata;
         if (metadata is null || metadata.PreHandlers.Length == 0)
-            return ReadOnlySpan<IPreHandlerAttribute>.Empty;
+            return [];
 
         var handlers = metadata.PreHandlers;
         if (handlers.Length <= 1)
@@ -293,11 +388,11 @@ public sealed class PipelineExecutor(
         return sorted;
     }
 
-    private static ReadOnlySpan<IPostHandlerAttribute> GetPostHandlers(IRequest request)
+    private static IPostHandlerAttribute[] GetPostHandlers(IRequest request)
     {
         var metadata = request.Metadata;
         if (metadata is null || metadata.PostHandlers.Length == 0)
-            return ReadOnlySpan<IPostHandlerAttribute>.Empty;
+            return [];
 
         var handlers = metadata.PostHandlers;
         if (handlers.Length <= 1)
@@ -337,7 +432,11 @@ public sealed class PipelineExecutor(
             if (ReferenceEquals(x, y)) return 0;
             if (x is null) return -1;
             if (y is null) return 1;
-            return x.PreHandlerExecutionPriority.CompareTo(y.PreHandlerExecutionPriority);
+
+            var byPriority = x.PreHandlerExecutionPriority.CompareTo(y.PreHandlerExecutionPriority);
+            if (byPriority != 0) return byPriority;
+
+            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
         }
     }
 
@@ -353,7 +452,11 @@ public sealed class PipelineExecutor(
             if (ReferenceEquals(x, y)) return 0;
             if (x is null) return -1;
             if (y is null) return 1;
-            return x.PostHandlerExecutionPriority.CompareTo(y.PostHandlerExecutionPriority);
+
+            var byPriority = x.PostHandlerExecutionPriority.CompareTo(y.PostHandlerExecutionPriority);
+            if (byPriority != 0) return byPriority;
+
+            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
         }
     }
 
@@ -373,7 +476,10 @@ public sealed class PipelineExecutor(
 
             var left = GetBehaviorPriority(x.GetType());
             var right = GetBehaviorPriority(y.GetType());
-            return left.CompareTo(right);
+            var byPriority = left.CompareTo(right);
+            if (byPriority != 0) return byPriority;
+
+            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
         }
     }
 }

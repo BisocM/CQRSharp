@@ -9,7 +9,6 @@ using CQRSharp.Abstractions.Data.Models.Outbox;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -24,8 +23,11 @@ namespace CQRSharp.Pipelines.Types.Transactions;
 [PipelinePriority(100)]
 public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     ILogger<UnitOfWorkBehavior<TRequest, TResult>> logger,
-    IServiceProvider serviceProvider,
-    IOptions<UnitOfWorkOptions> options)
+    IUnitOfWork unitOfWork,
+    IOutbox outbox,
+    IOptions<UnitOfWorkOptions> options,
+    IOutboxStore? outboxStore = null,
+    INotificationSerializer? serializer = null)
     : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
 {
     /// <inheritdoc />
@@ -37,16 +39,14 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         using var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
         activity?.SetTag("cqrsharp.request_type", typeof(TRequest).Name);
 
-        await using var scope = serviceProvider.CreateAsyncScope();
-        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        if (unitOfWork is IExplicitUnitOfWork explicitUow)
+            return await HandleExplicitTransactionAsync(request, next, cancellationToken, activity, explicitUow).ConfigureAwait(false);
 
-        if (uow is IExplicitUnitOfWork explicitUow) return await HandleExplicitTransactionAsync(request, next, cancellationToken, activity, scope.ServiceProvider, explicitUow);
-
-        return await HandleImplicitTransactionAsync(request, next, cancellationToken, activity, scope.ServiceProvider, uow);
+        return await HandleImplicitTransactionAsync(request, next, cancellationToken, activity).ConfigureAwait(false);
     }
 
     private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken,
-        Activity? activity, IServiceProvider provider, IExplicitUnitOfWork explicitUow)
+        Activity? activity, IExplicitUnitOfWork explicitUow)
     {
         if (explicitUow.HasActiveTransaction)
         {
@@ -65,7 +65,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         {
             var response = await next(cancellationToken).ConfigureAwait(false);
 
-            await SaveNotificationsFromOutboxAsync(provider, cancellationToken).ConfigureAwait(false);
+            await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
 
             await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
             activity?.AddEvent(new ActivityEvent("Transaction Committed"));
@@ -85,7 +85,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     }
 
     private async Task<TResult> HandleImplicitTransactionAsync(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken,
-        Activity? activity, IServiceProvider provider, IUnitOfWork uow)
+        Activity? activity)
     {
         logger.LogTrace("Beginning implicit transaction for {RequestName}", typeof(TRequest).Name);
         try
@@ -94,10 +94,10 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
 
             if (request is ITransactionalRequest)
             {
-                await SaveNotificationsFromOutboxAsync(provider, cancellationToken).ConfigureAwait(false);
+                await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
 
                 logger.LogTrace("Committing implicit transaction for {RequestName}", typeof(TRequest).Name);
-                await uow.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 activity?.AddEvent(new ActivityEvent("Implicit Transaction Committed"));
             }
 
@@ -122,23 +122,17 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         };
     }
 
-    private async Task SaveNotificationsFromOutboxAsync(IServiceProvider provider, CancellationToken cancellationToken)
+    private async Task SaveNotificationsFromOutboxAsync(CancellationToken cancellationToken)
     {
-        var outbox = provider.GetService<IOutbox>();
-        if (outbox is null) return; // Outbox not configured for this request, do nothing.
-
-        var notifications = outbox.GetNotifications();
-        if (!notifications.Any()) return;
-
-        var outboxStore = provider.GetService<IOutboxStore>();
-        var serializer = provider.GetService<INotificationSerializer>();
+        var notifications = outbox.Drain();
+        if (notifications.Count == 0) return;
 
         if (outboxStore is null || serializer is null)
             throw new InvalidOperationException("IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
 
         var messages = notifications.Select(n => new OutboxMessage(
             Guid.NewGuid(),
-            n.GetType().FullName!,
+            serializer.GetNotificationName(n.GetType()),
             serializer.Serialize(n),
             DateTime.UtcNow,
             OutboxMessageStatus.Pending,
