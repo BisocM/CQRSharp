@@ -7,14 +7,14 @@ namespace CQRSharp.Tests.Shared;
 /// </summary>
 /// <param name="requestId">The unique identifier for the request.</param>
 /// <param name="userId">The identifier for the user initiating the request.</param>
-public class TestRateLimitedContext(object requestId, object? userId) : IRateLimitedContext
+public class TestRateLimitedContext(string requestId, string userId) : IRateLimitedContext
 {
     /// <inheritdoc />
     public DateTime CreatedAt { get; } = DateTime.UtcNow;
 
     /// <inheritdoc />
-    public object RequestId { get; set; } = requestId;
+    public string RequestId { get; set; } = requestId;
 
     /// <inheritdoc />
-    public object? UserId { get; set; } = userId;
+    public string UserId { get; set; } = userId;
 }

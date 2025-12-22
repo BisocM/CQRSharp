@@ -1,6 +1,5 @@
 ﻿using System.Data;
 using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Outbox;
@@ -20,7 +19,6 @@ namespace CQRSharp.Pipelines.Types.Transactions;
 /// </summary>
 /// <typeparam name="TRequest">The type of the request.</typeparam>
 /// <typeparam name="TResult">The type of the result.</typeparam>
-[PipelinePriority(100)]
 public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     ILogger<UnitOfWorkBehavior<TRequest, TResult>> logger,
     IUnitOfWork unitOfWork,
@@ -28,8 +26,10 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     IOptions<UnitOfWorkOptions> options,
     IOutboxStore? outboxStore = null,
     INotificationSerializer? serializer = null)
-    : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+    : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    public int PipelineExecutionPriority => 100;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {

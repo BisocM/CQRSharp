@@ -11,7 +11,6 @@
 using CQRSharp.Sample.Application.Pipelines;
 using CQRSharp.Sample.Infrastructure.Factories;
 using CQRSharp.Sample.Infrastructure.Persistence;
-using CQRSharp.Sample.Infrastructure.Serialization;
 using CQRSharp.Sample.Infrastructure.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,11 +26,9 @@ public class Program
             .ConfigureServices((_, services) =>
             {
                 // Core CQRSharp services
-                services.AddCqrs(
+                services.AddCqrsGenerated(
                         opts => { opts.EnableMetrics = true; },
-                        opts => { opts.Mode = OutboxMode.Transactional; })
-                    .AddGenerated() // Adds source-generated handlers, requests, pipelines etc.
-                    .AddNotificationSerializer<CustomJsonSerializer>();
+                        opts => { opts.Mode = OutboxMode.Transactional; });
 
 	                // Register singleton data stores for the sample
 	                services.AddSingleton<CustomInMemoryUserStore>();

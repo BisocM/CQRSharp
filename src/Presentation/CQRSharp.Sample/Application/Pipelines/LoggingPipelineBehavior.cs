@@ -1,17 +1,19 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Application.Pipelines;
 
-// Use a high-priority value to ensure this runs early in the pipeline.
-[PipelinePriority(-100)]
-public class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineBehavior<TRequest, TResult>> logger)
-    : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+public sealed class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineBehavior<TRequest, TResult>> logger)
+    : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+    public int PipelineExecutionPriority => -100;
+
+    public async Task<TResult> Handle(
+        TRequest request,
+        Func<CancellationToken, Task<TResult>> next,
+        CancellationToken cancellationToken)
     {
         var requestName = typeof(TRequest).Name;
         var stopwatch = Stopwatch.StartNew();
@@ -19,9 +21,7 @@ public class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineB
         try
         {
             logger.LogInformation("[LoggingPipeline] Handling request {RequestName}: {Request}", requestName, request);
-
-            var result = await next(cancellationToken);
-            return result;
+            return await next(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -31,7 +31,11 @@ public class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineB
         finally
         {
             stopwatch.Stop();
-            logger.LogInformation("[LoggingPipeline] Finished request {RequestName} in {ElapsedMilliseconds}ms", requestName, stopwatch.ElapsedMilliseconds);
+            logger.LogInformation(
+                "[LoggingPipeline] Finished request {RequestName} in {ElapsedMilliseconds}ms",
+                requestName,
+                stopwatch.ElapsedMilliseconds);
         }
     }
 }
+

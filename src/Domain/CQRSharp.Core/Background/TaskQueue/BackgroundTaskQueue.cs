@@ -66,15 +66,15 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     public BackgroundTaskQueue(
         IOptions<BackgroundTaskQueueOptions> options,
         IDirectNotificationDispatcher dispatcher,
-        IHostApplicationLifetime lifetime,
         IQueueMetricsReporter metrics,
-        ILogger<BackgroundTaskQueue> logger)
+        ILogger<BackgroundTaskQueue> logger,
+        IHostApplicationLifetime? lifetime = null)
     {
         _options = options.Value ?? throw new ArgumentNullException(nameof(options));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _shutdownToken = lifetime.ApplicationStopping;
+        _shutdownToken = lifetime?.ApplicationStopping ?? _completion.Token;
         _metricsEnabled = _options.EnableMetrics;
 
         if (_options.Capacity <= 0)

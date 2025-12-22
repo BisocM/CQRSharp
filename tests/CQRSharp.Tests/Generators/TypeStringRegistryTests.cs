@@ -1,47 +1,53 @@
-﻿using System.Reflection;
+using CQRSharp.Abstractions.Data.Attributes.Notifications;
+using CQRSharp.Abstractions.Data.Attributes.Pipelines;
+using CQRSharp.Abstractions.Data.Interfaces.Context;
+using CQRSharp.Abstractions.Data.Interfaces.Handlers;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Data.Interfaces.Validation;
+using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Data.Models.Requests;
 using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Core.Factories;
+using CQRSharp.Core.Pipelines;
 
 namespace CQRSharp.Tests.Generators;
 
-/// <summary>
-///     Contains tests to ensure that the type strings defined in <see cref="TypeStrings" />
-///     resolve to actual, valid types within their specified assemblies. This is crucial
-///     for the correctness of the source generators that rely on them.
-/// </summary>
-public class TypeStringRegistryTests
+public sealed class TypeStringRegistryTests
 {
+    public static IEnumerable<object[]> Cases =>
+    [
+        // CQRSharp.Abstractions
+        [TypeStrings.ICommand, "CQRSharp.Abstractions", typeof(ICommand)],
+        [TypeStrings.IQuery, "CQRSharp.Abstractions", typeof(IQuery<>)],
+        [TypeStrings.RequestBaseGeneric, "CQRSharp.Abstractions", typeof(RequestBase<>)],
+        [TypeStrings.ICommandHandler1, "CQRSharp.Abstractions", typeof(ICommandHandler<>)],
+        [TypeStrings.ICommandHandler2, "CQRSharp.Abstractions", typeof(ICommandHandler<,>)],
+        [TypeStrings.IQueryHandler2, "CQRSharp.Abstractions", typeof(IQueryHandler<,>)],
+        [TypeStrings.IQueryHandler3, "CQRSharp.Abstractions", typeof(IQueryHandler<,,>)],
+        [TypeStrings.INotification, "CQRSharp.Abstractions", typeof(INotification)],
+        [TypeStrings.INotificationHandler, "CQRSharp.Abstractions", typeof(INotificationHandler<>)],
+        [TypeStrings.IRequestValidator1, "CQRSharp.Abstractions", typeof(IRequestValidator<>)],
+        [TypeStrings.IPreHandlerAttribute, "CQRSharp.Abstractions", typeof(IPreHandlerAttribute)],
+        [TypeStrings.IPostHandlerAttribute, "CQRSharp.Abstractions", typeof(IPostHandlerAttribute)],
+        [TypeStrings.PipelineExemptionAttribute, "CQRSharp.Abstractions", typeof(PipelineExemptionAttribute)],
+        [TypeStrings.NotificationNameAttribute, "CQRSharp.Abstractions", typeof(NotificationNameAttribute)],
+        [TypeStrings.RequestContextBase, "CQRSharp.Abstractions", typeof(RequestContextBase)],
+        [TypeStrings.CommandResult, "CQRSharp.Abstractions", typeof(CommandResult)],
+        [TypeStrings.PropertySensitivity, "CQRSharp.Abstractions", typeof(PropertySensitivity)],
+        // CQRSharp.Core
+        [TypeStrings.IPipelineBehavior, "CQRSharp.Core", typeof(IPipelineBehavior<,>)],
+        [TypeStrings.IRequestContextFactory, "CQRSharp.Core", typeof(IRequestContextFactory<>)],
+    ];
+
     [Theory]
-    // CQRSharp.Abstractions
-    [InlineData(TypeStrings.ICommand, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IQuery, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.RequestBaseGeneric, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.ICommandHandler1, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.ICommandHandler2, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IQueryHandler2, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IQueryHandler3, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.INotification, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.INotificationHandler, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IRequestValidator1, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IPreHandlerAttribute, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.IPostHandlerAttribute, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.PipelineExemptionAttribute, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.PipelinePriorityAttribute, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.NotificationNameAttribute, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.RequestContextBase, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.CommandResult, "CQRSharp.Abstractions")]
-    [InlineData(TypeStrings.PropertySensitivity, "CQRSharp.Abstractions")]
-    // CQRSharp.Core
-    [InlineData(TypeStrings.IPipelineBehavior, "CQRSharp.Core")]
-    [InlineData(TypeStrings.IRequestContextFactory, "CQRSharp.Core")]
-    public void TypeString_ShouldResolveToValidType(string metadataName, string assemblyName)
+    [MemberData(nameof(Cases))]
+    public void TypeString_ShouldResolveToValidType(string metadataName, string assemblyName, Type runtimeType)
     {
-        // Arrange
-        var assembly = Assembly.Load(assemblyName);
-
-        // Act
-        var resolvedType = assembly.GetType(metadataName);
-
-        // Assert
-        Assert.NotNull(resolvedType); // This ensures the type name and namespace are correct and the type exists.
+        Assert.Equal(metadataName, runtimeType.FullName);
+        Assert.Equal(assemblyName, runtimeType.Assembly.GetName().Name);
     }
 }
+

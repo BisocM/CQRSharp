@@ -35,13 +35,14 @@ public sealed partial class CqrsSourceGenerator
         if (notificationHandlerDef is not null)
         {
             var notificationTypes = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false })
+                .Where(c => c is { IsAbstract: false, IsGenericType: false } && IsAccessibleFromGeneratedCode(c))
                 .SelectMany(GetInterfacesAndBaseInterfaces)
                 .Where(i => i is { IsGenericType: true, TypeArguments.Length: 1 } &&
                             SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, notificationHandlerDef))
                 .Select(i => i.TypeArguments[0])
                 .Where(t => t is not null)
                 .Select(t => t!)
+                .Where(IsAccessibleFromGeneratedCode)
                 .Distinct(SymbolEqualityComparer.Default)
                 .Cast<ITypeSymbol>()
                 .OrderBy(t => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))

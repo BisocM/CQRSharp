@@ -1,5 +1,3 @@
-﻿// CQRSharp.Tests/Core/NotificationDispatcherTests.cs
-
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Abstractions.Data.Interfaces.Transactions;
@@ -13,10 +11,7 @@ using Moq;
 
 namespace CQRSharp.Tests.Core;
 
-/// <summary>
-///     Contains unit tests for the <see cref="NotificationDispatcher" /> class.
-/// </summary>
-public class NotificationDispatcherTests
+public sealed class NotificationDispatcherTests
 {
     private readonly Mock<IDirectNotificationDispatcher> _mockDirectDispatcher = new();
     private readonly Mock<IOutbox> _mockOutbox = new();
@@ -26,19 +21,34 @@ public class NotificationDispatcherTests
 
     private sealed record UnstableTestNotification : INotification;
 
-    /// <summary>
-    ///     Builds a service provider with mocked dependencies for testing the dispatcher.
-    /// </summary>
-    private IServiceProvider BuildServiceProvider(Action<OutboxOptions> configureOptions, bool hasActiveTransaction)
+    private sealed class TestStableNotificationNameProvider : IStableNotificationNameProvider
+    {
+        public bool TryGetStableName(Type notificationType, out string stableName)
+        {
+            if (notificationType == typeof(TestNotification))
+            {
+                stableName = "test.notification";
+                return true;
+            }
+
+            stableName = string.Empty;
+            return false;
+        }
+    }
+
+    private IServiceProvider BuildServiceProvider(Action<OutboxOptions> configureOptions, bool hasActiveTransaction, bool registerOutbox = true)
     {
         var services = new ServiceCollection();
         services.Configure(configureOptions);
 
         services.AddSingleton(_mockDirectDispatcher.Object);
-        services.AddScoped(_ => _mockOutbox.Object);
+        services.AddSingleton<IStableNotificationNameProvider, TestStableNotificationNameProvider>();
 
         _mockUow.Setup(u => u.HasActiveTransaction).Returns(hasActiveTransaction);
         services.AddScoped<IUnitOfWork>(_ => _mockUow.Object);
+
+        if (registerOutbox)
+            services.AddScoped(_ => _mockOutbox.Object);
 
         return services.BuildServiceProvider();
     }
@@ -46,14 +56,14 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsDisabled_DispatchesDirectly()
     {
-        // Arrange
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Disabled, true);
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Disabled, hasActiveTransaction: true);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        // Act
         await dispatcher.Publish(_testNotification, CancellationToken.None);
 
-        // Assert
         _mockDirectDispatcher.Verify(d => d.Publish(_testNotification, It.IsAny<CancellationToken>()), Times.Once);
         _mockOutbox.Verify(o => o.Add(It.IsAny<INotification>()), Times.Never);
     }
@@ -61,14 +71,14 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsEnabled_AddsToOutbox()
     {
-        // Arrange
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false);
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        // Act
         await dispatcher.Publish(_testNotification, CancellationToken.None);
 
-        // Assert
         _mockOutbox.Verify(o => o.Add(_testNotification), Times.Once);
         _mockDirectDispatcher.Verify(d => d.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -76,14 +86,14 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenModeIsTransactional_And_NoTransaction_DispatchesDirectly()
     {
-        // Arrange
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, false);
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, hasActiveTransaction: false);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        // Act
         await dispatcher.Publish(_testNotification, CancellationToken.None);
 
-        // Assert
         _mockDirectDispatcher.Verify(d => d.Publish(_testNotification, It.IsAny<CancellationToken>()), Times.Once);
         _mockOutbox.Verify(o => o.Add(It.IsAny<INotification>()), Times.Never);
     }
@@ -91,14 +101,14 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenModeIsTransactional_And_HasTransaction_AddsToOutbox()
     {
-        // Arrange
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, true);
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, hasActiveTransaction: true);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        // Act
         await dispatcher.Publish(_testNotification, CancellationToken.None);
 
-        // Assert
         _mockOutbox.Verify(o => o.Add(_testNotification), Times.Once);
         _mockDirectDispatcher.Verify(d => d.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -106,17 +116,12 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxEnabled_But_IOutboxNotRegistered_ThrowsException()
     {
-        // Arrange
-        var services = new ServiceCollection();
-        services.Configure<OutboxOptions>(opts => opts.Mode = OutboxMode.Enabled);
-        services.AddSingleton(_mockDirectDispatcher.Object);
-        _mockUow.Setup(u => u.HasActiveTransaction).Returns(false);
-        services.AddScoped<IUnitOfWork>(_ => _mockUow.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false, registerOutbox: false);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        var provider = services.BuildServiceProvider();
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
-
-        // Act & Assert
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => dispatcher.Publish(_testNotification));
         Assert.Contains("IOutbox service is not registered", ex.Message);
     }
@@ -124,15 +129,16 @@ public class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsEnabled_ButNotificationHasNoStableName_DispatchesDirectly()
     {
-        // Arrange
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false);
-        var dispatcher = new NotificationDispatcher(provider, provider.GetRequiredService<IOptions<OutboxOptions>>(), _mockDirectDispatcher.Object);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false);
+        var dispatcher = new NotificationDispatcher(
+            provider,
+            provider.GetRequiredService<IOptions<OutboxOptions>>(),
+            _mockDirectDispatcher.Object);
 
-        // Act
         await dispatcher.Publish(_unstableNotification, CancellationToken.None);
 
-        // Assert
         _mockDirectDispatcher.Verify(d => d.Publish(_unstableNotification, It.IsAny<CancellationToken>()), Times.Once);
         _mockOutbox.Verify(o => o.Add(It.IsAny<INotification>()), Times.Never);
     }
 }
+

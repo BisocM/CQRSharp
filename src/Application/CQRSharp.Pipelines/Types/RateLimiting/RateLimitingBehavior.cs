@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Telemetry;
@@ -28,68 +27,67 @@ namespace CQRSharp.Pipelines.Types.RateLimiting;
 ///     This behavior should be integrated into a pipeline as part of processing requests.
 /// </example>
 /// <seealso cref="IPipelineBehavior{TRequest,TResult}" />
-[PipelinePriority(int.MinValue)]
 public sealed class RateLimitingBehavior<TRequest, TResult>(
     ILogger<RateLimitingBehavior<TRequest, TResult>> logger,
     RateLimiter rateLimiter)
-    : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+    : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    public int PipelineExecutionPriority => int.MinValue;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
         // Creates a trace activity for the rate limiting check.
         using var activity = PipelineTelemetry.StartActivity("RateLimiting.Check", request);
+        ArgumentNullException.ThrowIfNull(request);
 
-        //Ensure the request can be cast to RequestBase for identifier extraction
-        if (request.Context is not IRateLimitedContext baseRequest)
+        // Rate limiting is explicitly enabled by providing a context that implements IRateLimitedContext.
+        if (request.Context is not IRateLimitedContext rateLimitedContext)
         {
-            logger.LogError(
-                "Rate limiting failed: request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
-            // Mark the activity as failed due to a configuration error.
-            activity?.SetStatus(ActivityStatusCode.Error, "Invalid request context for rate limiting.");
-            throw new InvalidOperationException(
-                "Request must inherit from RequestBase<IRateLimitedContext> to support rate limiting.");
+            activity?.SetStatus(ActivityStatusCode.Ok, "Rate limiting skipped (no IRateLimitedContext).");
+            return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        if (baseRequest.UserId == null || baseRequest.RequestId == null)
+        if (string.IsNullOrWhiteSpace(rateLimitedContext.UserId) ||
+            string.IsNullOrWhiteSpace(rateLimitedContext.RequestId))
         {
-            logger.LogWarning("User or Request identifier could not be determined for request.");
+            logger.LogError("Rate limiting failed: UserId/RequestId missing from IRateLimitedContext.");
             // Mark the activity as failed due to missing identifiers.
             activity?.SetStatus(ActivityStatusCode.Error, "User or Request identifier not found in context.");
             throw new InvalidOperationException("User or Request identifier could not be determined for rate limiting.");
         }
 
         // Add identifiers to the activity trace for correlation.
-        activity?.SetTag("ratelimit.user_id", baseRequest.UserId);
-        activity?.SetTag("ratelimit.request_id", baseRequest.RequestId);
+        activity?.SetTag("ratelimit.user_id", rateLimitedContext.UserId);
+        activity?.SetTag("ratelimit.request_id", rateLimitedContext.RequestId);
 
         logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.",
-            baseRequest.UserId,
-            baseRequest.RequestId);
+            rateLimitedContext.UserId,
+            rateLimitedContext.RequestId);
 
         //Apply rate limiting based on the user identifier
         var commandName = request.GetType().Name;
         var isAllowed = rateLimiter.AllowRequest(
-            (string)baseRequest.UserId,
+            rateLimitedContext.UserId,
             commandName
         );
         if (!isAllowed)
         {
             logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
-                baseRequest.UserId, baseRequest.RequestId, baseRequest.GetType().Name);
+                rateLimitedContext.UserId, rateLimitedContext.RequestId, request.GetType().Name);
 
             // Record that the request was throttled and mark the activity as failed.
             activity?.AddEvent(new ActivityEvent("RequestThrottled"));
             activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
-            throw new RateLimitExceededException(baseRequest, "Rate limit exceeded for user.");
+            throw new RateLimitExceededException(rateLimitedContext, "Rate limit exceeded for user.");
         }
 
         logger.LogInformation("Request {RequestId} for user {Identifier} passed rate limiting check.",
-            baseRequest.RequestId, baseRequest.UserId);
+            rateLimitedContext.RequestId, rateLimitedContext.UserId);
 
         // Mark the activity as successful before proceeding.
         activity?.SetStatus(ActivityStatusCode.Ok);
-        return await next(cancellationToken);
+        return await next(cancellationToken).ConfigureAwait(false);
     }
 }

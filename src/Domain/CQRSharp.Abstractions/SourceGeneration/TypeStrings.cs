@@ -29,7 +29,6 @@ public static class TypeStrings
     public const string IPreHandlerAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.IPreHandlerAttribute";
     public const string IPostHandlerAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.IPostHandlerAttribute";
     public const string PipelineExemptionAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelineExemptionAttribute";
-    public const string PipelinePriorityAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelinePriorityAttribute";
     public const string NotificationNameAttribute = "CQRSharp.Abstractions.Data.Attributes.Notifications.NotificationNameAttribute";
 
     // Abstractions - Context & Models

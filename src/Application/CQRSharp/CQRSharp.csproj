@@ -33,8 +33,17 @@
     <ItemGroup>
         <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
-        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+                          PrivateAssets="all"/>
         <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Ship the source generator transitively from the meta-package for plug-and-play AOT support. -->
+        <None Include="..\..\Infrastructure\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs"
+              Visible="false" />
     </ItemGroup>
 
 </Project>

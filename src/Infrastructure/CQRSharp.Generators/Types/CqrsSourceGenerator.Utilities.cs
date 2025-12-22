@@ -7,6 +7,19 @@ namespace CQRSharp.Generators.Types;
 
 public sealed partial class CqrsSourceGenerator
 {
+    private static bool IsAccessibleFromGeneratedCode(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is not INamedTypeSymbol namedTypeSymbol) return false;
+
+        for (INamedTypeSymbol? current = namedTypeSymbol; current is not null; current = current.ContainingType)
+        {
+            if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     ///     Traverses a type's hierarchy to find all unique interfaces it implements, including interfaces of its base types.
     /// </summary>
@@ -79,7 +92,9 @@ public sealed partial class CqrsSourceGenerator
     private static string GenerateAttributeArrayCode(ITypeSymbol requestTypeSymbol, INamedTypeSymbol attributeInterfaceSymbol, string fullyQualifiedInterfaceName)
     {
         var attributeInstances = requestTypeSymbol.GetAttributes()
-            .Where(attr => attr.AttributeClass != null && InheritsOrImplements(attr.AttributeClass, attributeInterfaceSymbol))
+            .Where(attr => attr.AttributeClass != null &&
+                           IsAccessibleFromGeneratedCode(attr.AttributeClass) &&
+                           InheritsOrImplements(attr.AttributeClass, attributeInterfaceSymbol))
             .ToList();
 
         if (!attributeInstances.Any()) return $"System.Array.Empty<{fullyQualifiedInterfaceName}>()";

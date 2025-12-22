@@ -1,6 +1,4 @@
 ﻿using System.Collections.Concurrent;
-using System.Reflection;
-using CQRSharp.Abstractions.Data.Attributes.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Outbox;
 using CQRSharp.Abstractions.Data.Interfaces.Transactions;
@@ -70,11 +68,20 @@ public sealed class NotificationDispatcher : INotificationDispatcher
 
         if (!useOutbox) return _directDispatcher.Publish(notification, cancellationToken);
 
+        var stableNameProvider = _provider.GetService<IStableNotificationNameProvider>();
+        if (stableNameProvider is null)
+            return _directDispatcher.Publish(notification, cancellationToken);
+
         // Durable storage requires a stable notification name. We treat this as the opt-in signal
         // for the outbox (keeps internal/framework notifications in-process and avoids fragile serialization).
-        if (!HasStableNameCache.GetOrAdd(
-                notification.GetType(),
-                static t => t.GetCustomAttribute<NotificationNameAttribute>() is not null))
+        var notificationType = notification.GetType();
+        if (!HasStableNameCache.TryGetValue(notificationType, out var hasStableName))
+        {
+            hasStableName = stableNameProvider.TryGetStableName(notificationType, out _);
+            HasStableNameCache.TryAdd(notificationType, hasStableName);
+        }
+
+        if (!hasStableName)
             return _directDispatcher.Publish(notification, cancellationToken);
 
         var outbox = _provider.GetService<IOutbox>();

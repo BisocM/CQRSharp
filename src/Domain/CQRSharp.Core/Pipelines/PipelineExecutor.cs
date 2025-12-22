@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Reflection;
 using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Context;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
@@ -40,9 +39,10 @@ public sealed class PipelineExecutor(
     IOptions<DispatcherOptions> dispatcherOptions,
     IBackgroundTaskManager backgroundTaskManager) : IPipelineExecutor
 {
-    private static readonly ConcurrentDictionary<Type, int> BehaviorPriorityCache = new();
     private static readonly ConcurrentDictionary<Type, IPreHandlerAttribute[]> SortedPreHandlerCache = new();
     private static readonly ConcurrentDictionary<Type, IPostHandlerAttribute[]> SortedPostHandlerCache = new();
+
+    private const int DefaultBehaviorPriority = int.MaxValue / 2;
 
     private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
     private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
@@ -172,7 +172,8 @@ public sealed class PipelineExecutor(
     ///     <para>
     ///         This method resolves all registered <see cref="IPipelineBehavior{TRequest, TResult}" /> instances
     ///         directly from the current request's scoped service provider. It then applies request-level pipeline
-    ///         exemptions and executes the behaviors in order based on <see cref="PipelinePriorityAttribute" />.
+    ///         exemptions and executes the behaviors in a deterministic order when they implement
+    ///         <see cref="IPrioritizedPipelineBehavior" />.
     ///     </para>
     /// </summary>
     /// <typeparam name="TRequest">The type of the request entering the pipeline.</typeparam>
@@ -411,15 +412,6 @@ public sealed class PipelineExecutor(
         return sorted;
     }
 
-    private static int GetBehaviorPriority(Type behaviorType)
-    {
-        return BehaviorPriorityCache.GetOrAdd(behaviorType, static type =>
-        {
-            var attribute = type.GetCustomAttribute<PipelinePriorityAttribute>();
-            return attribute?.Priority ?? PipelinePriorityAttribute.DefaultPriority;
-        });
-    }
-
     private sealed class PreHandlerPriorityComparer : IComparer<IPreHandlerAttribute>
     {
         public static PreHandlerPriorityComparer Instance { get; } = new();
@@ -474,8 +466,8 @@ public sealed class PipelineExecutor(
             if (x is null) return -1;
             if (y is null) return 1;
 
-            var left = GetBehaviorPriority(x.GetType());
-            var right = GetBehaviorPriority(y.GetType());
+            var left = x is IPrioritizedPipelineBehavior lp ? lp.PipelineExecutionPriority : DefaultBehaviorPriority;
+            var right = y is IPrioritizedPipelineBehavior rp ? rp.PipelineExecutionPriority : DefaultBehaviorPriority;
             var byPriority = left.CompareTo(right);
             if (byPriority != 0) return byPriority;
 

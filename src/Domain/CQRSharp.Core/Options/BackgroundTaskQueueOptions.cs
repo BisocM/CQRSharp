@@ -81,7 +81,4 @@ public sealed class BackgroundTaskQueueOptions
     ///     Default is 30 seconds.
     /// </summary>
     public TimeSpan ShutdownTimeout { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>Interval between successive metric log lines.</summary>
-    public TimeSpan MetricLogInterval { get; set; } = TimeSpan.FromSeconds(5);
 }

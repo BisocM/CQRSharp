@@ -25,9 +25,22 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 
             try
             {
+                var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
+
                 // Generate the DI registration helper
-                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!);
+                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc);
                 spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
+
+                // Generate the one-call DI bootstrap (AddCqrs + AddGenerated)
+                var bootstrapSourceCode = GenerateBootstrap();
+                spc.AddSource("CqrsGeneratedBootstrap.g.cs", SourceText.From(bootstrapSourceCode, Encoding.UTF8));
+
+                // Generate AOT-safe outbox notification JSON serialization (only for stable-name notifications).
+                if (stableNotifications.Length > 0)
+                {
+                    var outboxSerializerSourceCode = GenerateOutboxNotificationSerializer(stableNotifications);
+                    spc.AddSource("CqrsGeneratedOutboxNotificationSerializer.g.cs", SourceText.From(outboxSerializerSourceCode, Encoding.UTF8));
+                }
 
                 // Generate the AOT-safe dispatcher
                 var dispatcherSourceCode = GenerateDispatcher(compilation, candidateClasses!);

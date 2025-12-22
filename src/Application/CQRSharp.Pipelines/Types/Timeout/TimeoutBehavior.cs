@@ -33,9 +33,10 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
         ArgumentNullException.ThrowIfNull(request);
 
         using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout);
-        var combinedCancellationToken = CancellationTokenSource.CreateLinkedTokenSource(
+        using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            timeoutCancellationTokenSource.Token).Token;
+            timeoutCancellationTokenSource.Token);
+        var combinedCancellationToken = linkedCancellationTokenSource.Token;
 
         logger.LogInformation("Timeout for {ReqName} set for {TimeoutMilliseconds}ms", request.GetType().Name,
             timeout.TotalMilliseconds);

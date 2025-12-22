@@ -143,11 +143,29 @@ public class RateLimitingBehaviorTests
         _output.WriteLine("[PASS] Users u6 and u7 have separate buckets.");
     }
 
-    [Fact(DisplayName = "Null user: throws InvalidOperationException")]
-    public async Task NullUser_Throws()
+    [Fact(DisplayName = "No IRateLimitedContext: behavior is a no-op")]
+    public async Task NoRateLimitedContext_NoOp()
     {
         // Arrange
-        var ctx = new TestRateLimitedContext("r0", null);
+        var limiter = new RateLimiter(Options.Create(_options));
+        var behavior = new RateLimitingBehavior<TestCommand, object>(
+            new Mock<ILogger<RateLimitingBehavior<TestCommand, object>>>().Object,
+            limiter);
+
+        var request = new TestCommand();
+
+        // Act
+        var result = await behavior.Handle(request, _ => Task.FromResult<object>(new object()), CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+    }
+
+    [Fact(DisplayName = "Missing user: throws InvalidOperationException")]
+    public async Task MissingUser_Throws()
+    {
+        // Arrange
+        var ctx = new TestRateLimitedContext("r0", string.Empty);
         var req = new TestRateLimitedCommand { Context = ctx };
 
         // Act

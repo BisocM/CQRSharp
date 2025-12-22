@@ -11,11 +11,11 @@ public interface IRateLimitedContext : IRequestContext
     /// <summary>
     ///     The ID of the request. May be custom-defined by the user in their respective context factory.
     /// </summary>
-    public object RequestId { get; set; }
+    public string RequestId { get; set; }
 
     /// <summary>
     ///     The ID of the user to whom the request belongs to. May be custom-defined by the user in their respective context
     ///     factory.
     /// </summary>
-    public object UserId { get; set; }
+    public string UserId { get; set; }
 }
