@@ -43,7 +43,7 @@ public class RequestRegistryTests
         var map = new ConcurrentDictionary<Type, RequestMetadata>();
         var requestType = typeof(TestCommand);
         var handlerType = typeof(TestCommandHandler);
-        var metadata = new RequestMetadata(requestType, handlerType, [], [], [], [], null, null);
+        var metadata = new RequestMetadata(requestType, handlerType, [], [], [], null, null);
         map[requestType] = metadata;
         var registry = new RequestRegistry(map);
 
@@ -68,7 +68,7 @@ public class RequestRegistryTests
         var map = new ConcurrentDictionary<Type, RequestMetadata>();
         var requestType = typeof(TestCommand);
         var handlerType = typeof(TestCommandHandler);
-        var metadata = new RequestMetadata(requestType, handlerType, [], [], [], [], null, null);
+        var metadata = new RequestMetadata(requestType, handlerType, [], [], [], null, null);
         map[requestType] = metadata;
         var registry = new RequestRegistry(map);
 
@@ -90,4 +90,3 @@ public class RequestRegistryTests
         Assert.Null(result);
     }
 }
-

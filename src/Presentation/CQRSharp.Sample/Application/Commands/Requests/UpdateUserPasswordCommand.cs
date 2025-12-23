@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Sample.Application.Contexts;
 
@@ -8,5 +7,5 @@ public class UpdateUserPasswordCommand(Guid userId, string newPassword) : Comman
 {
     public Guid UserId { get; } = userId;
 
-    [SensitiveData] public string NewPassword { get; } = newPassword;
+    public string NewPassword { get; } = newPassword;
 }

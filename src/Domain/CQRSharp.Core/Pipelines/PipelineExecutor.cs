@@ -25,7 +25,7 @@ namespace CQRSharp.Core.Pipelines;
 ///     This is the central component that connects a request to its handler, wrapping it with cross-cutting concerns
 ///     like logging, transactions, validation, etc.
 /// </summary>
-/// <param name="serviceProvider">The root service provider to create scoped dependencies.</param>
+/// <param name="serviceProvider">The current DI scope service provider.</param>
 /// <param name="requestRegistry">The registry for request metadata.</param>
 /// <param name="handlerRegistry">The registry for compiled handler invokers.</param>
 /// <param name="contextFactoryRegistry">The registry for request context factories.</param>
@@ -44,6 +44,7 @@ public sealed class PipelineExecutor(
 
     private const int DefaultBehaviorPriority = int.MaxValue / 2;
 
+    private readonly IServiceProvider _services = serviceProvider;
     private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
     private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
     private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
@@ -68,10 +69,10 @@ public sealed class PipelineExecutor(
                 async workerToken =>
                 {
                     if (!ct.CanBeCanceled)
-                        return await ExecuteQueryImmediateAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
+                        return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
 
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
-                    return await ExecuteQueryImmediateAsync<TRequest, TResult>(query, linkedCts.Token).ConfigureAwait(false);
+                    return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, linkedCts.Token).ConfigureAwait(false);
                 },
                 ct);
         }
@@ -79,18 +80,34 @@ public sealed class PipelineExecutor(
         return ExecuteQueryImmediateAsync<TRequest, TResult>(query, ct);
     }
 
-    private async Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
+    private Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
         TRequest query, CancellationToken ct)
         where TRequest : IQuery<TResult>
     {
-        // Ensure the request has its metadata and a valid context before processing.
-        InitializeRequestContext(query);
+        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
+            ? ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, ct)
+            : ExecuteQueryInProviderAsync<TRequest, TResult>(query, _services, ct);
+    }
 
-        // Create a new DI scope for the request to ensure services are scoped correctly (e.g., DbContext, UnitOfWork).
+    private async Task<TResult> ExecuteQueryInNewScopeAsync<TRequest, TResult>(
+        TRequest query,
+        CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider;
+        return await ExecuteQueryInProviderAsync<TRequest, TResult>(query, scope.ServiceProvider, ct).ConfigureAwait(false);
+    }
 
-        // Resolve the specific handler for this request from the scoped provider.
+    private async Task<TResult> ExecuteQueryInProviderAsync<TRequest, TResult>(
+        TRequest query,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
+        // Ensure the request has its metadata and a valid context before processing.
+        InitializeRequestContext(query, provider);
+
+        // Resolve the specific handler for this request from the selected provider.
         var handler = GetHandler(typeof(TRequest), provider);
 
         // Execute the request through the resolved pipeline behaviors and handler.
@@ -116,10 +133,10 @@ public sealed class PipelineExecutor(
                 async workerToken =>
                 {
                     if (!ct.CanBeCanceled)
-                        return await ExecuteCommandImmediateAsync(command, workerToken).ConfigureAwait(false);
+                        return await ExecuteCommandInNewScopeAsync(command, workerToken).ConfigureAwait(false);
 
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
-                    return await ExecuteCommandImmediateAsync(command, linkedCts.Token).ConfigureAwait(false);
+                    return await ExecuteCommandInNewScopeAsync(command, linkedCts.Token).ConfigureAwait(false);
                 },
                 ct);
         }
@@ -127,18 +144,34 @@ public sealed class PipelineExecutor(
         return ExecuteCommandImmediateAsync(command, ct);
     }
 
-    private async Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
+    private Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
         TRequest command, CancellationToken ct)
         where TRequest : ICommand
     {
-        // Ensure the request has its metadata and a valid context before processing.
-        InitializeRequestContext(command);
+        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
+            ? ExecuteCommandInNewScopeAsync(command, ct)
+            : ExecuteCommandInProviderAsync(command, _services, ct);
+    }
 
-        // Create a new DI scope for the request.
+    private async Task<CommandResult> ExecuteCommandInNewScopeAsync<TRequest>(
+        TRequest command,
+        CancellationToken ct)
+        where TRequest : ICommand
+    {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var provider = scope.ServiceProvider;
+        return await ExecuteCommandInProviderAsync(command, scope.ServiceProvider, ct).ConfigureAwait(false);
+    }
 
-        // Resolve the specific handler for this request from the scoped provider.
+    private async Task<CommandResult> ExecuteCommandInProviderAsync<TRequest>(
+        TRequest command,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : ICommand
+    {
+        // Ensure the request has its metadata and a valid context before processing.
+        InitializeRequestContext(command, provider);
+
+        // Resolve the specific handler for this request from the selected provider.
         var handler = GetHandler(typeof(TRequest), provider);
 
         // Execute the request through the resolved pipeline behaviors and handler.
@@ -342,7 +375,7 @@ public sealed class PipelineExecutor(
     /// </summary>
     /// <param name="requestBase">The request object.</param>
     /// <exception cref="InvalidOperationException">Thrown if metadata or a required context factory is not found.</exception>
-    private void InitializeRequestContext(IRequest requestBase)
+    private void InitializeRequestContext(IRequest requestBase, IServiceProvider services)
     {
         // Retrieve and assign source-generated metadata to the request object.
         if (!requestRegistry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata == null)
@@ -357,7 +390,7 @@ public sealed class PipelineExecutor(
         var contextType = metadata.ContextType ?? typeof(RequestContextBase);
 
         // Find the appropriate factory for creating an instance of the context.
-        var factoryObj = contextFactoryRegistry.TryGetFactory(contextType, serviceProvider);
+        var factoryObj = contextFactoryRegistry.TryGetFactory(contextType, services);
 
         if (factoryObj is not IInternalRequestContextFactory contextFactory)
             throw new InvalidOperationException($"No factory for context type '{contextType.FullName}' registered.");

@@ -5,7 +5,12 @@ using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Sample.Domain.Events;
 
-[NotificationName("sample.user.created")]
+public static class SampleNotificationNames
+{
+    public const string UserCreated = "sample.user.created";
+}
+
+[NotificationName(SampleNotificationNames.UserCreated)]
 public class UserCreatedNotification(Guid userId, string name) : INotification
 {
     // Parameterless constructor for deserialization

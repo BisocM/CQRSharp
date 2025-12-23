@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace CQRSharp.Generators.Types;
+namespace CQRSharp.Generators.Cqrs;
 
 public sealed partial class CqrsSourceGenerator
 {

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
@@ -7,6 +7,8 @@
         <RootNamespace>CQRSharp.Generators</RootNamespace>
         <IsRoslynComponent>true</IsRoslynComponent>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <PublishAot>false</PublishAot>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
@@ -26,13 +28,15 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <!-- Avoid runtime dependencies for analyzer load; include shared constants as source. -->
+        <Compile Include="..\..\Domain\CQRSharp.Abstractions\SourceGeneration\TypeStrings.cs"
+                 Link="SourceGeneration\TypeStrings.cs" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>

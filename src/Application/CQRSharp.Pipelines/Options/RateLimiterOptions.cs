@@ -3,7 +3,7 @@
 namespace CQRSharp.Pipelines.Options;
 
 /// <summary>
-///     Class object for the options needed for the rate limited.
+///     Options for configuring the built-in <see cref="RateLimiter" />.
 /// </summary>
 public sealed class RateLimiterOptions
 {
@@ -15,8 +15,7 @@ public sealed class RateLimiterOptions
     /// <summary>
     ///     How many tokens are to be replenished for each user per second.
     /// </summary>
-    //TODO: This is atrocious and the customization is quite bad.
-    public int ReplenishRatePerSecond { get; set; } = 1;
+    public double ReplenishRatePerSecond { get; set; } = 1;
 
     /// <summary>
     ///     The scope of the rate limiter.

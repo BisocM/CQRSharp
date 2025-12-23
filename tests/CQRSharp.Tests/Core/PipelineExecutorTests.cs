@@ -51,6 +51,12 @@ namespace CQRSharp.Tests.Core;
 	        mockScope.Setup(s => s.ServiceProvider).Returns(_mockScopedProvider.Object);
 	        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
 	        _mockRootProvider.Setup(p => p.GetService(typeof(IServiceScopeFactory))).Returns(_mockScopeFactory.Object);
+
+	        _mockRootProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
+	        _mockRootProvider
+	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
+	            .Returns(Array.Empty<IPipelineBehavior<TestCommand, CommandResult>>());
+
 	        _mockScopedProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
 	        _mockScopedProvider
 	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
@@ -73,10 +79,11 @@ namespace CQRSharp.Tests.Core;
 	        );
 	    }
 
-    private void SetupHandlerResolution<THandler>(THandler handler) where THandler : class
-    {
-        _mockScopedProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
-    }
+	    private void SetupHandlerResolution<THandler>(THandler handler) where THandler : class
+	    {
+	        _mockRootProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
+	        _mockScopedProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
+	    }
 
     [Fact]
     public async Task ExecuteCommandAsync_WhenBehaviorIsExempted_SkipsIt()
@@ -91,12 +98,12 @@ namespace CQRSharp.Tests.Core;
         var exempted = new ExemptedBehavior<TestCommand, CommandResult>(callOrder);
         var other = new OtherBehavior<TestCommand, CommandResult>(callOrder);
 
-        _mockScopedProvider
-            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
-            .Returns(new IPipelineBehavior<TestCommand, CommandResult>[] { exempted, other });
+	        _mockRootProvider
+	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
+	            .Returns(new IPipelineBehavior<TestCommand, CommandResult>[] { exempted, other });
 
         var exemptions = new[] { new PipelineExemptionAttribute(typeof(ExemptedBehavior<,>)) };
-        RequestMetadata metadata = new(requestType, handlerType, [], [], exemptions, [], null, typeof(RequestContextBase));
+        RequestMetadata metadata = new(requestType, handlerType, [], [], exemptions, null, typeof(RequestContextBase));
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
@@ -131,7 +138,7 @@ namespace CQRSharp.Tests.Core;
         var handler = new TestCommandHandler();
         var requestType = typeof(TestCommand);
         var handlerType = typeof(TestCommandHandler);
-        RequestMetadata metadata = new(requestType, handlerType, [], [], [], [], null, typeof(RequestContextBase));
+        RequestMetadata metadata = new(requestType, handlerType, [], [], [], null, typeof(RequestContextBase));
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
@@ -169,7 +176,7 @@ namespace CQRSharp.Tests.Core;
         var handler = new TestCommandHandler();
         var requestType = typeof(TestCommand);
         var handlerType = typeof(TestCommandHandler);
-        RequestMetadata metadata = new(requestType, handlerType, [], [], [], [], null, typeof(RequestContextBase));
+        RequestMetadata metadata = new(requestType, handlerType, [], [], [], null, typeof(RequestContextBase));
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
@@ -241,7 +248,7 @@ namespace CQRSharp.Tests.Core;
         RequestMetadata metadata = new(requestType, handlerType,
             [mockPreHandler1.Object, mockPreHandler2.Object],
             [mockPostHandler1.Object, mockPostHandler2.Object],
-            [], [], null, typeof(RequestContextBase));
+            [], null, typeof(RequestContextBase));
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);

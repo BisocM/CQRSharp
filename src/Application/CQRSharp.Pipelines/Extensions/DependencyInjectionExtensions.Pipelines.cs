@@ -1,6 +1,7 @@
 ﻿using CQRSharp.Abstractions.Data.Interfaces.Transactions;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
+using CQRSharp.Pipelines.Types.Exceptions;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Pipelines.Types.Resilience;
 using CQRSharp.Pipelines.Types.Timeout;
@@ -12,6 +13,15 @@ namespace CQRSharp.Pipelines.Extensions;
 
 public static class DependencyInjectionExtensions
 {
+    /// <summary>
+    ///     Registers request-level exception hook support.
+    /// </summary>
+    public static IServiceCollection AddExceptionHandling(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>));
+        return services;
+    }
+
     /// <summary>
     ///     Registers the resilience pipeline behavior in the service collection.
     /// </summary>
@@ -68,12 +78,11 @@ public static class DependencyInjectionExtensions
 
         services.Configure<RateLimiterOptions>(options =>
         {
-            if (options.MaxTokens <= 0 || options.ReplenishRatePerSecond <= 0)
-                throw new ArgumentException(
-                    $"Rate limiting configuration is invalid. {nameof(options.MaxTokens)} and {nameof(options.ReplenishRatePerSecond)} must be greater than zero.");
-
-            //Apply the delegate if it is provided.
             configureOptions.Invoke(options);
+
+            if (options.MaxTokens <= 0 || options.ReplenishRatePerSecond <= 0 || options.MaxEntries <= 0)
+                throw new ArgumentException(
+                    $"Rate limiting configuration is invalid. {nameof(options.MaxTokens)}, {nameof(options.ReplenishRatePerSecond)}, and {nameof(options.MaxEntries)} must be greater than zero.");
         });
 
         services.AddSingleton<RateLimiter>();
@@ -111,6 +120,47 @@ public static class DependencyInjectionExtensions
 
         // Register the pipeline behavior.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
+
+        return services;
+    }
+
+    public static IServiceCollection AddUnitOfWorkBehavior(
+        this IServiceCollection services,
+        Func<IServiceProvider, IUnitOfWork> implementationFactory,
+        Action<UnitOfWorkOptions>? configureOptions = null)
+    {
+        services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
+        services.AddScoped<IUnitOfWork>(implementationFactory);
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
+        return services;
+    }
+
+    public static IServiceCollection AddCqrsPipelinePack(
+        this IServiceCollection services,
+        Action<CqrsPipelinePackOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        var pack = new CqrsPipelinePackOptions();
+        configure?.Invoke(pack);
+
+        if (pack.IncludeExceptionHandling)
+            services.AddExceptionHandling();
+
+        if (pack.IncludeValidation)
+            services.AddValidationBehavior();
+
+        if (pack.ConfigureRateLimiting is not null)
+            services.AddRateLimiting(pack.ConfigureRateLimiting);
+
+        if (pack.UnitOfWorkFactory is not null)
+            services.AddUnitOfWorkBehavior(pack.UnitOfWorkFactory, pack.ConfigureUnitOfWork);
+
+        if (pack.ConfigureTimeout is not null)
+            services.AddTimeoutBehavior(pack.ConfigureTimeout);
+
+        if (pack.ConfigureResilience is not null)
+            services.AddResilienceBehavior(pack.ConfigureResilience);
 
         return services;
     }

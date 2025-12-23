@@ -1,10 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Pipelines.Extensions;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Pipelines.Types.RateLimiting.Context;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -91,8 +93,8 @@ public class RateLimitingBehaviorTests
     {
         // Arrange
         var uid = "u4";
-        var cmd1 = new TestRateLimitedCommand { Context = new TestRateLimitedContext("r4a", uid) };
-        var cmd2 = new OtherRateLimitedCommand { Context = new TestRateLimitedContext("r4b", uid) };
+        var cmd1 = new CQRSharp.Tests.Shared.CollisionsA.CollisionCommand { Context = new TestRateLimitedContext("r4a", uid) };
+        var cmd2 = new CQRSharp.Tests.Shared.CollisionsB.CollisionCommand { Context = new TestRateLimitedContext("r4b", uid) };
         for (var i = 0; i < _options.MaxTokens; i++) await _behavior.Handle(cmd1, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
         // Act
@@ -217,5 +219,18 @@ public class RateLimitingBehaviorTests
         // Assert
         act.Should().Throw<ArgumentException>();
         _output.WriteLine("[PASS] Invalid options correctly cause constructor failure.");
+    }
+
+    [Fact(DisplayName = "DI registration: invalid options throw during resolution")]
+    public void AddRateLimiting_InvalidOptions_ThrowsDuringResolution()
+    {
+        var services = new ServiceCollection();
+        services.AddRateLimiting(options => options.MaxEntries = 0);
+
+        using var provider = services.BuildServiceProvider();
+
+        var act = () => provider.GetRequiredService<RateLimiter>();
+        act.Should().Throw<ArgumentException>()
+            .WithMessage("*Rate limiting configuration is invalid*");
     }
 }

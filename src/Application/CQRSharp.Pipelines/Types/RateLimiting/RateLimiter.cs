@@ -86,6 +86,33 @@ public sealed class RateLimiter : IDisposable
     }
 
     /// <summary>
+    ///     Determines whether a request is allowed based on rate limiting rules.
+    ///     This overload keys the per-command bucket by <see cref="Type" /> to avoid collisions between
+    ///     different requests that share the same simple name.
+    /// </summary>
+    /// <param name="userIdentifier">The unique identifier for the user making the request.</param>
+    /// <param name="requestType">The request type being executed.</param>
+    /// <returns><c>true</c> if the request is allowed; otherwise, <c>false</c>.</returns>
+    public bool AllowRequest(string userIdentifier, Type requestType)
+    {
+        ArgumentNullException.ThrowIfNull(requestType);
+        if (string.IsNullOrWhiteSpace(userIdentifier))
+            throw new ArgumentNullException(nameof(userIdentifier));
+
+        CleanupStaleBucketsIfNeeded();
+
+        object key = _config.Scope == RateLimitScope.PerCommand
+            ? new UserCommandKey(userIdentifier, requestType)
+            : userIdentifier;
+
+        var bucket = _cache.GetOrAdd(key, _ => new TokenBucket(
+            _config.MaxTokens,
+            _config.ReplenishRatePerSecond));
+
+        return bucket.TryConsume();
+    }
+
+    /// <summary>
     ///     Removes token buckets that have been idle longer than the configured maximum idle time.
     /// </summary>
     private void CleanupStaleBuckets()
@@ -108,7 +135,7 @@ public sealed class RateLimiter : IDisposable
     /// <summary>
     ///     Composite key for per-command rate limiting.
     /// </summary>
-    private sealed record UserCommandKey(string UserIdentifier, string CommandName);
+    private sealed record UserCommandKey(string UserIdentifier, object CommandKey);
 
     private void CleanupStaleBucketsIfNeeded()
     {

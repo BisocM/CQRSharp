@@ -22,3 +22,23 @@ public class TestQueryHandler : IQueryHandler<TestQuery, TestQueryResult>
     public virtual Task<TestQueryResult> Handle(TestQuery query, CancellationToken cancellationToken)
         => Task.FromResult(new TestQueryResult("Success"));
 }
+
+/// <summary>
+///     A test implementation of a command handler for <see cref="TransactionalCommand" />.
+/// </summary>
+public class TransactionalCommandHandler : ICommandHandler<TransactionalCommand>
+{
+    /// <inheritdoc />
+    public virtual Task<CommandResult> Handle(TransactionalCommand command, CancellationToken cancellationToken)
+        => Task.FromResult(CommandResult.FromSuccess());
+}
+
+/// <summary>
+///     A test implementation of a command handler for <see cref="NonTransactionalCommand" />.
+/// </summary>
+public class NonTransactionalCommandHandler : ICommandHandler<NonTransactionalCommand>
+{
+    /// <inheritdoc />
+    public virtual Task<CommandResult> Handle(NonTransactionalCommand command, CancellationToken cancellationToken)
+        => Task.FromResult(CommandResult.FromSuccess());
+}

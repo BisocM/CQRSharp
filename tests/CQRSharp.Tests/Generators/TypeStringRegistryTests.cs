@@ -1,6 +1,7 @@
 using CQRSharp.Abstractions.Data.Attributes.Notifications;
 using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Context;
+using CQRSharp.Abstractions.Data.Interfaces.Exceptions;
 using CQRSharp.Abstractions.Data.Interfaces.Handlers;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
@@ -30,13 +31,14 @@ public sealed class TypeStringRegistryTests
         [TypeStrings.INotification, "CQRSharp.Abstractions", typeof(INotification)],
         [TypeStrings.INotificationHandler, "CQRSharp.Abstractions", typeof(INotificationHandler<>)],
         [TypeStrings.IRequestValidator1, "CQRSharp.Abstractions", typeof(IRequestValidator<>)],
+        [TypeStrings.IRequestExceptionHandler3, "CQRSharp.Abstractions", typeof(IRequestExceptionHandler<,,>)],
+        [TypeStrings.IRequestExceptionAction2, "CQRSharp.Abstractions", typeof(IRequestExceptionAction<,>)],
         [TypeStrings.IPreHandlerAttribute, "CQRSharp.Abstractions", typeof(IPreHandlerAttribute)],
         [TypeStrings.IPostHandlerAttribute, "CQRSharp.Abstractions", typeof(IPostHandlerAttribute)],
         [TypeStrings.PipelineExemptionAttribute, "CQRSharp.Abstractions", typeof(PipelineExemptionAttribute)],
         [TypeStrings.NotificationNameAttribute, "CQRSharp.Abstractions", typeof(NotificationNameAttribute)],
         [TypeStrings.RequestContextBase, "CQRSharp.Abstractions", typeof(RequestContextBase)],
         [TypeStrings.CommandResult, "CQRSharp.Abstractions", typeof(CommandResult)],
-        [TypeStrings.PropertySensitivity, "CQRSharp.Abstractions", typeof(PropertySensitivity)],
         // CQRSharp.Core
         [TypeStrings.IPipelineBehavior, "CQRSharp.Core", typeof(IPipelineBehavior<,>)],
         [TypeStrings.IRequestContextFactory, "CQRSharp.Core", typeof(IRequestContextFactory<>)],
@@ -50,4 +52,3 @@ public sealed class TypeStringRegistryTests
         Assert.Equal(assemblyName, runtimeType.Assembly.GetName().Name);
     }
 }
-

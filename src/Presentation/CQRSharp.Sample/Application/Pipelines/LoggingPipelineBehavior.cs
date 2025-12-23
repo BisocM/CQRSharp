@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Application.Pipelines;
 
-public sealed class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPipelineBehavior<TRequest, TResult>> logger)
+public sealed class LoggingPipelineBehavior<TRequest, TResult>(
+    ILogger<LoggingPipelineBehavior<TRequest, TResult>> logger,
+    SampleDiagnostics diagnostics)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
     public int PipelineExecutionPriority => -100;
@@ -20,7 +23,8 @@ public sealed class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPi
 
         try
         {
-            logger.LogInformation("[LoggingPipeline] Handling request {RequestName}: {Request}", requestName, request);
+            diagnostics.RecordLoggedRequest(typeof(TRequest));
+            logger.LogInformation("[LoggingPipeline] Handling request {RequestName}", requestName);
             return await next(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -38,4 +42,3 @@ public sealed class LoggingPipelineBehavior<TRequest, TResult>(ILogger<LoggingPi
         }
     }
 }
-

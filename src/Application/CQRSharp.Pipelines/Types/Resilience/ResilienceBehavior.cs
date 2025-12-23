@@ -17,9 +17,11 @@ namespace CQRSharp.Pipelines.Types.Resilience;
 /// <typeparam name="TResult">The type of the result returned after processing the request.</typeparam>
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-    IOptions<ResilienceOptions> options) : IPipelineBehavior<TRequest, TResult>
+    IOptions<ResilienceOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    public int PipelineExecutionPriority => 200;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)

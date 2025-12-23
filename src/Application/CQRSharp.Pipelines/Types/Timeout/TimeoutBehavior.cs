@@ -16,8 +16,10 @@ namespace CQRSharp.Pipelines.Types.Timeout;
 /// <typeparam name="TResult">The type of the result produced by the handler pipeline.</typeparam>
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
-    IOptions<TimeoutOptions> options) : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
+    IOptions<TimeoutOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    public int PipelineExecutionPriority => 300;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next,

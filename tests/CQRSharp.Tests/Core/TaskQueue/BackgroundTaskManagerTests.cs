@@ -42,10 +42,11 @@ public class BackgroundTaskManagerTests
         BackgroundTaskQueueOptions opts, ILogger<BackgroundTaskQueue>? logger = null)
     {
         var dispatcher = new ControllableDispatcher();
+        var scopeFactory = new SingleDispatcherScopeFactory(dispatcher);
         var lifetime = new TestHostApplicationLifetime();
         var metrics = new TestMetricsReporter();
         var queueLogger = logger ?? NullLogger<BackgroundTaskQueue>.Instance;
-        var queue = new BackgroundTaskQueue(Opts(opts), dispatcher, metrics, queueLogger, lifetime);
+        var queue = new BackgroundTaskQueue(Opts(opts), scopeFactory, metrics, queueLogger, lifetime);
         return (queue, metrics, dispatcher);
     }
 
@@ -312,9 +313,10 @@ public class BackgroundTaskManagerTests
         var opts = MakeOptions(5, BoundedChannelFullMode.Wait);
         opts.NotificationMaxRetries = 5;
         var dispatcher = new ControllableDispatcher(2); // Fails twice, succeeds on the 3rd try
+        var scopeFactory = new SingleDispatcherScopeFactory(dispatcher);
         var queue = new BackgroundTaskQueue(
             Opts(opts),
-            dispatcher,
+            scopeFactory,
             new TestMetricsReporter(),
             NullLogger<BackgroundTaskQueue>.Instance,
             new TestHostApplicationLifetime());

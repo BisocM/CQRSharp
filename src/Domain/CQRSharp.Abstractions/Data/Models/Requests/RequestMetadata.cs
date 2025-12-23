@@ -22,10 +22,6 @@ namespace CQRSharp.Abstractions.Data.Models.Requests;
 /// <param name="PipelineExemptions">
 ///     An optional attribute specifying exemptions for the request from certain pipeline behaviors.
 /// </param>
-/// <param name="SensitiveProperties">
-///     An array of property sensitivities that indicate which request properties require special handling
-///     due to sensitivity in contexts like logging or sanitization.
-/// </param>
 /// <param name="ResultType">
 ///     The type of the result expected from the request, if applicable. NULL for commands.
 /// </param>
@@ -39,15 +35,6 @@ public sealed record RequestMetadata(
     IPreHandlerAttribute[] PreHandlers,
     IPostHandlerAttribute[] PostHandlers,
     PipelineExemptionAttribute[] PipelineExemptions,
-    PropertySensitivity[] SensitiveProperties,
     Type? ResultType,
     Type? ContextType
-);
-
-/// <summary>
-///     Captures which properties are sensitive for logging/sanitization.
-/// </summary>
-public sealed record PropertySensitivity(
-    string PropertyName,
-    bool IsSensitive
 );

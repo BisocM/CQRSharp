@@ -5,6 +5,7 @@ using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using static System.Threading.Tasks.Task;
@@ -92,4 +93,33 @@ public class TestHostApplicationLifetime : IHostApplicationLifetime
     public CancellationToken ApplicationStopping => _stoppingSource.Token;
     public CancellationToken ApplicationStopped => CancellationToken.None;
     public void StopApplication() => _stoppingSource.Cancel();
+}
+
+/// <summary>
+///     A minimal <see cref="IServiceScopeFactory" /> that always resolves a single
+///     <see cref="IDirectNotificationDispatcher" /> instance within created scopes.
+/// </summary>
+public sealed class SingleDispatcherScopeFactory(IDirectNotificationDispatcher dispatcher) : IServiceScopeFactory
+{
+    private readonly IDirectNotificationDispatcher _dispatcher =
+        dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+
+    public IServiceScope CreateScope() => new SingleDispatcherScope(_dispatcher);
+
+    private sealed class SingleDispatcherScope(IDirectNotificationDispatcher dispatcher) : IServiceScope
+    {
+        public IServiceProvider ServiceProvider { get; } = new SingleDispatcherServiceProvider(dispatcher);
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SingleDispatcherServiceProvider(IDirectNotificationDispatcher dispatcher) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+        {
+            return serviceType == typeof(IDirectNotificationDispatcher) ? dispatcher : null;
+        }
+    }
 }

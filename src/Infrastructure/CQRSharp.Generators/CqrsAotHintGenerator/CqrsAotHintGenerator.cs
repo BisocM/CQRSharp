@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-namespace CQRSharp.Generators.Types;
+namespace CQRSharp.Generators.Cqrs;
 
 /// <summary>
 ///     A source generator that creates hints for the Native AOT compiler.

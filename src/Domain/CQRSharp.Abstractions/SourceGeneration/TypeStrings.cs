@@ -24,6 +24,13 @@ public static class TypeStrings
     // Abstractions - Validation
     public const string IRequestValidator1 = "CQRSharp.Abstractions.Data.Interfaces.Validation.IRequestValidator`1";
 
+    // Abstractions - Exception Hooks
+    public const string IRequestExceptionHandler3 =
+        "CQRSharp.Abstractions.Data.Interfaces.Exceptions.IRequestExceptionHandler`3";
+
+    public const string IRequestExceptionAction2 =
+        "CQRSharp.Abstractions.Data.Interfaces.Exceptions.IRequestExceptionAction`2";
+
     // Abstractions - Attributes
     public const string HandlerTypeAttribute = "CQRSharp.Abstractions.Data.Attributes.Requests.HandlerTypeAttribute";
     public const string IPreHandlerAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.IPreHandlerAttribute";
@@ -31,12 +38,11 @@ public static class TypeStrings
     public const string PipelineExemptionAttribute = "CQRSharp.Abstractions.Data.Attributes.Pipelines.PipelineExemptionAttribute";
     public const string NotificationNameAttribute = "CQRSharp.Abstractions.Data.Attributes.Notifications.NotificationNameAttribute";
 
-    // Abstractions - Context & Models
-    public const string RequestContextBase = "CQRSharp.Abstractions.Data.Interfaces.Context.RequestContextBase";
-    public const string CommandResult = "CQRSharp.Abstractions.Data.Models.Commands.CommandResult";
-    public const string PropertySensitivity = "CQRSharp.Abstractions.Data.Models.Requests.PropertySensitivity";
+	    // Abstractions - Context & Models
+	    public const string RequestContextBase = "CQRSharp.Abstractions.Data.Interfaces.Context.RequestContextBase";
+	    public const string CommandResult = "CQRSharp.Abstractions.Data.Models.Commands.CommandResult";
 
-    // Core
-    public const string IPipelineBehavior = "CQRSharp.Core.Pipelines.IPipelineBehavior`2";
+	    // Core
+	    public const string IPipelineBehavior = "CQRSharp.Core.Pipelines.IPipelineBehavior`2";
     public const string IRequestContextFactory = "CQRSharp.Core.Factories.IRequestContextFactory`1";
 }

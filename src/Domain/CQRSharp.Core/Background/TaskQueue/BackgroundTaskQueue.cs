@@ -5,6 +5,7 @@ using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Core.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,7 +19,7 @@ namespace CQRSharp.Core.Background.TaskQueue;
 internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTaskManager, IDisposable
 {
     private readonly object _gate = new();
-    private readonly IDirectNotificationDispatcher _dispatcher;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<BackgroundTaskQueue> _logger;
     private readonly IQueueMetricsReporter _metrics;
     private readonly Channel<INotification> _notificationChannel;
@@ -65,13 +66,13 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     /// </summary>
     public BackgroundTaskQueue(
         IOptions<BackgroundTaskQueueOptions> options,
-        IDirectNotificationDispatcher dispatcher,
+        IServiceScopeFactory scopeFactory,
         IQueueMetricsReporter metrics,
         ILogger<BackgroundTaskQueue> logger,
         IHostApplicationLifetime? lifetime = null)
     {
         _options = options.Value ?? throw new ArgumentNullException(nameof(options));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _shutdownToken = lifetime?.ApplicationStopping ?? _completion.Token;
@@ -595,13 +596,22 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     /// <param name="token">The cancellation token.</param>
     private async Task DispatchAsync(INotification notif, CancellationToken token)
     {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var dispatcher = scope.ServiceProvider.GetService<IDirectNotificationDispatcher>();
+        if (dispatcher is null)
+        {
+            _logger.LogWarning(
+                "IDirectNotificationDispatcher is not registered. Background task queue notifications will not be dispatched.");
+            return;
+        }
+
         try
         {
             for (var attempt = 1; attempt <= _options.NotificationMaxRetries; attempt++)
                 try
                 {
                     // Attempt to publish the notification.
-                    await _dispatcher.Publish(notif, token).ConfigureAwait(false);
+                    await PublishNotificationAsync(dispatcher, notif, token).ConfigureAwait(false);
                     return; // On success, exit the method.
                 }
                 catch (OperationCanceledException)
@@ -643,5 +653,18 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             // CRITICAL: Always release the semaphore slot.
             _notifSem.Release();
         }
+    }
+
+    private static Task PublishNotificationAsync(
+        IDirectNotificationDispatcher dispatcher,
+        INotification notification,
+        CancellationToken cancellationToken)
+    {
+        return notification switch
+        {
+            TaskEnqueuedNotification typed => dispatcher.Publish(typed, cancellationToken),
+            TaskRejectedNotification typed => dispatcher.Publish(typed, cancellationToken),
+            _ => dispatcher.Publish(notification, cancellationToken)
+        };
     }
 }

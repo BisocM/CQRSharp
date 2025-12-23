@@ -19,4 +19,14 @@ public sealed class DispatcherOptions
     ///     The default value is <see cref="Enums.RunMode.Sync" />.
     /// </remarks>
     public RunMode RunMode { get; set; } = RunMode.Sync;
+
+    /// <summary>
+    ///     Controls whether request execution runs within the current DI scope (default)
+    ///     or in a newly-created child scope.
+    /// </summary>
+    /// <remarks>
+    ///     The default value is <see cref="ExecutionScopeMode.Current" /> to match MediatR-style scope semantics,
+    ///     allowing nested sends/publishes to share scoped services (DbContext/UnitOfWork/etc.).
+    /// </remarks>
+    public ExecutionScopeMode ScopeMode { get; set; } = ExecutionScopeMode.Current;
 }

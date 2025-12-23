@@ -3,7 +3,7 @@ using System.Linq;
 using CQRSharp.Abstractions.SourceGeneration;
 using Microsoft.CodeAnalysis;
 
-namespace CQRSharp.Generators.Types;
+namespace CQRSharp.Generators.Cqrs;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -64,10 +64,18 @@ public sealed partial class CqrsSourceGenerator
         var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
         var requestValidatorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestValidator1);
         var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
+        var requestExceptionHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionHandler3);
+        var requestExceptionActionSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionAction2);
 
         return commandHandlerSymbols
             .Concat(queryHandlerSymbols)
-            .Concat([notificationHandlerSymbol, requestValidatorSymbol, pipelineBehaviorSymbol])
+            .Concat([
+                notificationHandlerSymbol,
+                requestValidatorSymbol,
+                requestExceptionHandlerSymbol,
+                requestExceptionActionSymbol,
+                pipelineBehaviorSymbol
+            ])
             .Where(s => s is not null)
             .Cast<INamedTypeSymbol>();
     }
@@ -89,10 +97,10 @@ public sealed partial class CqrsSourceGenerator
         return null;
     }
 
-    private static string GenerateAttributeArrayCode(ITypeSymbol requestTypeSymbol, INamedTypeSymbol attributeInterfaceSymbol, string fullyQualifiedInterfaceName)
-    {
-        var attributeInstances = requestTypeSymbol.GetAttributes()
-            .Where(attr => attr.AttributeClass != null &&
+	    private static string GenerateAttributeArrayCode(ITypeSymbol requestTypeSymbol, INamedTypeSymbol attributeInterfaceSymbol, string fullyQualifiedInterfaceName)
+	    {
+	        var attributeInstances = requestTypeSymbol.GetAttributes()
+	            .Where(attr => attr.AttributeClass != null &&
                            IsAccessibleFromGeneratedCode(attr.AttributeClass) &&
                            InheritsOrImplements(attr.AttributeClass, attributeInterfaceSymbol))
             .ToList();
@@ -105,29 +113,13 @@ public sealed partial class CqrsSourceGenerator
             var args = string.Join(", ", attr.ConstructorArguments.Select(GenerateTypedConstant));
             return $"new {attrClassName}({args})";
         });
-
-        return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
-    }
-
-    private static string GenerateSensitivePropertiesCode(ITypeSymbol requestTypeSymbol)
-    {
-        const string sensitiveDataAttributeName = "SensitiveDataAttribute";
-        const string propertySensitivityFullyQualifiedName = $"global::{TypeStrings.PropertySensitivity}";
-
-        var sensitiveProps = requestTypeSymbol.GetMembers()
-            .OfType<IPropertySymbol>()
-            .Where(prop => prop.GetAttributes().Any(attr => attr.AttributeClass?.Name == sensitiveDataAttributeName))
-            .Select(prop => $"new {propertySensitivityFullyQualifiedName}(\"{prop.Name}\", true)")
-            .ToList();
-
-        return !sensitiveProps.Any()
-            ? $"System.Array.Empty<{propertySensitivityFullyQualifiedName}>()"
-            : $"new {propertySensitivityFullyQualifiedName}[] {{ {string.Join(", ", sensitiveProps)} }}";
-    }
-
-    private static string GenerateTypedConstant(TypedConstant constant)
-    {
-        if (constant.IsNull) return "null";
+	
+	        return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
+	    }
+	
+	    private static string GenerateTypedConstant(TypedConstant constant)
+	    {
+	        if (constant.IsNull) return "null";
         var value = constant.Value;
 
         switch (constant.Kind)
@@ -156,6 +148,9 @@ public sealed partial class CqrsSourceGenerator
 
     private static bool InheritsOrImplements(ITypeSymbol type, ITypeSymbol baseType)
     {
+        if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, baseType.OriginalDefinition))
+            return true;
+
         return GetInterfacesAndBaseInterfaces(type).Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, baseType.OriginalDefinition)) ||
                (type.BaseType != null && InheritsOrImplements(type.BaseType, baseType));
     }

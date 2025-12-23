@@ -32,7 +32,7 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
     RateLimiter rateLimiter)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => int.MinValue;
+    public int PipelineExecutionPriority => int.MinValue + 1;
 
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
@@ -67,10 +67,9 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
             rateLimitedContext.RequestId);
 
         //Apply rate limiting based on the user identifier
-        var commandName = request.GetType().Name;
         var isAllowed = rateLimiter.AllowRequest(
             rateLimitedContext.UserId,
-            commandName
+            request.GetType()
         );
         if (!isAllowed)
         {

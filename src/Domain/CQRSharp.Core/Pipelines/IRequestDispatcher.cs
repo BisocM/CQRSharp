@@ -15,4 +15,9 @@ public interface IRequestDispatcher
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>A task that represents the asynchronous send operation, containing the response.</returns>
     Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Sends a request by runtime type and returns the boxed response.
+    /// </summary>
+    Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default);
 }

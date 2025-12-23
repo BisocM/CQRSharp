@@ -4,32 +4,36 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-namespace CQRSharp.Generators.Types;
+namespace CQRSharp.Generators.Cqrs;
 
 [Generator]
 public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 {
-    public void Initialize(IncrementalGeneratorInitializationContext context)
-    {
-        var candidateClassesProvider = context.SyntaxProvider
-            .CreateSyntaxProvider(
-                static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
-                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(symbol => symbol is not null);
+	    public void Initialize(IncrementalGeneratorInitializationContext context)
+	    {
+	        var candidateClassesProvider = context.SyntaxProvider
+	            .CreateSyntaxProvider(
+	                static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+	                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
+	            .Where(symbol => symbol is not null);
 
-        var compilationAndCandidates = context.CompilationProvider.Combine(candidateClassesProvider.Collect());
+	        var generatorConfig = context.AnalyzerConfigOptionsProvider
+	            .Select(static (provider, _) => GeneratorConfig.From(provider.GlobalOptions));
 
-        context.RegisterSourceOutput(compilationAndCandidates, (spc, source) =>
-        {
-            var (compilation, candidateClasses) = source;
+	        var compilationAndCandidates = context.CompilationProvider.Combine(candidateClassesProvider.Collect());
+	        var compilationCandidatesAndConfig = compilationAndCandidates.Combine(generatorConfig);
 
-            try
-            {
-                var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
-
-                // Generate the DI registration helper
-                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc);
-                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
+	        context.RegisterSourceOutput(compilationCandidatesAndConfig, (spc, source) =>
+	        {
+	            var ((compilation, candidateClasses), config) = source;
+	
+	            try
+	            {
+	                var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
+	
+	                // Generate the DI registration helper
+	                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc, config);
+	                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
 
                 // Generate the one-call DI bootstrap (AddCqrs + AddGenerated)
                 var bootstrapSourceCode = GenerateBootstrap();

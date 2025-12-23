@@ -5,9 +5,12 @@ using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Background.Outbox.Types;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Factories;
+using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -27,22 +30,39 @@ public static class DependencyInjectionExtensions
     /// <param name="configureQueue">An optional action to configure the background task queue options.</param>
     /// <param name="configureOutbox">An optional action to configure notification outbox options.</param>
     /// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
-    public static IServiceCollection AddCqrs(this IServiceCollection services,
-        Action<BackgroundTaskQueueOptions>? configureQueue = null,
-        Action<OutboxOptions>? configureOutbox = null)
-    {
-        services.Configure<BackgroundTaskQueueOptions>(opts => configureQueue?.Invoke(opts));
-        services.Configure<OutboxOptions>(opts => configureOutbox?.Invoke(opts));
+	    public static IServiceCollection AddCqrs(this IServiceCollection services,
+	        Action<BackgroundTaskQueueOptions>? configureQueue = null,
+	        Action<OutboxOptions>? configureOutbox = null)
+	    {
+	        services.Configure<BackgroundTaskQueueOptions>(opts => configureQueue?.Invoke(opts));
+
+	        OutboxOptions? outboxProbe = null;
+	        if (configureOutbox is not null)
+	        {
+	            outboxProbe = new OutboxOptions();
+	            configureOutbox(outboxProbe);
+
+	            var outboxMode = outboxProbe.Mode;
+	            services.Configure<OutboxOptions>(opts => { opts.Mode = outboxMode; });
+	        }
+	        else
+	        {
+	            services.Configure<OutboxOptions>(_ => { });
+	        }
 
         services.TryAddScoped<IOutbox, Outbox>();
 
         services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
         services.TryAddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
 
-        services.TryAddSingleton<IPipelineExecutor, PipelineExecutor>();
+        services.TryAddScoped<IPipelineExecutor, PipelineExecutor>();
+        services.TryAddSingleton<IRequestExceptionHookRegistry, RequestExceptionHookRegistry>();
 
-        services.TryAddSingleton<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
+        services.TryAddScoped<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
         services.TryAddScoped<INotificationDispatcher, NotificationDispatcher>();
+
+        // Single CQRSharp façade: inject one thing (scoped to preserve DI scope semantics).
+        services.TryAddScoped<ICqrsDispatcher, CqrsDispatcher>();
 
         services.TryAddSingleton<BackgroundTaskQueue>();
         services.TryAddSingleton<IBackgroundTaskQueue>(sp => sp.GetRequiredService<BackgroundTaskQueue>());
@@ -50,6 +70,12 @@ public static class DependencyInjectionExtensions
         services.AddHostedService<BackgroundTaskQueueConsumer>();
 
         services.AddLogging();
+
+	        if (outboxProbe is not null)
+	        {
+	            if (outboxProbe.Mode != OutboxMode.Disabled)
+	                services.AddOutboxProcessor();
+	        }
 
         return services;
     }
