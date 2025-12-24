@@ -22,27 +22,26 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <Version>2.2.7</Version>
+        <Version>3.0.0</Version>
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
         <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
-        <Description>The core implementation of the CQRSharp framework, providing request dispatching, background queuing, and Native AOT support.</Description>
+        <Description>Core runtime for CQRSharp: request dispatching, notification publishing, pipeline execution, background queue/outbox processing, and NativeAOT-friendly generated registries.</Description>
         <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <PackageReleaseNotes>
-            Updated to version 2.2.7.
+            Version 3.0.0. Adds unified dispatch, notification pipelines, exception hooks, and AOT hardening.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
         <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>

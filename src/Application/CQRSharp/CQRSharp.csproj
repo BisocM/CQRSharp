@@ -24,10 +24,14 @@
         <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
         <Authors>CQRSharp</Authors>
         <Company>BisocM</Company>
-        <PackageProjectUrl>cqrsharp.bisocm.org</PackageProjectUrl>
+        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
-        <Version>2.2.7</Version>
-        <Description>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications, with complete Native AoT support. This is the main meta-package.</Description>
+        <RepositoryType>git</RepositoryType>
+        <Version>3.0.0</Version>
+        <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
+        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <Description>Meta-package for CQRSharp. References the runtime packages and embeds the source generator analyzer for plug-and-play registrations and NativeAOT-friendly builds.</Description>
     </PropertyGroup>
 
     <ItemGroup>
@@ -44,6 +48,12 @@
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
               Visible="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
 </Project>

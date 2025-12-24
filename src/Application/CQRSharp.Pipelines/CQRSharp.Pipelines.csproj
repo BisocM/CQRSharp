@@ -18,27 +18,26 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <Version>2.2.7</Version>
+        <Version>3.0.0</Version>
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
         <PackageTags>CQRS;CQRSharp;Pipelines;Resilience;RateLimiting</PackageTags>
         <Title>Optional Pipeline Behaviors for CQRSharp</Title>
-        <Description>Provides optional, ready-to-use pipeline behaviors for the CQRSharp framework, including resilience, timeout, rate limiting, and unit of work management.</Description>
+        <Description>Optional pipeline behaviors for CQRSharp, including validation, unit of work, retries, timeouts, rate limiting, and a pipeline-pack registration entrypoint for recommended defaults.</Description>
         <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <PackageReleaseNotes>
-            Updated to version 2.2.7.
+            Version 3.0.0. Adds pipeline-pack registration and hardens built-in behaviors.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
         <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>

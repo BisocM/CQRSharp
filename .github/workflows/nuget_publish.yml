@@ -1,0 +1,304 @@
+name: Release (NuGet)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run build/validation only (do not publish to NuGet)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: nuget-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CONFIGURATION: Release
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
+  PACKAGE_OUTPUT: artifacts/packages
+  TEST_RESULTS: artifacts/test-results
+  AOT_OUTPUT: artifacts/aot
+
+jobs:
+  build-validate-publish:
+    name: Build, validate, publish
+    runs-on: [ self-hosted, linux ]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            nuget.config
+
+      - name: Preflight (install prerequisites if missing)
+        run: |
+          echo "Runner: $(uname -a)"
+          echo
+          
+          need_clang=0
+          need_zlib=0
+          need_python=0
+
+          if ! command -v clang >/dev/null; then need_clang=1; fi
+          if [ ! -f /usr/include/zlib.h ]; then need_zlib=1; fi
+          if ! command -v python3 >/dev/null; then need_python=1; fi
+
+          if [ "${need_clang}" -eq 1 ] || [ "${need_zlib}" -eq 1 ] || [ "${need_python}" -eq 1 ]; then
+            echo "Installing missing prerequisites..."
+
+            if command -v sudo >/dev/null; then
+              SUDO="sudo"
+            else
+              SUDO=""
+            fi
+
+            if command -v apt-get >/dev/null; then
+              ${SUDO} apt-get update
+              ${SUDO} apt-get install -y \
+                $( [ "${need_clang}" -eq 1 ] && echo "clang" ) \
+                $( [ "${need_zlib}" -eq 1 ] && echo "zlib1g-dev" ) \
+                $( [ "${need_python}" -eq 1 ] && echo "python3" )
+            elif command -v dnf >/dev/null; then
+              ${SUDO} dnf install -y \
+                $( [ "${need_clang}" -eq 1 ] && echo "clang" ) \
+                $( [ "${need_zlib}" -eq 1 ] && echo "zlib-devel" ) \
+                $( [ "${need_python}" -eq 1 ] && echo "python3" )
+            elif command -v yum >/dev/null; then
+              ${SUDO} yum install -y \
+                $( [ "${need_clang}" -eq 1 ] && echo "clang" ) \
+                $( [ "${need_zlib}" -eq 1 ] && echo "zlib-devel" ) \
+                $( [ "${need_python}" -eq 1 ] && echo "python3" )
+            elif command -v apk >/dev/null; then
+              ${SUDO} apk add --no-cache \
+                $( [ "${need_clang}" -eq 1 ] && echo "clang" ) \
+                $( [ "${need_zlib}" -eq 1 ] && echo "zlib-dev" ) \
+                $( [ "${need_python}" -eq 1 ] && echo "python3" )
+            elif command -v zypper >/dev/null; then
+              ${SUDO} zypper --non-interactive install \
+                $( [ "${need_clang}" -eq 1 ] && echo "clang" ) \
+                $( [ "${need_zlib}" -eq 1 ] && echo "zlib-devel" ) \
+                $( [ "${need_python}" -eq 1 ] && echo "python3" )
+            else
+              echo "No supported package manager found (apt-get/dnf/yum/apk/zypper). Install clang + zlib headers + python3 on the runner."
+              exit 1
+            fi
+          fi
+
+          clang --version
+          python3 --version
+
+          if [ ! -f /usr/include/zlib.h ]; then
+            echo "zlib headers are still missing after install attempt."
+            exit 1
+          fi
+
+          dotnet --info
+
+      - name: Verify NuGet publishing secret
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "${NUGET_API_KEY}" ]; then
+            echo "Missing required secret: NUGET_API_KEY"
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore CQRSharp.sln
+
+      - name: Build
+        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore /p:ContinuousIntegrationBuild=true /p:GeneratePackageOnBuild=false
+
+      - name: Test
+        run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx;LogFileName=test_results.trx" --results-directory ${{ env.TEST_RESULTS }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ env.TEST_RESULTS }}
+
+      - name: Run Sample self-test (framework build)
+        run: dotnet run --project src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
+
+      - name: NativeAOT publish Sample + run
+        run: |
+          rm -rf "${{ env.AOT_OUTPUT }}"
+          mkdir -p "${{ env.AOT_OUTPUT }}"
+
+          arch="$(uname -m)"
+          case "${arch}" in
+            x86_64) rid="linux-x64" ;;
+            aarch64|arm64) rid="linux-arm64" ;;
+            *)
+              echo "Unsupported runner architecture for NativeAOT publish: ${arch}"
+              exit 1
+              ;;
+          esac
+          echo "NativeAOT RID: ${rid}"
+
+          dotnet publish src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj \
+            -c "${{ env.CONFIGURATION }}" \
+            -f net8.0 \
+            -r "${rid}" \
+            -o "${{ env.AOT_OUTPUT }}" \
+            /p:ContinuousIntegrationBuild=true \
+            /p:GeneratePackageOnBuild=false
+
+          "${{ env.AOT_OUTPUT }}/CQRSharp.Sample"
+
+      - name: Pack NuGet packages
+        run: |
+          rm -rf "${{ env.PACKAGE_OUTPUT }}"
+          mkdir -p "${{ env.PACKAGE_OUTPUT }}"
+
+          dotnet pack src/Domain/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Domain/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Application/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Infrastructure/CQRSharp.Generators/CQRSharp.Generators.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+
+      - name: Validate package contents
+        run: |
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          import zipfile
+
+          package_dir = os.environ.get("PACKAGE_OUTPUT", "artifacts/packages")
+          nuget_source = os.environ.get("NUGET_SOURCE", "https://api.nuget.org/v3/index.json")
+          del nuget_source  # avoid unused; we use the flat container API directly
+
+          packages = sorted(glob.glob(os.path.join(package_dir, "*.nupkg")))
+          if not packages:
+              raise SystemExit(f"No .nupkg files found in '{package_dir}'.")
+
+          def parse_nuspec(z: zipfile.ZipFile):
+              nuspec_paths = [n for n in z.namelist() if n.endswith(".nuspec")]
+              if len(nuspec_paths) != 1:
+                  raise ValueError(f"Expected 1 .nuspec file, found {len(nuspec_paths)}: {nuspec_paths}")
+              nuspec_raw = z.read(nuspec_paths[0]).decode("utf-8-sig", errors="replace")
+              root = ET.fromstring(nuspec_raw)
+              ns = {"n": root.tag.split("}")[0].strip("{")} if "}" in root.tag else {}
+              def find_text(path: str) -> str:
+                  node = root.find(path, ns) if ns else root.find(path)
+                  if node is None or node.text is None:
+                      raise ValueError(f"Missing nuspec value for '{path}'")
+                  return node.text.strip()
+              return find_text("n:metadata/n:id" if ns else "metadata/id"), find_text("n:metadata/n:version" if ns else "metadata/version")
+
+          def flatcontainer_versions(package_id: str) -> set[str]:
+              url = f"https://api.nuget.org/v3-flatcontainer/{package_id.lower()}/index.json"
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as resp:
+                      raw = resp.read().decode("utf-8", errors="replace")
+                      payload = json.loads(raw)
+                      return set(payload.get("versions", []))
+              except urllib.error.HTTPError as ex:
+                  if ex.code == 404:
+                      return set()
+                  raise
+
+          ids = set()
+          versions = set()
+          observed = []
+
+          for path in packages:
+              with zipfile.ZipFile(path) as z:
+                  package_id, version = parse_nuspec(z)
+                  ids.add(package_id)
+                  versions.add(version)
+                  observed.append((package_id, version, path))
+
+                  names = set(z.namelist())
+                  if package_id == "CQRSharp.Generators":
+                      if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
+                          raise SystemExit("CQRSharp.Generators package must include analyzers/dotnet/cs/CQRSharp.Generators.dll")
+                      if any(n.startswith("lib/") for n in names):
+                          raise SystemExit("CQRSharp.Generators package must NOT include lib/ outputs (analyzer-only).")
+
+                  if package_id == "CQRSharp":
+                      if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
+                          raise SystemExit("CQRSharp meta-package must embed analyzers/dotnet/cs/CQRSharp.Generators.dll for plug-and-play.")
+                      if any(n.startswith("lib/") for n in names):
+                          raise SystemExit("CQRSharp meta-package must NOT include lib/ outputs (meta-package).")
+
+          expected_ids = {
+              "CQRSharp.Abstractions",
+              "CQRSharp.Core",
+              "CQRSharp.Pipelines",
+              "CQRSharp.Generators",
+              "CQRSharp",
+          }
+
+          missing = expected_ids - ids
+          unexpected = ids - expected_ids
+          if missing:
+              raise SystemExit(f"Missing expected packages: {sorted(missing)}")
+          if unexpected:
+              raise SystemExit(f"Unexpected packages produced: {sorted(unexpected)}")
+
+          if len(versions) != 1:
+              raise SystemExit(f"Package versions are not aligned: {sorted(versions)}")
+          version = next(iter(versions))
+
+          existing = []
+          for package_id, _, _ in observed:
+              if version in flatcontainer_versions(package_id):
+                  existing.append(package_id)
+
+          if existing:
+              print(f"::warning::Version '{version}' already exists on NuGet for: {', '.join(sorted(existing))}")
+
+          print(f"Validated {len(packages)} packages, version {version}: {', '.join(sorted(ids))}")
+          PY
+
+      - name: Upload packages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ${{ env.PACKAGE_OUTPUT }}
+
+      - name: Publish to NuGet.org
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "${NUGET_API_KEY}" ]; then
+            echo "Missing required secret: NUGET_API_KEY"
+            exit 1
+          fi
+
+          for pkg in "${{ env.PACKAGE_OUTPUT }}"/*.nupkg; do
+            dotnet nuget push "${pkg}" \
+              --api-key "${NUGET_API_KEY}" \
+              --source "${{ env.NUGET_SOURCE }}" \
+              --skip-duplicate
+          done

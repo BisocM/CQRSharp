@@ -14,12 +14,11 @@
         <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
 
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>2.2.7</Version>
+        <Version>3.0.0</Version>
         <Authors>BisocM</Authors>
         <Title>CQRSharp Source Generators</Title>
-        <Description>Source generators for the CQRSharp framework to automate handler and pipeline registration.</Description>
+        <Description>Analyzer-only source generators for CQRSharp that generate handler registrations, AOT hints, and outbox notification serialization.</Description>
     </PropertyGroup>
 
     <ItemGroup>
@@ -36,7 +35,7 @@
     <ItemGroup>
         <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
         <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\README.md" Pack="true" PackagePath="\"/>
+        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
