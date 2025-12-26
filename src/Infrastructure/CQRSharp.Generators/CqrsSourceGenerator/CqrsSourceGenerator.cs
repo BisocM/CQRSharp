@@ -50,10 +50,18 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 var dispatcherSourceCode = GenerateDispatcher(compilation, candidateClasses!);
                 spc.AddSource("GeneratedRequestDispatcher.g.cs", SourceText.From(dispatcherSourceCode, Encoding.UTF8));
 
+                // Generate the AOT-safe stream dispatcher
+                var streamDispatcherSourceCode = GenerateStreamDispatcher(compilation, candidateClasses!);
+                spc.AddSource("GeneratedStreamRequestDispatcher.g.cs", SourceText.From(streamDispatcherSourceCode, Encoding.UTF8));
+
                 // Generate the AOT-safe notification dispatcher
                 var notificationDispatcherSourceCode = GenerateNotificationDispatcher(compilation, candidateClasses!);
                 spc.AddSource("GeneratedDirectNotificationDispatcher.g.cs",
                     SourceText.From(notificationDispatcherSourceCode, Encoding.UTF8));
+
+                // Generate the diagnostics/introspection API (request bindings)
+                var diagnosticsSourceCode = GenerateDiagnostics(compilation, candidateClasses!);
+                spc.AddSource("GeneratedCqrsDiagnostics.g.cs", SourceText.From(diagnosticsSourceCode, Encoding.UTF8));
             }
             catch (Exception ex)
             {

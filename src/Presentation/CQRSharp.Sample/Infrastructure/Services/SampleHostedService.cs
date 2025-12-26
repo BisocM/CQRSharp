@@ -2,14 +2,19 @@ using System.Diagnostics;
 using CQRSharp.Abstractions.Data.Models.Outbox;
 using CQRSharp.Abstractions.Data.Models.Commands;
 using CQRSharp.Abstractions.Data.Models.Validation;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Pipelines.Types.RateLimiting;
 using CQRSharp.Sample.Application.Commands.Requests;
+using CQRSharp.Sample.Application.Commands.Handlers;
+using CQRSharp.Sample.Application.Queries.Handlers;
 using CQRSharp.Sample.Application.Queries.Requests;
+using CQRSharp.Sample.Application.Pipelines;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Domain.Events;
+using CQRSharp.Sample.Infrastructure.Interceptors;
 using CQRSharp.Sample.Infrastructure.Persistence;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,6 +46,7 @@ public sealed class SampleHostedService(
             await using var scope = scopeFactory.CreateAsyncScope();
             var provider = scope.ServiceProvider;
             var cqrs = provider.GetRequiredService<ICqrsDispatcher>();
+            var cqrsDiagnostics = provider.GetRequiredService<ICqrsDiagnostics>();
             var scopeMarker = provider.GetRequiredService<SampleScopedMarker>();
 
             await RunBackgroundQueueTestAsync(backgroundTaskManager, diagnostics, stoppingToken).ConfigureAwait(false);
@@ -50,8 +56,10 @@ public sealed class SampleHostedService(
 	            await RunOutboxAndRequestTestAsync(cqrs, outboxStore, diagnostics, userContext.UserId, userId, stoppingToken)
 	                .ConfigureAwait(false);
 
-	            await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
-	            await RunDynamicSendTestAsync(cqrs, userId, stoppingToken).ConfigureAwait(false);
+            await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
+            await RunDynamicSendTestAsync(cqrs, userId, stoppingToken).ConfigureAwait(false);
+            await RunStreamingTestAsync(cqrs, diagnostics, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
+            await RunStreamExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
 	            await RunValidationTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
 	            await RunPipelineExemptionTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
 	            await RunInterceptorTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
@@ -59,6 +67,7 @@ public sealed class SampleHostedService(
             await RunResilienceTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunTimeoutTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
+            RunDiagnosticsApiTest(cqrsDiagnostics);
 
             logger.LogInformation("CQRSharp.Sample SELF-TEST PASSED");
         }
@@ -161,7 +170,7 @@ public sealed class SampleHostedService(
 	        RequireNotificationPipelineExecuted(diagnostics, typeof(QueryCompletedNotification<User?>));
 	    }
 
-	    private static async Task RunDynamicSendTestAsync(
+    private static async Task RunDynamicSendTestAsync(
 	        ICqrsDispatcher cqrs,
 	        Guid userId,
 	        CancellationToken cancellationToken)
@@ -174,6 +183,55 @@ public sealed class SampleHostedService(
 	        var user = await cqrs.Send(query, cancellationToken).ConfigureAwait(false);
 	        Require(user is User { Id: var id } && id == userId, "Dynamic Send(object) returned the wrong user.");
 	    }
+
+    private static async Task RunStreamingTestAsync(
+        ICqrsDispatcher cqrs,
+        SampleDiagnostics diagnostics,
+        Guid expectedMarkerId,
+        CancellationToken cancellationToken)
+    {
+        var typed = new List<StreamProbeItem>();
+        await foreach (var item in cqrs.Stream(new StreamProbeRequest(3), cancellationToken))
+            typed.Add(item);
+
+        Require(typed.Count == 3, $"Expected 3 streamed items, got {typed.Count}.");
+        Require(typed[0].Value == 1 && typed[1].Value == 2 && typed[2].Value == 3, "StreamProbeRequest values were incorrect.");
+        Require(typed.All(x => x.ScopedMarkerId == expectedMarkerId), "StreamProbeRequest observed an unexpected scoped marker id.");
+
+        object untypedRequest = new StreamProbeRequest(2);
+        var boxed = new List<object?>();
+        await foreach (var item in cqrs.Stream(untypedRequest, cancellationToken))
+            boxed.Add(item);
+
+        Require(boxed.Count == 2, $"Expected 2 boxed streamed items, got {boxed.Count}.");
+        Require(boxed[0] is StreamProbeItem { Value: 1 } && boxed[1] is StreamProbeItem { Value: 2 },
+            "Untyped Stream(object) returned unexpected items.");
+
+        RequireNotificationPipelineExecuted(diagnostics, typeof(StreamInitiatedNotification<StreamProbeItem>));
+        RequireNotificationPipelineExecuted(diagnostics, typeof(StreamCompletedNotification<StreamProbeItem>));
+    }
+
+    private static async Task RunStreamExceptionHandlingTestAsync(
+        ICqrsDispatcher cqrs,
+        SampleDiagnostics diagnostics,
+        CancellationToken cancellationToken)
+    {
+        Require(diagnostics.GetExceptionActionCount(typeof(ExceptionDemoStreamRequest)) == 0,
+            "ExceptionDemoStreamRequest exception action count should start at zero.");
+        Require(diagnostics.GetExceptionHandlerCount(typeof(ExceptionDemoStreamRequest)) == 0,
+            "ExceptionDemoStreamRequest exception handler count should start at zero.");
+
+        var results = new List<ExceptionDemoStreamItem>();
+        await foreach (var item in cqrs.Stream(new ExceptionDemoStreamRequest(), cancellationToken))
+            results.Add(item);
+
+        Require(results.Count == 2 && results[0].Value == -1 && results[1].Value == -2,
+            "ExceptionDemoStreamRequest returned unexpected items via exception handling.");
+        Require(diagnostics.GetExceptionActionCount(typeof(ExceptionDemoStreamRequest)) > 0,
+            "Expected exception action to execute for ExceptionDemoStreamRequest.");
+        Require(diagnostics.GetExceptionHandlerCount(typeof(ExceptionDemoStreamRequest)) > 0,
+            "Expected exception handler to execute for ExceptionDemoStreamRequest.");
+    }
 
 	    private static async Task RunValidationTestAsync(
 	        ICqrsDispatcher cqrs,
@@ -298,6 +356,66 @@ public sealed class SampleHostedService(
             "Expected exception action to execute for ExceptionDemoCommand.");
         Require(diagnostics.GetExceptionHandlerCount(typeof(ExceptionDemoCommand)) > 0,
             "Expected exception handler to execute for ExceptionDemoCommand.");
+    }
+
+    private static void RunDiagnosticsApiTest(ICqrsDiagnostics cqrsDiagnostics)
+    {
+        var pingBinding = cqrsDiagnostics.DescribeRequest(typeof(PingCommand));
+        Require(pingBinding.HandlerType == typeof(PingCommandHandler), "PingCommand binding did not report PingCommandHandler.");
+        Require(pingBinding.ResponseType == typeof(CommandResult), "PingCommand binding did not report CommandResult response type.");
+
+        var pingLoggingBehavior = typeof(LoggingPipelineBehavior<PingCommand, CommandResult>);
+        Require(!pingBinding.Pipeline.Any(b => b.BehaviorType == pingLoggingBehavior),
+            "PingCommand pipeline should exclude LoggingPipelineBehavior but it is still present.");
+        Require(pingBinding.ExemptedPipeline.Any(b => b.BehaviorType == pingLoggingBehavior && b.IsExempted),
+            "PingCommand diagnostics should report LoggingPipelineBehavior as exempted.");
+
+        var createUserBinding = cqrsDiagnostics.DescribeRequest(typeof(CreateUserCommand));
+        Require(createUserBinding.HandlerType == typeof(CreateUserCommandHandler),
+            "CreateUserCommand binding did not report CreateUserCommandHandler.");
+
+        var createUserLoggingBehavior = typeof(LoggingPipelineBehavior<CreateUserCommand, CommandResult>);
+        Require(createUserBinding.Pipeline.Any(b => b.BehaviorType == createUserLoggingBehavior && !b.IsExempted),
+            "CreateUserCommand pipeline should include LoggingPipelineBehavior but it was not reported.");
+
+        var interceptorBinding = cqrsDiagnostics.DescribeRequest(typeof(InterceptorDemoCommand));
+        Require(interceptorBinding.HandlerType == typeof(InterceptorDemoCommandHandler),
+            "InterceptorDemoCommand binding did not report InterceptorDemoCommandHandler.");
+        Require(interceptorBinding.PreHandlers.Any(h => h.AttributeType == typeof(CustomInterceptorAttribute) && h.Priority == 10),
+            "InterceptorDemoCommand diagnostics did not report CustomInterceptorAttribute as a pre-handler.");
+        Require(interceptorBinding.PostHandlers.Any(h => h.AttributeType == typeof(CustomInterceptorAttribute) && h.Priority == 10),
+            "InterceptorDemoCommand diagnostics did not report CustomInterceptorAttribute as a post-handler.");
+
+        var streamBinding = cqrsDiagnostics.DescribeRequest(typeof(StreamProbeRequest));
+        Require(streamBinding.HandlerType == typeof(StreamProbeRequestHandler),
+            "StreamProbeRequest binding did not report StreamProbeRequestHandler.");
+        Require(streamBinding.ResponseType == typeof(IAsyncEnumerable<StreamProbeItem>),
+            "StreamProbeRequest binding did not report IAsyncEnumerable<StreamProbeItem> response type.");
+
+        static void RequireSorted(IReadOnlyList<CqrsPipelineBehaviorBinding> bindings, string name)
+        {
+            for (var i = 1; i < bindings.Count; i++)
+            {
+                var prev = bindings[i - 1];
+                var next = bindings[i];
+
+                if (prev.Priority < next.Priority) continue;
+                if (prev.Priority > next.Priority)
+                    throw new InvalidOperationException($"{name} is not sorted by priority.");
+
+                var prevName = prev.BehaviorType.FullName;
+                var nextName = next.BehaviorType.FullName;
+                if (string.CompareOrdinal(prevName, nextName) > 0)
+                    throw new InvalidOperationException($"{name} is not deterministically sorted by type name.");
+            }
+        }
+
+        RequireSorted(pingBinding.Pipeline, "PingCommand pipeline");
+        RequireSorted(pingBinding.ExemptedPipeline, "PingCommand exempted pipeline");
+        RequireSorted(createUserBinding.Pipeline, "CreateUserCommand pipeline");
+        RequireSorted(createUserBinding.ExemptedPipeline, "CreateUserCommand exempted pipeline");
+        RequireSorted(streamBinding.Pipeline, "StreamProbeRequest pipeline");
+        RequireSorted(streamBinding.ExemptedPipeline, "StreamProbeRequest exempted pipeline");
     }
 
     private static OutboxMessage? GetUserCreatedOutboxMessage(InMemoryOutboxStore outboxStore)

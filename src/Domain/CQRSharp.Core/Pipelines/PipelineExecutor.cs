@@ -1,10 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Data.Attributes.Pipelines;
 using CQRSharp.Abstractions.Data.Interfaces.Context;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Models.Commands;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
@@ -144,6 +146,72 @@ public sealed class PipelineExecutor(
         return ExecuteCommandImmediateAsync(command, ct);
     }
 
+    public IAsyncEnumerable<TItem> ExecuteStreamAsync<TRequest, TItem>(TRequest request, CancellationToken ct)
+        where TRequest : IStreamRequest<TItem>
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
+            throw new InvalidOperationException("RunMode.Async is not supported for streaming requests.");
+
+        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
+            ? ExecuteStreamInNewScope<TRequest, TItem>(request, ct)
+            : ExecuteStreamInProvider<TRequest, TItem>(request, _services, ct);
+    }
+
+    private IAsyncEnumerable<TItem> ExecuteStreamInNewScope<TRequest, TItem>(
+        TRequest request,
+        CancellationToken ct)
+        where TRequest : IStreamRequest<TItem>
+    {
+        return ExecuteAsync();
+
+        async IAsyncEnumerable<TItem> ExecuteAsync([EnumeratorCancellation] CancellationToken enumeratorToken = default)
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            using var linked = CreateLinkedCancellationTokenSource(ct, enumeratorToken);
+            var token = linked?.Token ?? (ct.CanBeCanceled ? ct : enumeratorToken);
+
+            await foreach (var item in ExecuteStreamInProviderCore<TRequest, TItem>(request, scope.ServiceProvider, token)
+                               .WithCancellation(token)
+                               .ConfigureAwait(false))
+                yield return item;
+        }
+    }
+
+    private IAsyncEnumerable<TItem> ExecuteStreamInProvider<TRequest, TItem>(
+        TRequest request,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : IStreamRequest<TItem>
+    {
+        return ExecuteAsync();
+
+        async IAsyncEnumerable<TItem> ExecuteAsync([EnumeratorCancellation] CancellationToken enumeratorToken = default)
+        {
+            using var linked = CreateLinkedCancellationTokenSource(ct, enumeratorToken);
+            var token = linked?.Token ?? (ct.CanBeCanceled ? ct : enumeratorToken);
+
+            await foreach (var item in ExecuteStreamInProviderCore<TRequest, TItem>(request, provider, token)
+                               .WithCancellation(token)
+                               .ConfigureAwait(false))
+                yield return item;
+        }
+    }
+
+    private IAsyncEnumerable<TItem> ExecuteStreamInProviderCore<TRequest, TItem>(
+        TRequest request,
+        IServiceProvider provider,
+        CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TItem>
+    {
+        InitializeRequestContext(request, provider);
+
+        var handler = GetHandler(typeof(TRequest), provider);
+
+        return ExecuteStreamPipeline<TRequest, TItem>(request, handler, provider, cancellationToken);
+    }
+
     private Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
         TRequest command, CancellationToken ct)
         where TRequest : ICommand
@@ -176,6 +244,49 @@ public sealed class PipelineExecutor(
 
         // Execute the request through the resolved pipeline behaviors and handler.
         return await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
+    }
+
+    private IAsyncEnumerable<TItem> ExecuteStreamPipeline<TRequest, TItem>(
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TItem>
+    {
+        var resolved = services.GetServices<IStreamPipelineBehavior<TRequest, TItem>>();
+        var behaviors = resolved as IStreamPipelineBehavior<TRequest, TItem>[] ?? resolved.ToArray();
+
+        var exemptions = request.Metadata?.PipelineExemptions;
+        var behaviorCount = behaviors.Length;
+        if (exemptions is { Length: > 0 } && behaviorCount > 0)
+        {
+            var write = 0;
+            for (var read = 0; read < behaviorCount; read++)
+            {
+                var behavior = behaviors[read];
+                if (IsExempted(behavior.GetType(), exemptions)) continue;
+                behaviors[write++] = behavior;
+            }
+
+            behaviorCount = write;
+        }
+
+        if (behaviorCount == 0)
+            return ExecuteFinalStreamAction<TRequest, TItem>(request, handler, services, cancellationToken);
+
+        if (behaviorCount > 1)
+            Array.Sort(behaviors, 0, behaviorCount, StreamBehaviorPriorityComparer<TRequest, TItem>.Instance);
+
+        return InvokeBehavior(0, cancellationToken);
+
+        IAsyncEnumerable<TItem> InvokeBehavior(int index, CancellationToken ct)
+        {
+            if (index >= behaviorCount)
+                return ExecuteFinalStreamAction<TRequest, TItem>(request, handler, services, ct);
+
+            var behavior = behaviors[index];
+            return behavior.Handle(request, nextToken => InvokeBehavior(index + 1, nextToken), ct);
+        }
     }
 
     private static bool IsExempted(Type behaviorType, ReadOnlySpan<PipelineExemptionAttribute> exemptions)
@@ -303,6 +414,50 @@ public sealed class PipelineExecutor(
         return result;
     }
 
+    private IAsyncEnumerable<TItem> ExecuteFinalStreamAction<TRequest, TItem>(
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TItem>
+    {
+        return ExecuteAsync();
+
+        async IAsyncEnumerable<TItem> ExecuteAsync()
+        {
+            var notificationDispatcher = services.GetRequiredService<INotificationDispatcher>();
+
+            await notificationDispatcher.Publish(new StreamInitiatedNotification<TItem>(request), cancellationToken).ConfigureAwait(false);
+
+            await InvokePreHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+
+            var stream = await HandleStreamRequest<TItem>(request, handler, cancellationToken).ConfigureAwait(false);
+
+            var yielded = 0L;
+            var completed = false;
+
+            try
+            {
+                await foreach (var item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
+                {
+                    yielded++;
+                    yield return item;
+                }
+
+                completed = true;
+            }
+            finally
+            {
+                if (completed)
+                {
+                    await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+                    await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
     /// <summary>
     ///     Invokes the handler for a given request using a pre-compiled delegate from the handler registry.
     /// </summary>
@@ -318,7 +473,37 @@ public sealed class PipelineExecutor(
             throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
 
         var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
+
+        if (result is null)
+        {
+            if (request is ICommand || default(TResult) is not null)
+                throw new InvalidOperationException($"Handler returned null for request '{request.GetType().Name}'.");
+
+            return default!;
+        }
+
         return (TResult)result;
+    }
+
+    private async Task<IAsyncEnumerable<TItem>> HandleStreamRequest<TItem>(
+        object request,
+        object handler,
+        CancellationToken cancellationToken)
+    {
+        if (!handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
+            throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
+
+        var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+            throw new InvalidOperationException($"Handler returned null stream for request '{request.GetType().Name}'.");
+
+        return (IAsyncEnumerable<TItem>)result;
+    }
+
+    private static CancellationTokenSource? CreateLinkedCancellationTokenSource(CancellationToken requestToken, CancellationToken enumeratorToken)
+    {
+        if (!requestToken.CanBeCanceled || !enumeratorToken.CanBeCanceled) return null;
+        return CancellationTokenSource.CreateLinkedTokenSource(requestToken, enumeratorToken);
     }
 
     /// <summary>
@@ -494,6 +679,30 @@ public sealed class PipelineExecutor(
         }
 
         public int Compare(IPipelineBehavior<TRequest, TResult>? x, IPipelineBehavior<TRequest, TResult>? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+
+            var left = x is IPrioritizedPipelineBehavior lp ? lp.PipelineExecutionPriority : DefaultBehaviorPriority;
+            var right = y is IPrioritizedPipelineBehavior rp ? rp.PipelineExecutionPriority : DefaultBehaviorPriority;
+            var byPriority = left.CompareTo(right);
+            if (byPriority != 0) return byPriority;
+
+            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
+        }
+    }
+
+    private sealed class StreamBehaviorPriorityComparer<TRequest, TItem> : IComparer<IStreamPipelineBehavior<TRequest, TItem>>
+        where TRequest : IRequest
+    {
+        public static StreamBehaviorPriorityComparer<TRequest, TItem> Instance { get; } = new();
+
+        private StreamBehaviorPriorityComparer()
+        {
+        }
+
+        public int Compare(IStreamPipelineBehavior<TRequest, TItem>? x, IStreamPipelineBehavior<TRequest, TItem>? y)
         {
             if (ReferenceEquals(x, y)) return 0;
             if (x is null) return -1;

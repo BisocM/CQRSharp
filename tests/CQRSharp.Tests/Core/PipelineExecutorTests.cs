@@ -110,14 +110,14 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-                del = (h, r, c) =>
-                {
-                    callOrder.Add("handle");
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c)
-                        .ContinueWith(t => (object)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+	                del = (h, r, c) =>
+	                {
+	                    callOrder.Add("handle");
+	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c)
+	                        .ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+	                };
+	                return true;
+	            });
 
         SetupHandlerResolution(handler);
 
@@ -145,9 +145,9 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object)t.Result, TaskScheduler.Default);
-                return true;
-            });
+	                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+	                return true;
+	            });
 
         SetupHandlerResolution(handler);
 
@@ -186,13 +186,13 @@ namespace CQRSharp.Tests.Core;
             .Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-                del = (h, r, c) =>
-                {
-                    handled = true;
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+	                del = (h, r, c) =>
+	                {
+	                    handled = true;
+	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+	                };
+	                return true;
+	            });
 
         SetupHandlerResolution(handler);
 
@@ -255,13 +255,13 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-                del = (h, r, c) =>
-                {
-                    callOrder.Add("handle");
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+	                del = (h, r, c) =>
+	                {
+	                    callOrder.Add("handle");
+	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+	                };
+	                return true;
+	            });
 
         SetupHandlerResolution(handler);
 

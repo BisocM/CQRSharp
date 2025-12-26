@@ -9,6 +9,7 @@ public static class TypeStrings
     // Abstractions - Markers
     public const string ICommand = "CQRSharp.Abstractions.Data.Interfaces.Markers.Command.ICommand";
     public const string IQuery = "CQRSharp.Abstractions.Data.Interfaces.Markers.Query.IQuery`1";
+    public const string IStreamRequest = "CQRSharp.Abstractions.Data.Interfaces.Markers.Stream.IStreamRequest`1";
     public const string RequestBaseGeneric = "CQRSharp.Abstractions.Data.Interfaces.Markers.Request.RequestBase`1";
 
     // Abstractions - Handlers
@@ -16,6 +17,8 @@ public static class TypeStrings
     public const string ICommandHandler2 = "CQRSharp.Abstractions.Data.Interfaces.Handlers.ICommandHandler`2";
     public const string IQueryHandler2 = "CQRSharp.Abstractions.Data.Interfaces.Handlers.IQueryHandler`2";
     public const string IQueryHandler3 = "CQRSharp.Abstractions.Data.Interfaces.Handlers.IQueryHandler`3";
+    public const string IStreamRequestHandler2 = "CQRSharp.Abstractions.Data.Interfaces.Handlers.IStreamRequestHandler`2";
+    public const string IStreamRequestHandler3 = "CQRSharp.Abstractions.Data.Interfaces.Handlers.IStreamRequestHandler`3";
 
     // Abstractions - Notifications
     public const string INotification = "CQRSharp.Abstractions.Data.Interfaces.Notifications.INotification";
@@ -44,5 +47,6 @@ public static class TypeStrings
 
 	    // Core
 	    public const string IPipelineBehavior = "CQRSharp.Core.Pipelines.IPipelineBehavior`2";
+        public const string IStreamPipelineBehavior = "CQRSharp.Core.Pipelines.IStreamPipelineBehavior`2";
     public const string IRequestContextFactory = "CQRSharp.Core.Factories.IRequestContextFactory`1";
 }

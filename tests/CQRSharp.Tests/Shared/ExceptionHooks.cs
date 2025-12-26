@@ -1,6 +1,7 @@
 using CQRSharp.Abstractions.Data.Interfaces.Exceptions;
 using CQRSharp.Abstractions.Data.Interfaces.Handlers;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Models.Commands;
 using CQRSharp.Abstractions.Data.Models.Exceptions;
 
@@ -114,3 +115,115 @@ public sealed class BaseExceptionHandler(ExceptionHookProbe probe)
     }
 }
 
+public sealed class ActionOnlyExceptionStreamRequest : StreamRequestBase<int>;
+
+public sealed class HandledExceptionStreamRequest : StreamRequestBase<int>;
+
+public sealed class DerivedExceptionStreamRequest : StreamRequestBase<int>;
+
+public sealed class ActionOnlyExceptionStreamRequestHandler : IStreamRequestHandler<ActionOnlyExceptionStreamRequest, int>
+{
+    public async IAsyncEnumerable<int> Handle(ActionOnlyExceptionStreamRequest request, CancellationToken cancellationToken)
+    {
+        yield return 0;
+        await Task.Yield();
+        throw new ActionOnlyException();
+    }
+}
+
+public sealed class HandledExceptionStreamRequestHandler : IStreamRequestHandler<HandledExceptionStreamRequest, int>
+{
+    public async IAsyncEnumerable<int> Handle(HandledExceptionStreamRequest request, CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        if (cancellationToken.IsCancellationRequested) yield break;
+        throw new HandledException();
+    }
+}
+
+public sealed class DerivedExceptionStreamRequestHandler : IStreamRequestHandler<DerivedExceptionStreamRequest, int>
+{
+    public async IAsyncEnumerable<int> Handle(DerivedExceptionStreamRequest request, CancellationToken cancellationToken)
+    {
+        yield return 1;
+        await Task.Yield();
+        throw new DerivedHookException();
+    }
+}
+
+public sealed class ActionOnlyStreamExceptionAction(ExceptionHookProbe probe)
+    : IRequestExceptionAction<ActionOnlyExceptionStreamRequest, ActionOnlyException>
+{
+    public Task Execute(
+        ActionOnlyExceptionStreamRequest request,
+        ActionOnlyException exception,
+        CancellationToken cancellationToken)
+    {
+        probe.RecordAction();
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class HandledStreamExceptionHandler(ExceptionHookProbe probe)
+    : IRequestExceptionHandler<HandledExceptionStreamRequest, IAsyncEnumerable<int>, HandledException>
+{
+    public Task Handle(
+        HandledExceptionStreamRequest request,
+        HandledException exception,
+        RequestExceptionHandlerState<IAsyncEnumerable<int>> state,
+        CancellationToken cancellationToken)
+    {
+        probe.RecordHandledHandler();
+        state.SetHandled(Fallback());
+        return Task.CompletedTask;
+
+        static async IAsyncEnumerable<int> Fallback()
+        {
+            yield return 42;
+            yield return 43;
+            await Task.Yield();
+        }
+    }
+}
+
+public sealed class DerivedStreamExceptionHandler(ExceptionHookProbe probe)
+    : IRequestExceptionHandler<DerivedExceptionStreamRequest, IAsyncEnumerable<int>, DerivedHookException>
+{
+    public Task Handle(
+        DerivedExceptionStreamRequest request,
+        DerivedHookException exception,
+        RequestExceptionHandlerState<IAsyncEnumerable<int>> state,
+        CancellationToken cancellationToken)
+    {
+        probe.RecordDerivedHandler();
+        state.SetHandled(Empty());
+        return Task.CompletedTask;
+
+        static async IAsyncEnumerable<int> Empty()
+        {
+            await Task.Yield();
+            yield break;
+        }
+    }
+}
+
+public sealed class BaseStreamExceptionHandler(ExceptionHookProbe probe)
+    : IRequestExceptionHandler<DerivedExceptionStreamRequest, IAsyncEnumerable<int>, BaseHookException>
+{
+    public Task Handle(
+        DerivedExceptionStreamRequest request,
+        BaseHookException exception,
+        RequestExceptionHandlerState<IAsyncEnumerable<int>> state,
+        CancellationToken cancellationToken)
+    {
+        probe.RecordBaseHandler();
+        state.SetHandled(Empty());
+        return Task.CompletedTask;
+
+        static async IAsyncEnumerable<int> Empty()
+        {
+            await Task.Yield();
+            yield break;
+        }
+    }
+}

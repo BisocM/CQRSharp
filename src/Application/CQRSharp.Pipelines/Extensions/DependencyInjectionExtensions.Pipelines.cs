@@ -19,6 +19,7 @@ public static class DependencyInjectionExtensions
     public static IServiceCollection AddExceptionHandling(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamExceptionHandlingBehavior<,>));
         return services;
     }
 
@@ -35,6 +36,7 @@ public static class DependencyInjectionExtensions
         services.Configure<ResilienceOptions>(configureOptions.Invoke);
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamResilienceBehavior<,>));
 
         return services;
     }
@@ -52,6 +54,7 @@ public static class DependencyInjectionExtensions
         services.Configure<TimeoutOptions>(configureOptions.Invoke);
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamTimeoutBehavior<,>));
 
         return services;
     }
@@ -63,6 +66,7 @@ public static class DependencyInjectionExtensions
     public static IServiceCollection AddValidationBehavior(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamValidationBehavior<,>));
         return services;
     }
 
@@ -87,6 +91,7 @@ public static class DependencyInjectionExtensions
 
         services.AddSingleton<RateLimiter>();
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamRateLimitingBehavior<,>));
 
         return services;
     }
@@ -120,6 +125,7 @@ public static class DependencyInjectionExtensions
 
         // Register the pipeline behavior.
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>));
 
         return services;
     }
@@ -132,6 +138,7 @@ public static class DependencyInjectionExtensions
         services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
         services.AddScoped<IUnitOfWork>(implementationFactory);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>));
         return services;
     }
 

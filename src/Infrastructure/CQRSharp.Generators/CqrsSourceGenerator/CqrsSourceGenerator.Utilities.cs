@@ -61,20 +61,29 @@ public sealed partial class CqrsSourceGenerator
             compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler3)
         };
 
+        var streamHandlerSymbols = new[]
+        {
+            compilation.GetTypeByMetadataName(TypeStrings.IStreamRequestHandler2),
+            compilation.GetTypeByMetadataName(TypeStrings.IStreamRequestHandler3)
+        };
+
         var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
         var requestValidatorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestValidator1);
         var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
+        var streamPipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamPipelineBehavior);
         var requestExceptionHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionHandler3);
         var requestExceptionActionSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionAction2);
 
         return commandHandlerSymbols
             .Concat(queryHandlerSymbols)
+            .Concat(streamHandlerSymbols)
             .Concat([
                 notificationHandlerSymbol,
                 requestValidatorSymbol,
                 requestExceptionHandlerSymbol,
                 requestExceptionActionSymbol,
-                pipelineBehaviorSymbol
+                pipelineBehaviorSymbol,
+                streamPipelineBehaviorSymbol
             ])
             .Where(s => s is not null)
             .Cast<INamedTypeSymbol>();

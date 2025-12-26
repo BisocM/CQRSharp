@@ -10,7 +10,7 @@ namespace CQRSharp.Core.Caching.Contexts;
 public sealed class ContextFactoryRegistry : IContextFactoryRegistry
 {
     // Thread-safe dictionary for holding context-to-factory resolver mappings.
-    private readonly ConcurrentDictionary<Type, Func<IServiceProvider, object>> _factoryMappings;
+    private readonly ConcurrentDictionary<Type, Func<IServiceProvider, object?>> _factoryMappings;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="ContextFactoryRegistry" /> class with the specified factory mappings.
@@ -20,7 +20,7 @@ public sealed class ContextFactoryRegistry : IContextFactoryRegistry
     ///     <c>IRequestContextFactory&lt;TContext&gt;</c>
     ///     from an <see cref="IServiceProvider" />.
     /// </param>
-    public ContextFactoryRegistry(ConcurrentDictionary<Type, Func<IServiceProvider, object>> factoryMappings)
+    public ContextFactoryRegistry(ConcurrentDictionary<Type, Func<IServiceProvider, object?>> factoryMappings)
     {
         _factoryMappings = factoryMappings;
     }

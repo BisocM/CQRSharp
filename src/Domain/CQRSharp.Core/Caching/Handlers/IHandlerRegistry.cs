@@ -27,6 +27,6 @@ public interface IHandlerRegistry
 /// <param name="handler">The target handler to invoke.</param>
 /// <param name="request">The request object to be processed by the handler.</param>
 /// <param name="cancellationToken">A token used to propagate notification that operations should be canceled.</param>
-/// <returns>A task representing the asynchronous invocation, returning an object as the result.</returns>
-public delegate Task<object>
+/// <returns>A task representing the asynchronous invocation, returning the boxed result (nullable for queries).</returns>
+public delegate Task<object?>
     HandlerInvokerDelegate(object handler, object request, CancellationToken cancellationToken);

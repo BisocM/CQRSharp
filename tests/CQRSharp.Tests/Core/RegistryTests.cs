@@ -13,7 +13,7 @@ public class HandlerRegistryTests
     {
         var map = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();
         var requestType = typeof(TestCommand);
-        map[requestType] = (_, _, _) => Task.FromResult<object>("test");
+        map[requestType] = (_, _, _) => Task.FromResult<object?>("test");
         var registry = new HandlerRegistry(map);
 
         var found = registry.TryGetHandlerDelegate(requestType, out var invoker);

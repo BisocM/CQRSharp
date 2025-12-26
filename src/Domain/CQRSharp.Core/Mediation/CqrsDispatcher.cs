@@ -1,4 +1,5 @@
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
@@ -11,19 +12,26 @@ namespace CQRSharp.Core.Mediation;
 public sealed class CqrsDispatcher : ICqrsDispatcher
 {
     private readonly IRequestDispatcher _requestDispatcher;
+    private readonly IStreamRequestDispatcher _streamRequestDispatcher;
     private readonly INotificationDispatcher _notificationDispatcher;
 
     public CqrsDispatcher(
         IRequestDispatcher requestDispatcher,
+        IStreamRequestDispatcher streamRequestDispatcher,
         INotificationDispatcher notificationDispatcher)
     {
         _requestDispatcher = requestDispatcher ?? throw new ArgumentNullException(nameof(requestDispatcher));
+        _streamRequestDispatcher = streamRequestDispatcher ?? throw new ArgumentNullException(nameof(streamRequestDispatcher));
         _notificationDispatcher = notificationDispatcher ?? throw new ArgumentNullException(nameof(notificationDispatcher));
     }
 
     public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (request is IStreamRequest)
+            throw new InvalidOperationException("Stream requests must be executed via Stream(...) instead of Send(...).");
+
         return _requestDispatcher.ExecuteAsync(request, cancellationToken);
     }
 
@@ -34,7 +42,26 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         if (request is not IRequest typedRequest)
             throw new ArgumentException($"Request must implement {nameof(IRequest)}.", nameof(request));
 
+        if (typedRequest is IStreamRequest)
+            throw new InvalidOperationException("Stream requests must be executed via Stream(...) instead of Send(...).");
+
         return _requestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
+    }
+
+    public IAsyncEnumerable<TItem> Stream<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return _streamRequestDispatcher.ExecuteAsync(request, cancellationToken);
+    }
+
+    public IAsyncEnumerable<object?> Stream(object request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request is not IStreamRequest typedRequest)
+            throw new ArgumentException($"Request must implement {nameof(IStreamRequest)}.", nameof(request));
+
+        return _streamRequestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
     }
 
     public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)

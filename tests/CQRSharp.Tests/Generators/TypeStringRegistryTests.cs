@@ -6,6 +6,7 @@ using CQRSharp.Abstractions.Data.Interfaces.Handlers;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Abstractions.Data.Interfaces.Validation;
 using CQRSharp.Abstractions.Data.Models.Commands;
@@ -23,11 +24,14 @@ public sealed class TypeStringRegistryTests
         // CQRSharp.Abstractions
         [TypeStrings.ICommand, "CQRSharp.Abstractions", typeof(ICommand)],
         [TypeStrings.IQuery, "CQRSharp.Abstractions", typeof(IQuery<>)],
+        [TypeStrings.IStreamRequest, "CQRSharp.Abstractions", typeof(IStreamRequest<>)],
         [TypeStrings.RequestBaseGeneric, "CQRSharp.Abstractions", typeof(RequestBase<>)],
         [TypeStrings.ICommandHandler1, "CQRSharp.Abstractions", typeof(ICommandHandler<>)],
         [TypeStrings.ICommandHandler2, "CQRSharp.Abstractions", typeof(ICommandHandler<,>)],
         [TypeStrings.IQueryHandler2, "CQRSharp.Abstractions", typeof(IQueryHandler<,>)],
         [TypeStrings.IQueryHandler3, "CQRSharp.Abstractions", typeof(IQueryHandler<,,>)],
+        [TypeStrings.IStreamRequestHandler2, "CQRSharp.Abstractions", typeof(IStreamRequestHandler<,>)],
+        [TypeStrings.IStreamRequestHandler3, "CQRSharp.Abstractions", typeof(IStreamRequestHandler<,,>)],
         [TypeStrings.INotification, "CQRSharp.Abstractions", typeof(INotification)],
         [TypeStrings.INotificationHandler, "CQRSharp.Abstractions", typeof(INotificationHandler<>)],
         [TypeStrings.IRequestValidator1, "CQRSharp.Abstractions", typeof(IRequestValidator<>)],
@@ -41,6 +45,7 @@ public sealed class TypeStringRegistryTests
         [TypeStrings.CommandResult, "CQRSharp.Abstractions", typeof(CommandResult)],
         // CQRSharp.Core
         [TypeStrings.IPipelineBehavior, "CQRSharp.Core", typeof(IPipelineBehavior<,>)],
+        [TypeStrings.IStreamPipelineBehavior, "CQRSharp.Core", typeof(IStreamPipelineBehavior<,>)],
         [TypeStrings.IRequestContextFactory, "CQRSharp.Core", typeof(IRequestContextFactory<>)],
     ];
 

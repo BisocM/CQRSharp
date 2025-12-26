@@ -1,5 +1,6 @@
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Models.Commands;
 
 namespace CQRSharp.Core.Pipelines;
@@ -30,4 +31,12 @@ public interface IPipelineExecutor
     /// <returns>A task that represents the asynchronous execution operation, containing the <see cref="CommandResult" />.</returns>
     Task<CommandResult> ExecuteCommandAsync<TRequest>(TRequest command, CancellationToken cancellationToken)
         where TRequest : ICommand;
+
+    /// <summary>
+    ///     Executes a streaming request through its configured stream pipeline and returns the stream.
+    /// </summary>
+    /// <typeparam name="TRequest">The streaming request type.</typeparam>
+    /// <typeparam name="TItem">The streamed element type.</typeparam>
+    IAsyncEnumerable<TItem> ExecuteStreamAsync<TRequest, TItem>(TRequest request, CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TItem>;
 }

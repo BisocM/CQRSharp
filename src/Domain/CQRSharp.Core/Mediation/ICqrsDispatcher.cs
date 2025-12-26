@@ -1,4 +1,5 @@
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Mediation;
@@ -17,6 +18,16 @@ public interface ICqrsDispatcher
     ///     Sends a request by runtime type (untyped), returning the boxed response.
     /// </summary>
     Task<object?> Send(object request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Executes a streaming request and returns an <see cref="IAsyncEnumerable{T}" /> of elements.
+    /// </summary>
+    IAsyncEnumerable<TItem> Stream<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Executes a streaming request by runtime type (untyped), returning boxed elements.
+    /// </summary>
+    IAsyncEnumerable<object?> Stream(object request, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Publishes a notification to all registered handlers.

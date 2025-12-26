@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using CQRSharp.Abstractions.Data.Interfaces.Handlers;
 using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Data.Interfaces.Notifications;
 using CQRSharp.Core.Mediation;
 
@@ -59,5 +60,49 @@ public sealed class PublishScopeCheckQueryHandler(ICqrsDispatcher cqrs, ScopedMa
     {
         await cqrs.Publish(new ScopeCheckNotification(marker.Id), cancellationToken);
         return sink.TryTake(out var ok) && ok;
+    }
+}
+
+public sealed class NestedSendScopeStreamRequest : StreamRequestBase<bool>;
+
+public sealed class NestedSendScopeStreamRequestHandler(ScopedMarker marker, ICqrsDispatcher cqrs)
+    : IStreamRequestHandler<NestedSendScopeStreamRequest, bool>
+{
+    public async IAsyncEnumerable<bool> Handle(NestedSendScopeStreamRequest request, CancellationToken cancellationToken)
+    {
+        var innerId = await cqrs.Send(new GetScopedMarkerIdQuery(), cancellationToken);
+        yield return innerId == marker.Id;
+    }
+}
+
+public sealed class DisposalTracker
+{
+    private int _disposedCount;
+
+    public int DisposedCount => Volatile.Read(ref _disposedCount);
+
+    public void RecordDisposed() => Interlocked.Increment(ref _disposedCount);
+}
+
+public sealed class ScopedDisposalProbe(DisposalTracker tracker) : IAsyncDisposable
+{
+    public Guid Id { get; } = Guid.NewGuid();
+
+    public ValueTask DisposeAsync()
+    {
+        tracker.RecordDisposed();
+        return default;
+    }
+}
+
+public sealed class StreamScopeDisposalRequest : StreamRequestBase<Guid>;
+
+public sealed class StreamScopeDisposalRequestHandler(ScopedDisposalProbe probe) : IStreamRequestHandler<StreamScopeDisposalRequest, Guid>
+{
+    public async IAsyncEnumerable<Guid> Handle(StreamScopeDisposalRequest request, CancellationToken cancellationToken)
+    {
+        yield return probe.Id;
+        await Task.Delay(50, cancellationToken);
+        yield return probe.Id;
     }
 }
