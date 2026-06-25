@@ -397,5 +397,11 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 /.idea
-output.txt
-CQRSharp/outputfiles.txt
+
+# Repo-local .NET SDK installs (dotnet-install scripts / toolpath sentinels)
+.dotnet/
+
+# Local NuGet package output (PackageOutputPath) and CI build artifacts
+.nupkgs/
+artifacts/
+outputfiles.txt

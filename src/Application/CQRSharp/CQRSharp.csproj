@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+
+        <PackageId>CQRSharp</PackageId>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <NoWarn>$(NoWarn);CS2008;NU5128</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Meta-package: no lib output, so no symbol package. -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
+        <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
+        <Description>A lightweight, attribute-driven CQRS framework for .NET 8/9/10 with first-class Native AOT support. A Roslyn source generator wires up command, query, stream, and notification dispatch at compile time — no runtime reflection — and bundled analyzers catch wiring mistakes as you type. Install this meta-package for the full plug-and-play setup: abstractions, runtime, source generator, and analyzers.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+                          PrivateAssets="all"/>
+        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
+                          PrivateAssets="all"/>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Ship the source generator and analyzers transitively from the meta-package for plug-and-play support. -->
+        <None Include="..\..\Infrastructure\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs"
+              Visible="false"/>
+        <None Include="..\..\Infrastructure\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs"
+              Visible="false"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,14 @@
+{
+  "_comment": "Config for the bisocm LLM pre-publish review (see .github/scripts/llm_review.py). Edit 'model' to switch models; the review is advisory and never blocks publishing.",
+  "baseUrl": "https://bisocm.org/v1",
+  "model": "mimo-v2.5",
+  "temperature": 0.3,
+  "maxTokens": 1200,
+  "timeoutSeconds": 150,
+  "_reasoningEffortByModel": "null = omit the field (mimo-v2.5 reasons at fixed medium); 'none' turns reasoning off (gemma).",
+  "reasoningEffortByModel": {
+    "mimo-v2.5": null,
+    "gemma-4-12b-abliterated": "none"
+  },
+  "checks": ["readme", "descriptions", "release-notes"]
+}

@@ -1,0 +1,53 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
+        <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
+        <Description>The CQRSharp runtime: the ICqrsDispatcher facade, pipeline execution, notification publishing, background task queue and transactional outbox processing, distributed-tracing hooks, health checks, and the source-generated, Native-AOT-friendly handler registries.</Description>
+        <PackageReleaseNotes>
+            Version 3.0.0. Adds unified dispatch, notification pipelines, exception hooks, and AOT hardening.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    </ItemGroup>
+
+</Project>

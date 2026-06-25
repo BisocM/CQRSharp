@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
+
+    <PropertyGroup>
+        <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('netstandard'))">
+        <PublishAot>false</PublishAot>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>netstandard2.0;net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>netstandard2.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp</PackageTags>
+        <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
+        <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
+        <PackageReleaseNotes>
+            Version 3.0.0. Breaking changes: removed SensitiveData attribute and updated request metadata.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <!--
+        netstandard2.0 lacks IAsyncDisposable / IAsyncEnumerable in the BCL; this polyfill supplies them.
+        net8.0+ have these in-box, so the reference is scoped to netstandard2.0 only. (Previously these
+        types arrived transitively via an unused Microsoft.Extensions.DependencyInjection.Abstractions ref.)
+    -->
+    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+        <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2"/>
+    </ItemGroup>
+
+</Project>

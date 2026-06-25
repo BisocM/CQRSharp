@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <RootNamespace>CQRSharp.Generators</RootNamespace>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <PublishAot>false</PublishAot>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <!-- Analyzer-only package: no lib output, so no symbol package and no lib/ref TFM (NU5128 is expected). -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <!-- RS2000/RS2008 (analyzer release tracking) target DiagnosticAnalyzer.SupportedDiagnostics; this is an
+             IIncrementalGenerator that reports CQRGEN* diagnostics inline, so release tracking does not apply. -->
+        <NoWarn>$(NoWarn);NU5128;RS2000;RS2008</NoWarn>
+
+        <Title>CQRSharp Source Generators</Title>
+        <Description>The CQRSharp Roslyn source generator: emits handler registration, the AOT-safe dispatcher and notification wiring, Native-AOT trimming hints, and outbox JSON serialization at compile time. Pulled in transitively by the CQRSharp meta-package.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <!-- The well-known-type resolver is shared, verbatim, with CQRSharp.Analyzers (source-linked, not a reference,
+         so neither Roslyn component takes a dependency on the other). -->
+    <ItemGroup>
+        <Compile Include="..\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>default</LangVersion>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;Pipelines;Resilience;RateLimiting</PackageTags>
+        <Title>Optional Pipeline Behaviors for CQRSharp</Title>
+        <Description>Optional, opt-in pipeline behaviors for CQRSharp — validation, unit of work, resilience/retries, timeouts, rate limiting, idempotency, and logging — plus a one-call pipeline-pack registration for sensible defaults.</Description>
+        <PackageReleaseNotes>
+            Version 3.0.0. Adds pipeline-pack registration and hardens built-in behaviors.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
+    </ItemGroup>
+
+</Project>
