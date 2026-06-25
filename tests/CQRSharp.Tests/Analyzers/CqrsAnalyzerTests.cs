@@ -218,4 +218,60 @@ public class CqrsAnalyzerTests
         var diagnostics = await AnalyzeAsync(source, new HandlerContextMismatchAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA001");
     }
+
+    [Fact(DisplayName = "CQRA001: convenience handler for a custom-context request is not flagged")]
+    public async Task CQRA001_DoesNotFlagConvenienceHandlerWithCustomContext()
+    {
+        // The documented convenience overload ICommandHandler<TCommand> inherits ICommandHandler<TCommand,
+        // RequestContextBase>. That implicit default context must NOT be reported as a mismatch against a request
+        // that declares a custom context — the developer never spelled out a context type argument.
+        const string source = """
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Handlers;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Commands;
+
+                              public sealed class CustomCtx : RequestContextBase { }
+
+                              public sealed class CustomContextCommand : CommandBase<CustomCtx> { }
+
+                              public sealed class ConvenienceHandler : ICommandHandler<CustomContextCommand>
+                              {
+                                  public Task<CommandResult> Handle(CustomContextCommand command, CancellationToken cancellationToken)
+                                      => Task.FromResult(CommandResult.FromSuccess());
+                              }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new HandlerContextMismatchAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA001");
+    }
+
+    [Fact(DisplayName = "CQRA005: open-generic behavior exemption is not flagged")]
+    public async Task CQRA005_DoesNotFlagOpenGenericBehaviorExemption()
+    {
+        // typeof(MyBehavior<,>) is an unbound generic; the analyzer must still recognize it as a pipeline behavior.
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp.Core.Pipelines;
+
+                              public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
+                                  where TRequest : IRequest
+                              {
+                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                      => next(cancellationToken);
+                              }
+
+                              [PipelineExemption(typeof(MyBehavior<,>))]
+                              public sealed class SomeRequest { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA005");
+    }
 }
