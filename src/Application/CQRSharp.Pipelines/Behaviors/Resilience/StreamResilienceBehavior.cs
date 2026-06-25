@@ -16,10 +16,13 @@ namespace CQRSharp.Pipelines.Behaviors.Resilience;
 /// </summary>
 public sealed class StreamResilienceBehavior<TRequest, TItem>(
     ILogger<StreamResilienceBehavior<TRequest, TItem>> logger,
-    IOptions<ResilienceOptions> options)
+    IOptions<ResilienceOptions> options,
+    TimeProvider? timeProvider = null)
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     // Runs OUTSIDE the unit-of-work behavior (priority 100) so each retry executes against a fresh transaction.
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
 
@@ -127,7 +130,7 @@ public sealed class StreamResilienceBehavior<TRequest, TItem>(
                     activity?.SetTag("resilience.retry_delay_ms", delay.TotalMilliseconds);
 
                     if (delay > TimeSpan.Zero)
-                        await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                        await Task.Delay(delay, _timeProvider, cancellationToken).ConfigureAwait(false);
 
                     continue;
                 }

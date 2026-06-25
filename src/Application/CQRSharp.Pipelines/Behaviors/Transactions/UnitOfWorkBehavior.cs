@@ -25,9 +25,12 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     IOutbox outbox,
     IOptions<UnitOfWorkOptions> options,
     IOutboxStore? outboxStore = null,
-    INotificationSerializer? serializer = null)
+    INotificationSerializer? serializer = null,
+    TimeProvider? timeProvider = null)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
@@ -143,7 +146,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
             Guid.NewGuid(),
             serializer.GetNotificationName(n.GetType()),
             serializer.Serialize(n),
-            DateTime.UtcNow,
+            _timeProvider.GetUtcNow().UtcDateTime,
             OutboxMessageStatus.Pending,
             null,
             null,

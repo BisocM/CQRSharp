@@ -16,8 +16,11 @@ namespace CQRSharp.Pipelines.Behaviors.Timeout;
 /// <typeparam name="TResult">The type of the result produced by the handler pipeline.</typeparam>
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
-    IOptions<TimeoutOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
+    IOptions<TimeoutOptions> options,
+    TimeProvider? timeProvider = null) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next,
@@ -32,7 +35,7 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
 
         ArgumentNullException.ThrowIfNull(request);
 
-        using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout);
+        using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout, _timeProvider);
         using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             timeoutCancellationTokenSource.Token);

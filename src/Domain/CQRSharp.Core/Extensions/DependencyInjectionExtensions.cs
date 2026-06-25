@@ -62,6 +62,11 @@ public static class DependencyInjectionExtensions
             services.Configure<OutboxOptions>(_ => { });
         }
 
+        // The single clock seam: every time-dependent component reads "now" through TimeProvider, so behavior is
+        // deterministic under test (via FakeTimeProvider) and overridable by consumers. Defaults to the system clock;
+        // a consumer that registers their own TimeProvider before/after AddCqrs wins.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.TryAddScoped<IOutbox, Outbox>();
 
         services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();

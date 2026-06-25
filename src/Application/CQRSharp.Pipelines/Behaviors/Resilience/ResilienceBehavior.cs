@@ -17,9 +17,12 @@ namespace CQRSharp.Pipelines.Behaviors.Resilience;
 /// <typeparam name="TResult">The type of the result returned after processing the request.</typeparam>
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
-    IOptions<ResilienceOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
+    IOptions<ResilienceOptions> options,
+    TimeProvider? timeProvider = null) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
@@ -79,7 +82,7 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 activity?.SetTag("resilience.retry_delay_ms", delay.TotalMilliseconds);
 
                 if (delay > TimeSpan.Zero)
-                    await Task.Delay(delay, cancellationToken);
+                    await Task.Delay(delay, _timeProvider, cancellationToken);
             }
             catch (Exception ex)
             {

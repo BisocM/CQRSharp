@@ -10,6 +10,7 @@ using CQRSharp.Pipelines.Behaviors.Transactions;
 using CQRSharp.Pipelines.Behaviors.Validation;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CQRSharp.Pipelines.Extensions;
 
@@ -181,6 +182,9 @@ public static class DependencyInjectionExtensions
         Action<CqrsPipelinePackOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // Ensure the clock seam is available even if the pipeline pack is wired without the core AddCqrs call.
+        services.TryAddSingleton(TimeProvider.System);
 
         var pack = new CqrsPipelinePackOptions();
         configure?.Invoke(pack);

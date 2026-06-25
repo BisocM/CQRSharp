@@ -10,6 +10,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Xunit.Abstractions;
 
@@ -75,18 +76,24 @@ public class RateLimitingBehaviorTests
     [Fact(DisplayName = "After refill: tokens replenished over time")]
     public async Task AfterRefill_TokensReplenished()
     {
-        // Arrange
+        // Arrange — a FakeTimeProvider-backed limiter so refill is driven by virtual time, not a real wall-clock wait.
+        var time = new FakeTimeProvider();
+        var limiter = new RateLimiter(Options.Create(_options), time);
+        var behavior = new RateLimitingBehavior<RequestBase<IRateLimitedContext>, object>(
+            new Mock<ILogger<RateLimitingBehavior<RequestBase<IRateLimitedContext>, object>>>().Object,
+            limiter);
+
         var ctx = new TestRateLimitedContext("r3", "u3");
         var req = new TestRateLimitedCommand { Context = ctx };
-        for (var i = 0; i < _options.MaxTokens; i++) await _behavior.Handle(req, _ => Task.FromResult<object>(null!), CancellationToken.None);
+        for (var i = 0; i < _options.MaxTokens; i++) await behavior.Handle(req, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
-        // Act
-        await Task.Delay(TimeSpan.FromSeconds(_options.MaxTokens / _options.ReplenishRatePerSecond + 1));
-        Func<Task> act = () => _behavior.Handle(req, _ => Task.FromResult<object>(null!), CancellationToken.None);
+        // Act — at 1 token/s, advancing MaxTokens(+1) seconds of virtual time refills the whole bucket.
+        time.Advance(TimeSpan.FromSeconds(_options.MaxTokens / _options.ReplenishRatePerSecond + 1));
+        Func<Task> act = () => behavior.Handle(req, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
         // Assert
         await act.Should().NotThrowAsync();
-        _output.WriteLine("[PASS] Tokens replenished for user u3 after delay.");
+        _output.WriteLine("[PASS] Tokens replenished for user u3 after virtual delay.");
     }
 
     [Fact(DisplayName = "Per-command scope: independent buckets per command type")]

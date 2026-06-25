@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
@@ -12,9 +11,11 @@ namespace CQRSharp.Pipelines.Behaviors.Logging;
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TItem">The streamed element type.</typeparam>
 public sealed class StreamLoggingBehavior<TRequest, TItem>(
-    ILogger<StreamLoggingBehavior<TRequest, TItem>> logger) : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
+    ILogger<StreamLoggingBehavior<TRequest, TItem>> logger, TimeProvider? timeProvider = null) : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging;
 
     public IAsyncEnumerable<TItem> Handle(
@@ -28,7 +29,7 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
             var requestName = typeof(TRequest).Name;
-            var startTimestamp = Stopwatch.GetTimestamp();
+            var startTimestamp = _timeProvider.GetTimestamp();
             logger.LogInformation("Streaming {RequestName}", requestName);
 
             var count = 0L;
@@ -44,7 +45,7 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Streaming {RequestName} failed after {Count} item(s) and {ElapsedMs:0.##}ms",
-                        requestName, count, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
                     throw;
                 }
 
@@ -54,7 +55,7 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
             }
 
             logger.LogInformation("Streamed {RequestName}: {Count} item(s) in {ElapsedMs:0.##}ms",
-                requestName, count, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
     }
 }

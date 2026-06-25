@@ -28,6 +28,8 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0"/>
         <!-- Workspaces APIs (Document/Project/AdhocWorkspace/CodeAction) for exercising code-fix providers in-test. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0"/>
+        <!-- FakeTimeProvider drives the clock seam deterministically in timing tests (no real Task.Delay). -->
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
         <PackageReference Include="Moq" Version="4.20.72"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
