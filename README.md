@@ -2,7 +2,6 @@
 
 [![NuGet version (CQRSharp)](https://img.shields.io/nuget/v/CQRSharp.svg?style=flat-square)](https://www.nuget.org/packages/CQRSharp/)
 [![CodeQL](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql)
-[![Qodana](https://github.com/BisocM/CQRSharp/actions/workflows/qodana_code_quality.yml/badge.svg)](https://github.com/BisocM/CQRSharp/actions/workflows/qodana_code_quality.yml)
 
 ![Alt](https://repobeats.axiom.co/api/embed/1d9c645b87f2a7c1c24211e12b02407a8df0ff87.svg "Repobeats Analytics")
 
