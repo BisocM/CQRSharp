@@ -29,7 +29,7 @@
 
     <!-- Pack the icon, license, and README into every CQRSharp package (inert for non-packable projects). -->
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)Assets/CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
         <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Visible="false"/>
         <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false"/>
     </ItemGroup>

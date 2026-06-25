@@ -12,7 +12,7 @@ applications, with complete Native AOT support.
 A Roslyn source generator wires up dispatching and registration at compile time, so there is no runtime reflection and
 the whole framework is trimming- and Native-AOT-friendly.
 
-For more information, please advise the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
+For more information, see the [CQRSharp project page](https://bisocm.org/projects/cqrsharp).
 
 ---
 
@@ -54,7 +54,7 @@ using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Abstractions.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Models.Commands;
 
-public sealed class CreateUser : ICommand
+public sealed class CreateUser : CommandBase
 {
     public required string Name { get; init; }
 }
@@ -76,9 +76,11 @@ public sealed class UsersController(ICqrsDispatcher dispatcher)
 }
 ```
 
-Queries (`IQuery<TResult>` / `IQueryHandler<,>`), streaming requests (`IStreamRequest<TItem>` via `dispatcher.Stream`),
-and notifications (`INotification` via `dispatcher.Publish`) follow the same pattern. Cross-cutting behaviors
-(validation, rate limiting, timeout, resilience, unit-of-work) are opt-in via `AddCqrsPipelinePack`.
+Queries derive from `QueryBase<TResult>` and are handled by `IQueryHandler<TQuery, TResult>`; streaming requests are
+dispatched with `dispatcher.Stream`, and notifications implement `INotification` and are published with
+`dispatcher.Publish`. Use `CommandBase<TContext>` / `QueryBase<TResult, TContext>` when a request needs a custom
+context. Cross-cutting behaviors (validation, rate limiting, timeout, resilience, unit-of-work, idempotency) are opt-in
+via `AddCqrsPipelinePack`.
 
 ---
 

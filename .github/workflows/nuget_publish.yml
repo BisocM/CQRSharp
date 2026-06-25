@@ -17,6 +17,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write  # mint the GitHub OIDC token for NuGet Trusted Publishing (keyless publish)
 
 env:
   CONFIGURATION: Release
@@ -30,7 +31,7 @@ env:
 jobs:
   build-validate-publish:
     name: Build, validate, publish
-    runs-on: [ self-hosted, linux ]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
@@ -112,21 +113,13 @@ jobs:
 
           dotnet --info
 
-      - name: Verify NuGet publishing secret
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          if [ -z "${NUGET_API_KEY}" ]; then
-            echo "Missing required secret: NUGET_API_KEY"
-            exit 1
-          fi
-
       - name: Restore
         run: dotnet restore CQRSharp.sln
 
-      - name: Build
-        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore /p:ContinuousIntegrationBuild=true /p:GeneratePackageOnBuild=false
+      - name: Build (zero-warning gate)
+        # -warnaserror makes the compiler/MSBuild fail the build on ANY warning, so the step's exit code is the gate
+        # (no fragile, locale-dependent log scraping). A clean NuGet publish requires zero warnings.
+        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore /p:ContinuousIntegrationBuild=true /p:GeneratePackageOnBuild=false -warnaserror
 
       - name: Test
         run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx;LogFileName=test_results.trx" --results-directory ${{ env.TEST_RESULTS }}
@@ -182,6 +175,7 @@ jobs:
         id: validate
         run: |
           python3 - <<'PY'
+          from __future__ import annotations
           import glob
           import json
           import os
@@ -214,13 +208,18 @@ jobs:
                   return node.text.strip()
               return find_text("n:metadata/n:id" if ns else "metadata/id"), find_text("n:metadata/n:version" if ns else "metadata/version")
 
+          def normalize_version(v: str) -> str:
+              # Match NuGet normalization enough for the gate: drop +build-metadata and lowercase (prerelease is
+              # case-insensitive), so the gate does not misfire on prerelease/+metadata versions.
+              return v.strip().split("+", 1)[0].lower()
+
           def flatcontainer_versions(package_id: str) -> set[str]:
               url = f"https://api.nuget.org/v3-flatcontainer/{package_id.lower()}/index.json"
               try:
                   with urllib.request.urlopen(url, timeout=30) as resp:
                       raw = resp.read().decode("utf-8", errors="replace")
                       payload = json.loads(raw)
-                      return set(payload.get("versions", []))
+                      return {normalize_version(x) for x in payload.get("versions", [])}
               except urllib.error.HTTPError as ex:
                   if ex.code == 404:
                       return set()
@@ -247,6 +246,8 @@ jobs:
                   if package_id == "CQRSharp":
                       if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
                           raise SystemExit("CQRSharp meta-package must embed analyzers/dotnet/cs/CQRSharp.Generators.dll for plug-and-play.")
+                      if "analyzers/dotnet/cs/CQRSharp.Analyzers.dll" not in names:
+                          raise SystemExit("CQRSharp meta-package must embed analyzers/dotnet/cs/CQRSharp.Analyzers.dll for plug-and-play.")
                       if any(n.startswith("lib/") for n in names):
                           raise SystemExit("CQRSharp meta-package must NOT include lib/ outputs (meta-package).")
 
@@ -271,7 +272,7 @@ jobs:
 
           existing = []
           for package_id, _, _ in observed:
-              if version in flatcontainer_versions(package_id):
+              if normalize_version(version) in flatcontainer_versions(package_id):
                   existing.append(package_id)
 
           # Publish only when this version is genuinely new — i.e. at least one package does not yet have this
@@ -300,19 +301,30 @@ jobs:
           name: nuget-packages
           path: ${{ env.PACKAGE_OUTPUT }}
 
+      - name: LLM pre-publish review (bisocm, advisory)
+        # Run when a publish will actually happen (new version) or on any manual dispatch, so dry runs still get the
+        # review but a Release push that did not change the version doesn't burn bisocm calls.
+        if: ${{ steps.validate.outputs.should_publish == 'true' || github.event_name == 'workflow_dispatch' }}
+        continue-on-error: true
+        env:
+          BISOCM_API_KEY: ${{ secrets.BISOCM_API_KEY }}
+        run: python3 .github/scripts/llm_review.py
+
+      - name: NuGet login (OIDC -> short-lived key, Trusted Publishing)
+        # Exchanges the GitHub OIDC token for a 1-hour nuget.org key. Run immediately before the push (the key expires)
+        # and only when a publish will actually happen.
+        if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && steps.validate.outputs.should_publish == 'true' }}
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: BisocM  # nuget.org username (profile name) the Trusted Publishing policy is configured for
+
       - name: Publish to NuGet.org
         if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && steps.validate.outputs.should_publish == 'true' }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          if [ -z "${NUGET_API_KEY}" ]; then
-            echo "Missing required secret: NUGET_API_KEY"
-            exit 1
-          fi
-
           for pkg in "${{ env.PACKAGE_OUTPUT }}"/*.nupkg; do
             dotnet nuget push "${pkg}" \
-              --api-key "${NUGET_API_KEY}" \
+              --api-key "${{ steps.nuget_login.outputs.NUGET_API_KEY }}" \
               --source "${{ env.NUGET_SOURCE }}" \
               --skip-duplicate
           done
