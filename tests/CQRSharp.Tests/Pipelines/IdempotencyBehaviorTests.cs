@@ -16,6 +16,60 @@ namespace CQRSharp.Tests.Pipelines;
 /// </summary>
 public class IdempotencyBehaviorTests
 {
+    private static IdempotencyBehavior<TRequest, object> Create<TRequest>(IIdempotencyStore store)
+        where TRequest : IRequest
+        => new(NullLogger<IdempotencyBehavior<TRequest, object>>.Instance, store);
+
+    [Fact(DisplayName = "Non-idempotent request passes through untouched")]
+    public async Task NonIdempotent_PassesThrough()
+    {
+        var behavior = Create<PlainRequest>(new InMemoryStore());
+        var calls = 0;
+
+        var result = await behavior.Handle(new PlainRequest(),
+            _ =>
+            {
+                calls++;
+                return Task.FromResult<object>("ok");
+            }, CancellationToken.None);
+
+        result.Should().Be("ok");
+        calls.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "Duplicate request is rejected with DuplicateRequestException")]
+    public async Task Duplicate_IsRejected()
+    {
+        var behavior = Create<IdempotentRequest>(new InMemoryStore());
+        var calls = 0;
+        Func<CancellationToken, Task<object>> next = _ =>
+        {
+            calls++;
+            return Task.FromResult<object>("ok");
+        };
+
+        (await behavior.Handle(new IdempotentRequest("k1"), next, CancellationToken.None)).Should().Be("ok");
+
+        Func<Task> second = () => behavior.Handle(new IdempotentRequest("k1"), next, CancellationToken.None);
+        await second.Should().ThrowAsync<DuplicateRequestException>();
+        calls.Should().Be(1, "the duplicate must not reach the handler");
+    }
+
+    [Fact(DisplayName = "A failed request releases its claim so it can be retried")]
+    public async Task Failure_ReleasesClaim()
+    {
+        var behavior = Create<IdempotentRequest>(new InMemoryStore());
+
+        Func<Task> firstFails = () => behavior.Handle(new IdempotentRequest("k2"),
+            _ => throw new InvalidOperationException("boom"), CancellationToken.None);
+        await firstFails.Should().ThrowAsync<InvalidOperationException>();
+
+        // The claim was released on failure, so a fresh attempt with the same key is allowed to proceed.
+        var retry = await behavior.Handle(new IdempotentRequest("k2"),
+            _ => Task.FromResult<object>("ok"), CancellationToken.None);
+        retry.Should().Be("ok");
+    }
+
     private sealed class InMemoryStore : IIdempotencyStore
     {
         private readonly ConcurrentDictionary<string, byte> _claimed = new();
@@ -41,51 +95,5 @@ public class IdempotencyBehaviorTests
     {
         public IRequestContext? Context { get; set; }
         public RequestMetadata? Metadata { get; set; }
-    }
-
-    private static IdempotencyBehavior<TRequest, object> Create<TRequest>(IIdempotencyStore store)
-        where TRequest : IRequest
-        => new(NullLogger<IdempotencyBehavior<TRequest, object>>.Instance, store);
-
-    [Fact(DisplayName = "Non-idempotent request passes through untouched")]
-    public async Task NonIdempotent_PassesThrough()
-    {
-        var behavior = Create<PlainRequest>(new InMemoryStore());
-        var calls = 0;
-
-        var result = await behavior.Handle(new PlainRequest(),
-            _ => { calls++; return Task.FromResult<object>("ok"); }, CancellationToken.None);
-
-        result.Should().Be("ok");
-        calls.Should().Be(1);
-    }
-
-    [Fact(DisplayName = "Duplicate request is rejected with DuplicateRequestException")]
-    public async Task Duplicate_IsRejected()
-    {
-        var behavior = Create<IdempotentRequest>(new InMemoryStore());
-        var calls = 0;
-        Func<CancellationToken, Task<object>> next = _ => { calls++; return Task.FromResult<object>("ok"); };
-
-        (await behavior.Handle(new IdempotentRequest("k1"), next, CancellationToken.None)).Should().Be("ok");
-
-        Func<Task> second = () => behavior.Handle(new IdempotentRequest("k1"), next, CancellationToken.None);
-        await second.Should().ThrowAsync<DuplicateRequestException>();
-        calls.Should().Be(1, "the duplicate must not reach the handler");
-    }
-
-    [Fact(DisplayName = "A failed request releases its claim so it can be retried")]
-    public async Task Failure_ReleasesClaim()
-    {
-        var behavior = Create<IdempotentRequest>(new InMemoryStore());
-
-        Func<Task> firstFails = () => behavior.Handle(new IdempotentRequest("k2"),
-            _ => throw new InvalidOperationException("boom"), CancellationToken.None);
-        await firstFails.Should().ThrowAsync<InvalidOperationException>();
-
-        // The claim was released on failure, so a fresh attempt with the same key is allowed to proceed.
-        var retry = await behavior.Handle(new IdempotentRequest("k2"),
-            _ => Task.FromResult<object>("ok"), CancellationToken.None);
-        retry.Should().Be("ok");
     }
 }

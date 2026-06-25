@@ -38,7 +38,7 @@ public class RateLimiterAndResilienceInternalsTests
     {
         // A very slow replenish rate means no meaningful refill happens across these synchronous calls, so the bucket
         // starts full at MaxTokens and drains one token per call. This pins the capacity boundary precisely.
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 5, rate: 0.0001));
+        using var limiter = NewLimiter(BaseOptions(5, 0.0001));
 
         for (var i = 0; i < 5; i++)
             limiter.AllowRequest("burst-user", typeof(RateLimiterAndResilienceInternalsTests))
@@ -51,7 +51,7 @@ public class RateLimiterAndResilienceInternalsTests
     [Fact(DisplayName = "Single-token bucket: first request consumes the only token, second is denied")]
     public void SingleToken_JustEnoughThenZero()
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 0.0001));
+        using var limiter = NewLimiter(BaseOptions(1, 0.0001));
 
         limiter.AllowRequest("u", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue("the lone token is available");
         limiter.AllowRequest("u", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeFalse("the lone token was just spent");
@@ -63,7 +63,7 @@ public class RateLimiterAndResilienceInternalsTests
         // 2 tokens/s == one token per 500ms. After draining the single token and waiting only ~50ms, well under
         // 0.1 of a token has accrued, so _tokens stays < 1 and the request is denied. This exercises the
         // "refilled but still below the 1-token threshold" branch of TryConsume.
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 2));
+        using var limiter = NewLimiter(BaseOptions(1, 2));
 
         limiter.AllowRequest("frac", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
         limiter.AllowRequest("frac", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeFalse();
@@ -79,7 +79,7 @@ public class RateLimiterAndResilienceInternalsTests
     {
         // High rate + long-ish wait would over-fill an uncapped bucket; capacity 2 must hold. After a generous wait we
         // should get exactly 2 allowed requests and then a denial, proving the Math.Min(maxTokens, ...) cap.
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 2, rate: 1000));
+        using var limiter = NewLimiter(BaseOptions(2, 1000));
 
         limiter.AllowRequest("cap", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
         limiter.AllowRequest("cap", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
@@ -99,7 +99,7 @@ public class RateLimiterAndResilienceInternalsTests
         const int maxTokens = 8;
         const int contenders = maxTokens * 6;
         // Negligible refill rate so the only tokens available are the initial MaxTokens, regardless of timing jitter.
-        using var limiter = NewLimiter(BaseOptions(maxTokens: maxTokens, rate: 0.0001));
+        using var limiter = NewLimiter(BaseOptions(maxTokens, 0.0001));
 
         var granted = 0;
         var start = new ManualResetEventSlim(false);
@@ -122,7 +122,7 @@ public class RateLimiterAndResilienceInternalsTests
     [Fact(DisplayName = "PerCommand scope: same user is rate-limited independently per request type")]
     public void PerCommandScope_IndependentBucketsPerType()
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 0.0001, scope: RateLimitScope.PerCommand));
+        using var limiter = NewLimiter(BaseOptions(1, 0.0001, RateLimitScope.PerCommand));
 
         // Drain the bucket for one request type.
         limiter.AllowRequest("user", typeof(PerCommandTypeA)).Should().BeTrue();
@@ -135,7 +135,7 @@ public class RateLimiterAndResilienceInternalsTests
     [Fact(DisplayName = "Global scope: same user shares one bucket across request types")]
     public void GlobalScope_SharedBucketAcrossTypes()
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 0.0001, scope: RateLimitScope.Global));
+        using var limiter = NewLimiter(BaseOptions(1, 0.0001, RateLimitScope.Global));
 
         limiter.AllowRequest("user", typeof(PerCommandTypeA)).Should().BeTrue();
         limiter.AllowRequest("user", typeof(PerCommandTypeB))
@@ -147,7 +147,7 @@ public class RateLimiterAndResilienceInternalsTests
     [InlineData("   ")]
     public void AllowRequest_BlankUser_Throws(string user)
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 1));
+        using var limiter = NewLimiter(BaseOptions(1, 1));
 
         var stringOverload = () => limiter.AllowRequest(user, "command");
         var typeOverload = () => limiter.AllowRequest(user, typeof(RateLimiterAndResilienceInternalsTests));
@@ -161,7 +161,7 @@ public class RateLimiterAndResilienceInternalsTests
     [InlineData("   ")]
     public void AllowRequest_BlankCommandName_Throws(string command)
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 1));
+        using var limiter = NewLimiter(BaseOptions(1, 1));
 
         var act = () => limiter.AllowRequest("user", command);
 
@@ -171,7 +171,7 @@ public class RateLimiterAndResilienceInternalsTests
     [Fact(DisplayName = "AllowRequest(string,Type) rejects a null request type")]
     public void AllowRequest_NullType_Throws()
     {
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 1, rate: 1));
+        using var limiter = NewLimiter(BaseOptions(1, 1));
 
         var act = () => limiter.AllowRequest("user", (Type)null!);
 
@@ -179,12 +179,12 @@ public class RateLimiterAndResilienceInternalsTests
     }
 
     [Theory(DisplayName = "Constructor validates each configuration field independently")]
-    [InlineData(0, 1, 1)]    // MaxTokens <= 0
-    [InlineData(-5, 1, 1)]   // MaxTokens negative
-    [InlineData(1, 0, 1)]    // ReplenishRatePerSecond <= 0
-    [InlineData(1, -2, 1)]   // ReplenishRatePerSecond negative
-    [InlineData(1, 1, 0)]    // MaxEntries <= 0
-    [InlineData(1, 1, -1)]   // MaxEntries negative
+    [InlineData(0, 1, 1)] // MaxTokens <= 0
+    [InlineData(-5, 1, 1)] // MaxTokens negative
+    [InlineData(1, 0, 1)] // ReplenishRatePerSecond <= 0
+    [InlineData(1, -2, 1)] // ReplenishRatePerSecond negative
+    [InlineData(1, 1, 0)] // MaxEntries <= 0
+    [InlineData(1, 1, -1)] // MaxEntries negative
     public void Constructor_InvalidConfiguration_Throws(int maxTokens, double rate, int maxEntries)
     {
         var options = BaseOptions(maxTokens, rate);
@@ -198,7 +198,7 @@ public class RateLimiterAndResilienceInternalsTests
     [Fact(DisplayName = "Valid default-shaped configuration constructs without throwing")]
     public void Constructor_ValidConfiguration_Succeeds()
     {
-        var act = () => NewLimiter(BaseOptions(maxTokens: 3, rate: 1));
+        var act = () => NewLimiter(BaseOptions(3, 1));
 
         act.Should().NotThrow();
     }
@@ -208,7 +208,7 @@ public class RateLimiterAndResilienceInternalsTests
     {
         // Exercises LruCache.GetOrAdd's existing-key path: repeated lookups for the same key must hit one bucket and
         // drain it cumulatively rather than minting a fresh full bucket each time.
-        using var limiter = NewLimiter(BaseOptions(maxTokens: 3, rate: 0.0001));
+        using var limiter = NewLimiter(BaseOptions(3, 0.0001));
 
         limiter.AllowRequest("same", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
         limiter.AllowRequest("same", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
@@ -224,7 +224,7 @@ public class RateLimiterAndResilienceInternalsTests
         // new key that lands in an occupied shard drives the LruCache's "_map.Count > capacity -> RemoveLast" eviction
         // path. We can't name the specific victim (the cache is sharded and internal), but we can prove the eviction
         // path runs for thousands of keys without throwing and that each fresh key gets its single token.
-        var options = BaseOptions(maxTokens: 1, rate: 0.0001);
+        var options = BaseOptions(1, 0.0001);
         options.MaxEntries = 1;
         using var limiter = NewLimiter(options);
 
@@ -240,7 +240,7 @@ public class RateLimiterAndResilienceInternalsTests
         // CleanupStaleBucketsIfNeeded. The internal cadence is floored at one second, so we drain the bucket, wait past
         // both the idle threshold and the cadence, then a fresh request both triggers the RemoveWhere sweep and re-adds
         // a full bucket -> the previously-exhausted key is allowed again.
-        var options = BaseOptions(maxTokens: 1, rate: 0.0001);
+        var options = BaseOptions(1, 0.0001);
         options.MaxIdleTime = TimeSpan.FromMilliseconds(1);
         options.CleanupInterval = TimeSpan.Zero;
         using var limiter = NewLimiter(options);
@@ -288,8 +288,8 @@ public class RateLimiterAndResilienceInternalsTests
 
     [Theory(DisplayName = "Backoff multiplier <= 1 produces a fixed (non-growing) delay equal to BaseDelay")]
     [InlineData(1.0)]
-    [InlineData(0.5)]   // clamped up to 1.0
-    [InlineData(-3.0)]  // clamped up to 1.0
+    [InlineData(0.5)] // clamped up to 1.0
+    [InlineData(-3.0)] // clamped up to 1.0
     public void ComputeRetryDelay_FixedDelay(double multiplier)
     {
         var options = new ResilienceOptions

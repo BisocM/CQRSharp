@@ -26,4 +26,3 @@ public delegate Task<RequestExceptionHandlingOutcome> RequestExceptionHookInvoke
     object request,
     Exception exception,
     CancellationToken cancellationToken);
-

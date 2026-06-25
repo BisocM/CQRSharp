@@ -47,23 +47,23 @@ public class CqrsAnalyzerTests
     public async Task CQRA004_FlagsSendOfStreamRequest()
     {
         const string source = """
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-            using CQRSharp.Abstractions.Models.Requests;
-            using CQRSharp.Core.Mediation;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp.Core.Mediation;
 
-            public sealed class MyStream : IStreamRequest<int>
-            {
-                public IRequestContext? Context { get; set; }
-                public RequestMetadata? Metadata { get; set; }
-            }
+                              public sealed class MyStream : IStreamRequest<int>
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
 
-            public class Consumer
-            {
-                public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyStream());
-            }
-            """;
+                              public class Consumer
+                              {
+                                  public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyStream());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new SendStreamRequestAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA004" && d.Severity == DiagnosticSeverity.Error);
@@ -73,23 +73,23 @@ public class CqrsAnalyzerTests
     public async Task CQRA004_DoesNotFlagSendOfCommand()
     {
         const string source = """
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Markers.Command;
-            using CQRSharp.Abstractions.Models.Requests;
-            using CQRSharp.Core.Mediation;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp.Core.Mediation;
 
-            public sealed class MyCommand : ICommand
-            {
-                public IRequestContext? Context { get; set; }
-                public RequestMetadata? Metadata { get; set; }
-            }
+                              public sealed class MyCommand : ICommand
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
 
-            public class Consumer
-            {
-                public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyCommand());
-            }
-            """;
+                              public class Consumer
+                              {
+                                  public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyCommand());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new SendStreamRequestAnalyzer());
         diagnostics.Should().NotContain(d => d.Id == "CQRA004");
@@ -99,13 +99,13 @@ public class CqrsAnalyzerTests
     public async Task CQRA005_FlagsNonBehaviorExemption()
     {
         const string source = """
-            using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp.Abstractions.Attributes.Pipelines;
 
-            public sealed class NotABehavior { }
+                              public sealed class NotABehavior { }
 
-            [PipelineExemption(typeof(NotABehavior))]
-            public sealed class SomeRequest { }
-            """;
+                              [PipelineExemption(typeof(NotABehavior))]
+                              public sealed class SomeRequest { }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA005" && d.Severity == DiagnosticSeverity.Error);
@@ -115,23 +115,23 @@ public class CqrsAnalyzerTests
     public async Task CQRA003_FlagsRequestWithNoHandler()
     {
         const string source = """
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Markers.Command;
-            using CQRSharp.Abstractions.Models.Requests;
-            using CQRSharp.Core.Mediation;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp.Core.Mediation;
 
-            public sealed class Unhandled : ICommand
-            {
-                public IRequestContext? Context { get; set; }
-                public RequestMetadata? Metadata { get; set; }
-            }
+                              public sealed class Unhandled : ICommand
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
 
-            public class Consumer
-            {
-                public async Task Run(ICqrsDispatcher d) => await d.Send(new Unhandled());
-            }
-            """;
+                              public class Consumer
+                              {
+                                  public async Task Run(ICqrsDispatcher d) => await d.Send(new Unhandled());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new HandlerDiscoveryAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA003");
@@ -141,32 +141,32 @@ public class CqrsAnalyzerTests
     public async Task CQRA003_DoesNotFlagRequestWithHandler()
     {
         const string source = """
-            using System.Threading;
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Handlers;
-            using CQRSharp.Abstractions.Interfaces.Markers.Command;
-            using CQRSharp.Abstractions.Models.Commands;
-            using CQRSharp.Abstractions.Models.Requests;
-            using CQRSharp.Core.Mediation;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Handlers;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Commands;
+                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp.Core.Mediation;
 
-            public sealed class Handled : ICommand
-            {
-                public IRequestContext? Context { get; set; }
-                public RequestMetadata? Metadata { get; set; }
-            }
+                              public sealed class Handled : ICommand
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
 
-            public sealed class HandledHandler : ICommandHandler<Handled>
-            {
-                public Task<CommandResult> Handle(Handled command, CancellationToken cancellationToken)
-                    => Task.FromResult(CommandResult.FromSuccess());
-            }
+                              public sealed class HandledHandler : ICommandHandler<Handled>
+                              {
+                                  public Task<CommandResult> Handle(Handled command, CancellationToken cancellationToken)
+                                      => Task.FromResult(CommandResult.FromSuccess());
+                              }
 
-            public class Consumer
-            {
-                public async Task Run(ICqrsDispatcher d) => await d.Send(new Handled());
-            }
-            """;
+                              public class Consumer
+                              {
+                                  public async Task Run(ICqrsDispatcher d) => await d.Send(new Handled());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new HandlerDiscoveryAnalyzer());
         diagnostics.Should().NotContain(d => d.Id == "CQRA003");
@@ -176,17 +176,17 @@ public class CqrsAnalyzerTests
     public async Task CQRA006_FlagsNotificationWithNoSubscriber()
     {
         const string source = """
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Notifications;
-            using CQRSharp.Core.Mediation;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Notifications;
+                              using CQRSharp.Core.Mediation;
 
-            public sealed class Unheard : INotification { }
+                              public sealed class Unheard : INotification { }
 
-            public class Consumer
-            {
-                public async Task Run(ICqrsDispatcher d) => await d.Publish(new Unheard());
-            }
-            """;
+                              public class Consumer
+                              {
+                                  public async Task Run(ICqrsDispatcher d) => await d.Publish(new Unheard());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new HandlerDiscoveryAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA006");
@@ -196,24 +196,24 @@ public class CqrsAnalyzerTests
     public async Task CQRA001_FlagsContextMismatch()
     {
         const string source = """
-            using System.Threading;
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Handlers;
-            using CQRSharp.Abstractions.Interfaces.Markers.Command;
-            using CQRSharp.Abstractions.Models.Commands;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Handlers;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Commands;
 
-            public sealed class CtxA : RequestContextBase { }
-            public sealed class CtxB : RequestContextBase { }
+                              public sealed class CtxA : RequestContextBase { }
+                              public sealed class CtxB : RequestContextBase { }
 
-            public sealed class MismatchedCommand : CommandBase<CtxA> { }
+                              public sealed class MismatchedCommand : CommandBase<CtxA> { }
 
-            public sealed class MismatchedHandler : ICommandHandler<MismatchedCommand, CtxB>
-            {
-                public Task<CommandResult> Handle(MismatchedCommand command, CancellationToken cancellationToken)
-                    => Task.FromResult(CommandResult.FromSuccess());
-            }
-            """;
+                              public sealed class MismatchedHandler : ICommandHandler<MismatchedCommand, CtxB>
+                              {
+                                  public Task<CommandResult> Handle(MismatchedCommand command, CancellationToken cancellationToken)
+                                      => Task.FromResult(CommandResult.FromSuccess());
+                              }
+                              """;
 
         var diagnostics = await AnalyzeAsync(source, new HandlerContextMismatchAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA001");

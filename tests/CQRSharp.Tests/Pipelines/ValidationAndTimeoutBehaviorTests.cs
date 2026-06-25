@@ -19,23 +19,6 @@ namespace CQRSharp.Tests.Pipelines;
 /// </summary>
 public class ValidationAndTimeoutBehaviorTests
 {
-    // ---- Validation -------------------------------------------------------
-
-    /// <summary>
-    ///     A configurable fake validator that returns a fixed set of failures and records whether it ran.
-    /// </summary>
-    private sealed class FakeValidator(params ValidationFailure[] failures)
-        : IRequestValidator<TestCommand>
-    {
-        public bool WasCalled { get; private set; }
-
-        public Task<ValidationFailure[]> ValidateAsync(TestCommand request, CancellationToken cancellationToken)
-        {
-            WasCalled = true;
-            return Task.FromResult(failures);
-        }
-    }
-
     private static ValidationBehavior<TestCommand, object> CreateValidationBehavior(
         params IRequestValidator<TestCommand>[] validators)
         => new(validators);
@@ -149,7 +132,11 @@ public class ValidationAndTimeoutBehaviorTests
 
         Func<Task> act = () => behavior.Handle(
             new TestCommand(),
-            async ct => { await Task.Delay(TimeSpan.FromSeconds(30), ct); return (object)"never"; },
+            async ct =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                return "never";
+            },
             CancellationToken.None);
 
         await act.Should().ThrowAsync<TimeoutException>();
@@ -169,7 +156,7 @@ public class ValidationAndTimeoutBehaviorTests
                 // ReSharper disable once AccessToDisposedClosure
                 cts.Cancel();
                 await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                return (object)"never";
+                return "never";
             },
             cts.Token);
 
@@ -177,5 +164,21 @@ public class ValidationAndTimeoutBehaviorTests
         // cancellation must propagate as OperationCanceledException.
         var assertion = await act.Should().ThrowAsync<OperationCanceledException>();
         assertion.Which.Should().NotBeOfType<TimeoutException>();
+    }
+    // ---- Validation -------------------------------------------------------
+
+    /// <summary>
+    ///     A configurable fake validator that returns a fixed set of failures and records whether it ran.
+    /// </summary>
+    private sealed class FakeValidator(params ValidationFailure[] failures)
+        : IRequestValidator<TestCommand>
+    {
+        public bool WasCalled { get; private set; }
+
+        public Task<ValidationFailure[]> ValidateAsync(TestCommand request, CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            return Task.FromResult(failures);
+        }
     }
 }

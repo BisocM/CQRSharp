@@ -25,4 +25,3 @@ public sealed class RequestExceptionHandlerState<TResponse>
         Response = response;
     }
 }
-

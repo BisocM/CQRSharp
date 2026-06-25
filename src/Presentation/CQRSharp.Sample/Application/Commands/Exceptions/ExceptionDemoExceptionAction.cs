@@ -16,4 +16,3 @@ public sealed class ExceptionDemoExceptionAction(SampleDiagnostics diagnostics)
         return Task.CompletedTask;
     }
 }
-

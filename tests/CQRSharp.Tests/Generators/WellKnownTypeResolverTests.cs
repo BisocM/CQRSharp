@@ -24,7 +24,7 @@ public sealed class WellKnownTypeResolverTests
             StringComparer.OrdinalIgnoreCase)
         {
             typeof(ICqrsDispatcher).Assembly.Location, // CQRSharp.Core — carries the [assembly: CqrsWellKnownType] declarations
-            typeof(PublicRole).Assembly.Location       // CQRSharp.Abstractions — defines the attribute + enum
+            typeof(PublicRole).Assembly.Location // CQRSharp.Abstractions — defines the attribute + enum
         };
 
         return paths.Select(p => (MetadataReference)MetadataReference.CreateFromFile(p)).ToArray();
@@ -108,26 +108,26 @@ public sealed class WellKnownTypeResolverTests
         // SymbolEqualityComparer) to the OriginalDefinition of the interface on a real handler implementation in a
         // consumer compilation — exactly what the generator and analyzers do.
         const string source = """
-            using System.Threading;
-            using System.Threading.Tasks;
-            using CQRSharp.Abstractions.Interfaces.Context;
-            using CQRSharp.Abstractions.Interfaces.Handlers;
-            using CQRSharp.Abstractions.Interfaces.Markers.Command;
-            using CQRSharp.Abstractions.Models.Commands;
-            using CQRSharp.Abstractions.Models.Requests;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Handlers;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Commands;
+                              using CQRSharp.Abstractions.Models.Requests;
 
-            public sealed class C : ICommand
-            {
-                public IRequestContext? Context { get; set; }
-                public RequestMetadata? Metadata { get; set; }
-            }
+                              public sealed class C : ICommand
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
 
-            public sealed class H : ICommandHandler<C>
-            {
-                public Task<CommandResult> Handle(C command, CancellationToken cancellationToken)
-                    => Task.FromResult(CommandResult.FromSuccess());
-            }
-            """;
+                              public sealed class H : ICommandHandler<C>
+                              {
+                                  public Task<CommandResult> Handle(C command, CancellationToken cancellationToken)
+                                      => Task.FromResult(CommandResult.FromSuccess());
+                              }
+                              """;
 
         var compilation = Compile(source, CoreAndAbstractionsReferences());
         var known = CqrsKnownSymbols.For(compilation);

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace CQRSharp.Core.Diagnostics.HealthChecks;
@@ -30,20 +28,16 @@ public sealed class CqrsBindingsHealthCheck(ICqrsDiagnostics diagnostics) : IHea
         var warningCount = 0;
 
         foreach (var binding in bindings)
-        {
-            foreach (var issue in binding.Issues)
+        foreach (var issue in binding.Issues)
+            switch (issue.Severity)
             {
-                switch (issue.Severity)
-                {
-                    case CqrsBindingIssueSeverity.Error:
-                        errorCount++;
-                        break;
-                    case CqrsBindingIssueSeverity.Warning:
-                        warningCount++;
-                        break;
-                }
+                case CqrsBindingIssueSeverity.Error:
+                    errorCount++;
+                    break;
+                case CqrsBindingIssueSeverity.Warning:
+                    warningCount++;
+                    break;
             }
-        }
 
         var data = new Dictionary<string, object>
         {
@@ -61,7 +55,7 @@ public sealed class CqrsBindingsHealthCheck(ICqrsDiagnostics diagnostics) : IHea
                 .ToArray();
 
             return Task.FromResult(HealthCheckResult.Unhealthy(
-                description: $"CQRSharp request bindings have {errorCount} error(s).",
+                $"CQRSharp request bindings have {errorCount} error(s).",
                 data: data));
         }
 
@@ -74,12 +68,12 @@ public sealed class CqrsBindingsHealthCheck(ICqrsDiagnostics diagnostics) : IHea
                 .ToArray();
 
             return Task.FromResult(HealthCheckResult.Degraded(
-                description: $"CQRSharp request bindings have {warningCount} warning(s).",
+                $"CQRSharp request bindings have {warningCount} warning(s).",
                 data: data));
         }
 
         return Task.FromResult(HealthCheckResult.Healthy(
-            description: $"CQRSharp request bindings OK ({bindings.Count} request(s)).",
-            data: data));
+            $"CQRSharp request bindings OK ({bindings.Count} request(s)).",
+            data));
     }
 }

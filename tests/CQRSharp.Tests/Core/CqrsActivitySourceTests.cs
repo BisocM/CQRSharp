@@ -17,7 +17,7 @@ public class CqrsActivitySourceTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == CqrsActivitySource.Name,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = (ref _) => ActivitySamplingResult.AllData,
             ActivityStarted = started.Add
         };
         ActivitySource.AddActivityListener(listener);

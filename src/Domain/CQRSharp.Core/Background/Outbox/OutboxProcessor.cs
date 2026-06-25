@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;

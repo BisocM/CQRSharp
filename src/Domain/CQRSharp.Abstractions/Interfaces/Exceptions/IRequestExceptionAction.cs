@@ -17,4 +17,3 @@ public interface IRequestExceptionAction<in TRequest, in TException>
     /// </summary>
     Task Execute(TRequest request, TException exception, CancellationToken cancellationToken);
 }
-

@@ -14,4 +14,3 @@ public interface IStableNotificationNameProvider
     /// <returns><c>true</c> when a stable name is known for the type; otherwise <c>false</c>.</returns>
     bool TryGetStableName(Type notificationType, out string stableName);
 }
-

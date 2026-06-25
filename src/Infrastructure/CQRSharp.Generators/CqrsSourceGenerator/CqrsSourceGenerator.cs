@@ -10,34 +10,50 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
 [Generator]
 public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 {
-	    public void Initialize(IncrementalGeneratorInitializationContext context)
-	    {
-	        var candidateClassesProvider = context.SyntaxProvider
-	            .CreateSyntaxProvider(
-	                static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
-	                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-	            .Where(symbol => symbol is not null);
+    private static readonly DiagnosticDescriptor WellKnownTypeUnresolvedDiagnostic = new(
+        "CQRGEN007",
+        "CQRSharp well-known type could not be resolved",
+        "The CQRSharp framework type for role '{0}' could not be resolved from the referenced CQRSharp assemblies. Source generation will be incomplete; ensure the CQRSharp package versions are consistent.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Error,
+        true);
 
-	        var generatorConfig = context.AnalyzerConfigOptionsProvider
-	            .Select(static (provider, _) => GeneratorConfig.From(provider.GlobalOptions));
+    private static readonly DiagnosticDescriptor CoreNotReferencedDiagnostic = new(
+        "CQRGEN008",
+        "CQRSharp.Core is not referenced",
+        "CQRSharp.Abstractions is referenced but CQRSharp.Core is not, so CQRSharp source generation is skipped. Reference CQRSharp.Core (or the CQRSharp meta-package) to enable it.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Info,
+        true);
 
-	        var compilationAndCandidates = context.CompilationProvider.Combine(candidateClassesProvider.Collect());
-	        var compilationCandidatesAndConfig = compilationAndCandidates.Combine(generatorConfig);
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        var candidateClassesProvider = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
+            .Where(symbol => symbol is not null);
 
-	        context.RegisterSourceOutput(compilationCandidatesAndConfig, (spc, source) =>
-	        {
-	            var ((compilation, candidateClasses), config) = source;
-	
-	            try
-	            {
-	                // Surface well-known-type resolution problems loudly instead of silently emitting an empty registry.
+        var generatorConfig = context.AnalyzerConfigOptionsProvider
+            .Select(static (provider, _) => GeneratorConfig.From(provider.GlobalOptions));
+
+        var compilationAndCandidates = context.CompilationProvider.Combine(candidateClassesProvider.Collect());
+        var compilationCandidatesAndConfig = compilationAndCandidates.Combine(generatorConfig);
+
+        context.RegisterSourceOutput(compilationCandidatesAndConfig, (spc, source) =>
+        {
+            var ((compilation, candidateClasses), config) = source;
+
+            try
+            {
+                // Surface well-known-type resolution problems loudly instead of silently emitting an empty registry.
                 ReportWellKnownTypeIssues(CqrsKnownSymbols.For(compilation), spc);
 
                 var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
-	
-	                // Generate the DI registration helper
-	                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc, config);
-	                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
+
+                // Generate the DI registration helper
+                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc, config);
+                spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
 
                 // Generate the one-call DI bootstrap (AddCqrs + AddGenerated)
                 var bootstrapSourceCode = GenerateBootstrap();
@@ -84,22 +100,6 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
             }
         });
     }
-
-    private static readonly DiagnosticDescriptor WellKnownTypeUnresolvedDiagnostic = new(
-        "CQRGEN007",
-        "CQRSharp well-known type could not be resolved",
-        "The CQRSharp framework type for role '{0}' could not be resolved from the referenced CQRSharp assemblies. Source generation will be incomplete; ensure the CQRSharp package versions are consistent.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private static readonly DiagnosticDescriptor CoreNotReferencedDiagnostic = new(
-        "CQRGEN008",
-        "CQRSharp.Core is not referenced",
-        "CQRSharp.Abstractions is referenced but CQRSharp.Core is not, so CQRSharp source generation is skipped. Reference CQRSharp.Core (or the CQRSharp meta-package) to enable it.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Info,
-        isEnabledByDefault: true);
 
     // Turns the former silent no-op (an empty registry when a well-known type fails to resolve) into a build signal.
     private static void ReportWellKnownTypeIssues(CqrsKnownSymbols known, SourceProductionContext context)

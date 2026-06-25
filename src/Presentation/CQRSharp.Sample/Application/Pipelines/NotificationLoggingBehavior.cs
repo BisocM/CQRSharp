@@ -13,8 +13,6 @@ public sealed class NotificationLoggingBehavior<TNotification>(
     : INotificationPipelineBehavior<TNotification>, IPrioritizedPipelineBehavior
     where TNotification : INotification
 {
-    public int PipelineExecutionPriority => -100;
-
     public async Task Handle(
         TNotification notification,
         Func<CancellationToken, Task> next,
@@ -44,4 +42,6 @@ public sealed class NotificationLoggingBehavior<TNotification>(
                 stopwatch.ElapsedMilliseconds);
         }
     }
+
+    public int PipelineExecutionPriority => -100;
 }

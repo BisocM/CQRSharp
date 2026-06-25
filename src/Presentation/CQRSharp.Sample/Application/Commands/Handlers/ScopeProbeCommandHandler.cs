@@ -13,4 +13,3 @@ public sealed class ScopeProbeCommandHandler(SampleScopedMarker marker) : IComma
         return Task.FromResult(CommandResult.FromSuccess());
     }
 }
-

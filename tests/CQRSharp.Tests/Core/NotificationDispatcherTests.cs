@@ -19,23 +19,6 @@ public sealed class NotificationDispatcherTests
     private readonly TestNotification _testNotification = new();
     private readonly UnstableTestNotification _unstableNotification = new();
 
-    private sealed record UnstableTestNotification : INotification;
-
-    private sealed class TestStableNotificationNameProvider : IStableNotificationNameProvider
-    {
-        public bool TryGetStableName(Type notificationType, out string stableName)
-        {
-            if (notificationType == typeof(TestNotification))
-            {
-                stableName = "test.notification";
-                return true;
-            }
-
-            stableName = string.Empty;
-            return false;
-        }
-    }
-
     private IServiceProvider BuildServiceProvider(Action<OutboxOptions> configureOptions, bool hasActiveTransaction, bool registerOutbox = true)
     {
         var services = new ServiceCollection();
@@ -56,7 +39,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsDisabled_DispatchesDirectly()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Disabled, hasActiveTransaction: true);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Disabled, true);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -71,7 +54,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsEnabled_AddsToOutbox()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -86,7 +69,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenModeIsTransactional_And_NoTransaction_DispatchesDirectly()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, hasActiveTransaction: false);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, false);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -101,7 +84,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenModeIsTransactional_And_HasTransaction_AddsToOutbox()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, hasActiveTransaction: true);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Transactional, true);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -116,7 +99,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxEnabled_But_IOutboxNotRegistered_ThrowsException()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false, registerOutbox: false);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false, false);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -129,7 +112,7 @@ public sealed class NotificationDispatcherTests
     [Fact]
     public async Task Publish_WhenOutboxIsEnabled_ButNotificationHasNoStableName_DispatchesDirectly()
     {
-        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, hasActiveTransaction: false);
+        var provider = BuildServiceProvider(opts => opts.Mode = OutboxMode.Enabled, false);
         var dispatcher = new NotificationDispatcher(
             provider,
             provider.GetRequiredService<IOptions<OutboxOptions>>(),
@@ -140,5 +123,21 @@ public sealed class NotificationDispatcherTests
         _mockDirectDispatcher.Verify(d => d.Publish(_unstableNotification, It.IsAny<CancellationToken>()), Times.Once);
         _mockOutbox.Verify(o => o.Add(It.IsAny<INotification>()), Times.Never);
     }
-}
 
+    private sealed record UnstableTestNotification : INotification;
+
+    private sealed class TestStableNotificationNameProvider : IStableNotificationNameProvider
+    {
+        public bool TryGetStableName(Type notificationType, out string stableName)
+        {
+            if (notificationType == typeof(TestNotification))
+            {
+                stableName = "test.notification";
+                return true;
+            }
+
+            stableName = string.Empty;
+            return false;
+        }
+    }
+}

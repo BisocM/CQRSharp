@@ -25,65 +25,65 @@ namespace CQRSharp.Tests.Core;
 /// <summary>
 ///     Contains unit tests for the <see cref="PipelineExecutor" /> class.
 /// </summary>
-	public class PipelineExecutorTests
-	{
-	    private readonly PipelineExecutor _executor;
-	    private readonly Mock<IHandlerRegistry> _mockHandlerRegistry;
-	    private readonly Mock<INotificationDispatcher> _mockNotificationDispatcher;
-	    private readonly Mock<IBackgroundTaskManager> _mockBackgroundTaskManager;
-	    private readonly Mock<IServiceProvider> _mockRootProvider;
-	    private readonly Mock<IContextFactoryRegistry> _mockContextFactoryRegistry;
-	    private readonly Mock<IRequestRegistry> _mockRequestRegistry;
-	    private readonly Mock<IServiceScopeFactory> _mockScopeFactory;
-	    private readonly Mock<IServiceProvider> _mockScopedProvider;
-	
-	    public PipelineExecutorTests()
-	    {
-	        _mockRootProvider = new Mock<IServiceProvider>();
-	        _mockScopeFactory = new Mock<IServiceScopeFactory>();
-	        var mockScope = new Mock<IServiceScope>();
-	        _mockScopedProvider = new Mock<IServiceProvider>();
-	        _mockRequestRegistry = new Mock<IRequestRegistry>();
-	        _mockHandlerRegistry = new Mock<IHandlerRegistry>();
-	        _mockContextFactoryRegistry = new Mock<IContextFactoryRegistry>();
-	        _mockNotificationDispatcher = new Mock<INotificationDispatcher>();
+public class PipelineExecutorTests
+{
+    private readonly PipelineExecutor _executor;
+    private readonly Mock<IBackgroundTaskManager> _mockBackgroundTaskManager;
+    private readonly Mock<IContextFactoryRegistry> _mockContextFactoryRegistry;
+    private readonly Mock<IHandlerRegistry> _mockHandlerRegistry;
+    private readonly Mock<INotificationDispatcher> _mockNotificationDispatcher;
+    private readonly Mock<IRequestRegistry> _mockRequestRegistry;
+    private readonly Mock<IServiceProvider> _mockRootProvider;
+    private readonly Mock<IServiceProvider> _mockScopedProvider;
+    private readonly Mock<IServiceScopeFactory> _mockScopeFactory;
 
-	        mockScope.Setup(s => s.ServiceProvider).Returns(_mockScopedProvider.Object);
-	        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
-	        _mockRootProvider.Setup(p => p.GetService(typeof(IServiceScopeFactory))).Returns(_mockScopeFactory.Object);
+    public PipelineExecutorTests()
+    {
+        _mockRootProvider = new Mock<IServiceProvider>();
+        _mockScopeFactory = new Mock<IServiceScopeFactory>();
+        var mockScope = new Mock<IServiceScope>();
+        _mockScopedProvider = new Mock<IServiceProvider>();
+        _mockRequestRegistry = new Mock<IRequestRegistry>();
+        _mockHandlerRegistry = new Mock<IHandlerRegistry>();
+        _mockContextFactoryRegistry = new Mock<IContextFactoryRegistry>();
+        _mockNotificationDispatcher = new Mock<INotificationDispatcher>();
 
-	        _mockRootProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
-	        _mockRootProvider
-	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
-	            .Returns(Array.Empty<IPipelineBehavior<TestCommand, CommandResult>>());
+        mockScope.Setup(s => s.ServiceProvider).Returns(_mockScopedProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+        _mockRootProvider.Setup(p => p.GetService(typeof(IServiceScopeFactory))).Returns(_mockScopeFactory.Object);
 
-	        _mockScopedProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
-	        _mockScopedProvider
-	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
-	            .Returns(Array.Empty<IPipelineBehavior<TestCommand, CommandResult>>());
+        _mockRootProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
+        _mockRootProvider
+            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
+            .Returns(Array.Empty<IPipelineBehavior<TestCommand, CommandResult>>());
 
-	        var mockContextFactory = new Mock<IInternalRequestContextFactory>();
-	        mockContextFactory.Setup(f => f.CreateContext(It.IsAny<IRequest>())).Returns(new RequestContextBase());
-	        _mockContextFactoryRegistry.Setup(r => r.TryGetFactory(It.IsAny<Type>(), It.IsAny<IServiceProvider>())).Returns(mockContextFactory.Object);
+        _mockScopedProvider.Setup(p => p.GetService(typeof(INotificationDispatcher))).Returns(_mockNotificationDispatcher.Object);
+        _mockScopedProvider
+            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
+            .Returns(Array.Empty<IPipelineBehavior<TestCommand, CommandResult>>());
+
+        var mockContextFactory = new Mock<IInternalRequestContextFactory>();
+        mockContextFactory.Setup(f => f.CreateContext(It.IsAny<IRequest>())).Returns(new RequestContextBase());
+        _mockContextFactoryRegistry.Setup(r => r.TryGetFactory(It.IsAny<Type>(), It.IsAny<IServiceProvider>())).Returns(mockContextFactory.Object);
 
         _mockBackgroundTaskManager = new Mock<IBackgroundTaskManager>();
         var dispatcherOptions = Options.Create(new DispatcherOptions { RunMode = RunMode.Sync });
 
-	        _executor = new PipelineExecutor(
-	            _mockRootProvider.Object,
-	            _mockRequestRegistry.Object,
-	            _mockHandlerRegistry.Object,
-	            _mockContextFactoryRegistry.Object,
-	            dispatcherOptions,
-	            _mockBackgroundTaskManager.Object
-	        );
-	    }
+        _executor = new PipelineExecutor(
+            _mockRootProvider.Object,
+            _mockRequestRegistry.Object,
+            _mockHandlerRegistry.Object,
+            _mockContextFactoryRegistry.Object,
+            dispatcherOptions,
+            _mockBackgroundTaskManager.Object
+        );
+    }
 
-	    private void SetupHandlerResolution<THandler>(THandler handler) where THandler : class
-	    {
-	        _mockRootProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
-	        _mockScopedProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
-	    }
+    private void SetupHandlerResolution<THandler>(THandler handler) where THandler : class
+    {
+        _mockRootProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
+        _mockScopedProvider.Setup(p => p.GetService(typeof(THandler))).Returns(handler);
+    }
 
     [Fact]
     public async Task ExecuteCommandAsync_WhenBehaviorIsExempted_SkipsIt()
@@ -98,9 +98,9 @@ namespace CQRSharp.Tests.Core;
         var exempted = new ExemptedBehavior<TestCommand, CommandResult>(callOrder);
         var other = new OtherBehavior<TestCommand, CommandResult>(callOrder);
 
-	        _mockRootProvider
-	            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
-	            .Returns(new IPipelineBehavior<TestCommand, CommandResult>[] { exempted, other });
+        _mockRootProvider
+            .Setup(p => p.GetService(typeof(IEnumerable<IPipelineBehavior<TestCommand, CommandResult>>)))
+            .Returns(new IPipelineBehavior<TestCommand, CommandResult>[] { exempted, other });
 
         var exemptions = new[] { new PipelineExemptionAttribute(typeof(ExemptedBehavior<,>)) };
         RequestMetadata metadata = new(requestType, handlerType, [], [], exemptions, null, typeof(RequestContextBase));
@@ -110,14 +110,14 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-	                del = (h, r, c) =>
-	                {
-	                    callOrder.Add("handle");
-	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c)
-	                        .ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-	                };
-	                return true;
-	            });
+                del = (h, r, c) =>
+                {
+                    callOrder.Add("handle");
+                    return ((TestCommandHandler)h).Handle((TestCommand)r, c)
+                        .ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+                };
+                return true;
+            });
 
         SetupHandlerResolution(handler);
 
@@ -145,9 +145,9 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-	                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-	                return true;
-	            });
+                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+                return true;
+            });
 
         SetupHandlerResolution(handler);
 
@@ -186,13 +186,13 @@ namespace CQRSharp.Tests.Core;
             .Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-	                del = (h, r, c) =>
-	                {
-	                    handled = true;
-	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-	                };
-	                return true;
-	            });
+                del = (h, r, c) =>
+                {
+                    handled = true;
+                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+                };
+                return true;
+            });
 
         SetupHandlerResolution(handler);
 
@@ -255,13 +255,13 @@ namespace CQRSharp.Tests.Core;
         _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
-	                del = (h, r, c) =>
-	                {
-	                    callOrder.Add("handle");
-	                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-	                };
-	                return true;
-	            });
+                del = (h, r, c) =>
+                {
+                    callOrder.Add("handle");
+                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
+                };
+                return true;
+            });
 
         SetupHandlerResolution(handler);
 

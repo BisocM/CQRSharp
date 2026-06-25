@@ -28,4 +28,3 @@ public sealed class RequestValidationException : Exception
     /// </summary>
     public IReadOnlyList<ValidationFailure> Failures { get; }
 }
-

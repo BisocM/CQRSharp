@@ -15,8 +15,6 @@ public sealed class ExceptionHandlingBehavior<TRequest, TResult>(
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => int.MinValue;
-
     public async Task<TResult> Handle(
         TRequest request,
         Func<CancellationToken, Task<TResult>> next,
@@ -50,5 +48,6 @@ public sealed class ExceptionHandlingBehavior<TRequest, TResult>(
             return (TResult)outcome.Response!;
         }
     }
-}
 
+    public int PipelineExecutionPriority => int.MinValue;
+}

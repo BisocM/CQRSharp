@@ -19,7 +19,7 @@ public sealed class BackgroundTaskQueueOptions
     public int Capacity { get; set; } = 1000;
 
     /// <summary>
-///     Policy to apply when <see cref="Capacity" /> is reached.
+    ///     Policy to apply when <see cref="Capacity" /> is reached.
     ///     <list type="bullet">
     ///         <item>
     ///             <see cref="BoundedChannelFullMode.Wait" /> (default):

@@ -23,4 +23,3 @@ public interface IRequestExceptionHandler<in TRequest, TResponse, in TException>
         RequestExceptionHandlerState<TResponse> state,
         CancellationToken cancellationToken);
 }
-

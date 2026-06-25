@@ -22,8 +22,6 @@ public sealed class IdempotencyBehavior<TRequest, TResult>(
     IIdempotencyStore store) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Idempotency;
-
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
@@ -54,4 +52,6 @@ public sealed class IdempotencyBehavior<TRequest, TResult>(
             throw;
         }
     }
+
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Idempotency;
 }

@@ -18,8 +18,6 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
     IOptions<TimeoutOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Timeout;
-
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next,
@@ -58,4 +56,6 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
             throw new TimeoutException($"{typeof(TRequest).Name} execution timed out.");
         }
     }
+
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Timeout;
 }

@@ -201,37 +201,37 @@ internal sealed class DiagnosticsSortedCommandHandler : ICommandHandler<Diagnost
 internal sealed class DiagnosticsBehaviorA<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => 10;
-
     public Task<TResult> Handle(
         TRequest request,
         Func<CancellationToken, Task<TResult>> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
+
+    public int PipelineExecutionPriority => 10;
 }
 
 internal sealed class DiagnosticsBehaviorB<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => 10;
-
     public Task<TResult> Handle(
         TRequest request,
         Func<CancellationToken, Task<TResult>> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
+
+    public int PipelineExecutionPriority => 10;
 }
 
 internal sealed class DiagnosticsBehaviorC<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => 20;
-
     public Task<TResult> Handle(
         TRequest request,
         Func<CancellationToken, Task<TResult>> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
+
+    public int PipelineExecutionPriority => 20;
 }
 
 internal sealed class DiagnosticsCustomContext : RequestContextBase;

@@ -13,4 +13,3 @@ public sealed class ValidatedCommandHandler(SampleDiagnostics diagnostics) : ICo
         return Task.FromResult(CommandResult.FromSuccess());
     }
 }
-

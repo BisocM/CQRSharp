@@ -41,11 +41,11 @@
         <None Include="..\..\Infrastructure\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
-              Visible="false" />
+              Visible="false"/>
         <None Include="..\..\Infrastructure\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
-              Visible="false" />
+              Visible="false"/>
     </ItemGroup>
 
 </Project>

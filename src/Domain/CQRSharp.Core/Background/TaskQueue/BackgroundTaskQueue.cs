@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+﻿using System.Threading.Channels;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Background.TaskQueue.Types;
@@ -18,49 +18,28 @@ namespace CQRSharp.Core.Background.TaskQueue;
 /// </summary>
 internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTaskManager, IDisposable
 {
+    private readonly QueueEntry[] _buffer;
+    private readonly CancellationTokenSource _completion = new();
+    private readonly SemaphoreSlim? _freeSlots;
     private readonly object _gate = new();
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly SemaphoreSlim _itemsAvailable;
     private readonly ILogger<BackgroundTaskQueue> _logger;
     private readonly IQueueMetricsReporter _metrics;
+    private readonly bool _metricsEnabled;
     private readonly Channel<INotification> _notificationChannel;
     private readonly SemaphoreSlim _notifSem;
     private readonly BackgroundTaskQueueOptions _options;
-    private readonly bool _metricsEnabled;
-    private readonly Guid _queueId = Guid.NewGuid();
-    private readonly SemaphoreSlim _itemsAvailable;
-    private readonly SemaphoreSlim? _freeSlots;
-    private readonly CancellationTokenSource _completion = new();
-    private readonly CancellationToken _shutdownToken;
     private readonly Task _pumpTask;
-
-    private long _sequenceCounter;
+    private readonly Guid _queueId = Guid.NewGuid();
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly CancellationToken _shutdownToken;
+    private int _count;
     private int _disposed;
+    private int _head;
     private bool _isCompleted;
 
-    private readonly QueueEntry[] _buffer;
-    private int _head;
+    private long _sequenceCounter;
     private int _tail;
-    private int _count;
-
-    private readonly struct QueueEntry
-    {
-        public QueueEntry(
-            QueuedTask task,
-            Action<Exception>? setException,
-            Action<CancellationToken>? setCanceled)
-        {
-            Task = task;
-            SetException = setException;
-            SetCanceled = setCanceled;
-        }
-
-        public QueuedTask Task { get; }
-        public Action<Exception>? SetException { get; }
-        public Action<CancellationToken>? SetCanceled { get; }
-
-        public void Reject(Exception exception) => SetException?.Invoke(exception);
-        public void Cancel(CancellationToken cancellationToken) => SetCanceled?.Invoke(cancellationToken);
-    }
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="BackgroundTaskQueue" /> class.
@@ -701,5 +680,25 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             TaskRejectedNotification typed => dispatcher.Publish(typed, cancellationToken),
             _ => dispatcher.Publish(notification, cancellationToken)
         };
+    }
+
+    private readonly struct QueueEntry
+    {
+        public QueueEntry(
+            QueuedTask task,
+            Action<Exception>? setException,
+            Action<CancellationToken>? setCanceled)
+        {
+            Task = task;
+            SetException = setException;
+            SetCanceled = setCanceled;
+        }
+
+        public QueuedTask Task { get; }
+        public Action<Exception>? SetException { get; }
+        public Action<CancellationToken>? SetCanceled { get; }
+
+        public void Reject(Exception exception) => SetException?.Invoke(exception);
+        public void Cancel(CancellationToken cancellationToken) => SetCanceled?.Invoke(cancellationToken);
     }
 }

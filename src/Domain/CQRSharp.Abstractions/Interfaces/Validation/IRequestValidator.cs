@@ -18,4 +18,3 @@ public interface IRequestValidator<in TRequest> where TRequest : IRequest
     /// <returns>An array of validation failures.</returns>
     Task<ValidationFailure[]> ValidateAsync(TRequest request, CancellationToken cancellationToken);
 }
-

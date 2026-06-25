@@ -58,4 +58,3 @@ public sealed class DynamicSendTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 }
-

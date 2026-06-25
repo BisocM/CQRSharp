@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
+﻿using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 
 namespace CQRSharp.Core.Background.Outbox.Types;

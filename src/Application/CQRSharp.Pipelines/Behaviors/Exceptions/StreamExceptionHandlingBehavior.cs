@@ -1,5 +1,4 @@
 using System.Runtime.ExceptionServices;
-using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Pipelines;

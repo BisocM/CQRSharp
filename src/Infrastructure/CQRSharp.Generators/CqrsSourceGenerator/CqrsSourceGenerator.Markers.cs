@@ -17,7 +17,7 @@ public sealed partial class CqrsSourceGenerator
         "'{0}' implements a CQRSharp handler interface but is less accessible than internal, so it is skipped by generated registration. Make it public or internal (and not nested in a less-accessible type), or register it manually.",
         "CQRSharp.Generators",
         DiagnosticSeverity.Warning,
-        isEnabledByDefault: true);
+        true);
 
     /// <summary>
     ///     Emits one assembly-level marker attribute per handled request and per handled notification, so the CQRSharp

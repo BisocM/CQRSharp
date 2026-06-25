@@ -82,8 +82,6 @@ public sealed class NotificationPipelineTests
     internal sealed class BehaviorA(NotificationTrace trace)
         : INotificationPipelineBehavior<TestNotification>, IPrioritizedPipelineBehavior
     {
-        public int PipelineExecutionPriority => 10;
-
         public async Task Handle(
             TestNotification notification,
             Func<CancellationToken, Task> next,
@@ -93,13 +91,13 @@ public sealed class NotificationPipelineTests
             await next(cancellationToken).ConfigureAwait(false);
             trace.Add("A:after");
         }
+
+        public int PipelineExecutionPriority => 10;
     }
 
     internal sealed class BehaviorB(NotificationTrace trace)
         : INotificationPipelineBehavior<TestNotification>, IPrioritizedPipelineBehavior
     {
-        public int PipelineExecutionPriority => 20;
-
         public async Task Handle(
             TestNotification notification,
             Func<CancellationToken, Task> next,
@@ -109,5 +107,7 @@ public sealed class NotificationPipelineTests
             await next(cancellationToken).ConfigureAwait(false);
             trace.Add("B:after");
         }
+
+        public int PipelineExecutionPriority => 20;
     }
 }

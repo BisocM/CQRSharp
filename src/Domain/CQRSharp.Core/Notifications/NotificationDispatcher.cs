@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;

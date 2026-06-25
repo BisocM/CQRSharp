@@ -10,4 +10,3 @@ public sealed class ExceptionDemoCommandHandler : ICommandHandler<ExceptionDemoC
     public Task<CommandResult> Handle(ExceptionDemoCommand command, CancellationToken cancellationToken)
         => throw new ExceptionDemoException();
 }
-

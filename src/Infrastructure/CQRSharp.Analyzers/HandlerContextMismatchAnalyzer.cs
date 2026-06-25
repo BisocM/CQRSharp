@@ -92,10 +92,8 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
     private static ITypeSymbol? GetDeclaredContext(ITypeSymbol requestType, INamedTypeSymbol requestBase)
     {
         for (var current = requestType as INamedTypeSymbol; current is not null; current = current.BaseType)
-        {
             if (current.IsGenericType && SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, requestBase))
                 return current.TypeArguments[0];
-        }
 
         return null;
     }

@@ -7,4 +7,3 @@ public sealed class ExceptionDemoException : Exception
     {
     }
 }
-

@@ -17,4 +17,3 @@ public readonly record struct RequestExceptionHandlingOutcome(bool Handled, obje
     /// <returns>A handled outcome carrying the supplied response.</returns>
     public static RequestExceptionHandlingOutcome HandledWith(object? response) => new(true, response);
 }
-

@@ -11,11 +11,9 @@ public sealed partial class CqrsSourceGenerator
     {
         if (typeSymbol is not INamedTypeSymbol namedTypeSymbol) return false;
 
-        for (INamedTypeSymbol? current = namedTypeSymbol; current is not null; current = current.ContainingType)
-        {
+        for (var current = namedTypeSymbol; current is not null; current = current.ContainingType)
             if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
                 return false;
-        }
 
         return true;
     }
@@ -93,10 +91,10 @@ public sealed partial class CqrsSourceGenerator
         return null;
     }
 
-	    private static string GenerateAttributeArrayCode(ITypeSymbol requestTypeSymbol, INamedTypeSymbol attributeInterfaceSymbol, string fullyQualifiedInterfaceName)
-	    {
-	        var attributeInstances = requestTypeSymbol.GetAttributes()
-	            .Where(attr => attr.AttributeClass != null &&
+    private static string GenerateAttributeArrayCode(ITypeSymbol requestTypeSymbol, INamedTypeSymbol attributeInterfaceSymbol, string fullyQualifiedInterfaceName)
+    {
+        var attributeInstances = requestTypeSymbol.GetAttributes()
+            .Where(attr => attr.AttributeClass != null &&
                            IsAccessibleFromGeneratedCode(attr.AttributeClass) &&
                            InheritsOrImplements(attr.AttributeClass, attributeInterfaceSymbol))
             .ToList();
@@ -109,13 +107,13 @@ public sealed partial class CqrsSourceGenerator
             var args = string.Join(", ", attr.ConstructorArguments.Select(GenerateTypedConstant));
             return $"new {attrClassName}({args})";
         });
-	
-	        return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
-	    }
-	
-	    private static string GenerateTypedConstant(TypedConstant constant)
-	    {
-	        if (constant.IsNull) return "null";
+
+        return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
+    }
+
+    private static string GenerateTypedConstant(TypedConstant constant)
+    {
+        if (constant.IsNull) return "null";
         var value = constant.Value;
 
         switch (constant.Kind)

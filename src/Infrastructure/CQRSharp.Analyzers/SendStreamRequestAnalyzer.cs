@@ -64,7 +64,8 @@ public sealed class SendStreamRequestAnalyzer : DiagnosticAnalyzer
     {
         if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, iface)) return true;
         foreach (var implemented in type.AllInterfaces)
-            if (SymbolEqualityComparer.Default.Equals(implemented.OriginalDefinition, iface)) return true;
+            if (SymbolEqualityComparer.Default.Equals(implemented.OriginalDefinition, iface))
+                return true;
         return false;
     }
 }

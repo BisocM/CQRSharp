@@ -37,6 +37,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
     private readonly Mock<ILogger<StreamUnitOfWorkBehavior<ITransactionalRequest, int>>> _mockLogger = new();
     private readonly Mock<IOutbox> _mockOutbox = new();
     private readonly Mock<IUnitOfWork> _mockUoW = new();
+
     private readonly IOptions<UnitOfWorkOptions> _options =
         Options.Create(new UnitOfWorkOptions { DefaultIsolationLevel = IsolationLevel.ReadCommitted });
 
@@ -83,9 +84,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
                                return Range(10, 20, 30);
                            },
                            CancellationToken.None))
-        {
             collected.Add(item);
-        }
 
         collected.Should().Equal(10, 20, 30);
         nextCalls.Should().Be(1);
@@ -101,15 +100,13 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
 
         var collected = new List<int>();
 
-        Func<Task> act = async () =>
+        var act = async () =>
         {
             await foreach (var item in behavior.Handle(
                                request,
                                _ => ThrowsAt(2, failure),
                                CancellationToken.None))
-            {
                 collected.Add(item);
-            }
         };
 
         var assertion = await act.Should().ThrowAsync<InvalidOperationException>();
@@ -138,31 +135,10 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
                            new NonTransactionalCommand(),
                            _ => Range(1, 2),
                            CancellationToken.None))
-        {
             collected.Add(item);
-        }
 
         collected.Should().Equal(1, 2);
         _mockUoW.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    // ---- Stream Validation -----------------------------------------------
-
-    /// <summary>
-    ///     A configurable fake stream validator that returns a fixed set of failures and records whether it ran.
-    ///     Uniquely named (Stream-prefixed, nested, private) so it never collides with the FakeValidator used by
-    ///     <see cref="ValidationAndTimeoutBehaviorTests" />.
-    /// </summary>
-    private sealed class StreamFakeValidator(params ValidationFailure[] failures)
-        : IRequestValidator<TestCommand>
-    {
-        public bool WasCalled { get; private set; }
-
-        public Task<ValidationFailure[]> ValidateAsync(TestCommand request, CancellationToken cancellationToken)
-        {
-            WasCalled = true;
-            return Task.FromResult(failures);
-        }
     }
 
     private static StreamValidationBehavior<TestCommand, int> CreateValidationBehavior(
@@ -185,7 +161,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
             yield return 1;
         }
 
-        Func<Task> act = async () =>
+        var act = async () =>
         {
             await foreach (var _ in behavior.Handle(new TestCommand(), _ => Inner(), CancellationToken.None))
             {
@@ -208,7 +184,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
         var f2 = new ValidationFailure("E2", "From validator two");
         var behavior = CreateValidationBehavior(new StreamFakeValidator(f1), new StreamFakeValidator(f2));
 
-        Func<Task> act = async () =>
+        var act = async () =>
         {
             await foreach (var _ in behavior.Handle(new TestCommand(), _ => Range(1), CancellationToken.None))
             {
@@ -243,5 +219,24 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
             collected.Add(item);
 
         collected.Should().Equal(42);
+    }
+
+    // ---- Stream Validation -----------------------------------------------
+
+    /// <summary>
+    ///     A configurable fake stream validator that returns a fixed set of failures and records whether it ran.
+    ///     Uniquely named (Stream-prefixed, nested, private) so it never collides with the FakeValidator used by
+    ///     <see cref="ValidationAndTimeoutBehaviorTests" />.
+    /// </summary>
+    private sealed class StreamFakeValidator(params ValidationFailure[] failures)
+        : IRequestValidator<TestCommand>
+    {
+        public bool WasCalled { get; private set; }
+
+        public Task<ValidationFailure[]> ValidateAsync(TestCommand request, CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            return Task.FromResult(failures);
+        }
     }
 }

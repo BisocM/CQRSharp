@@ -28,8 +28,6 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     INotificationSerializer? serializer = null)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
-
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
@@ -44,6 +42,8 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
 
         return await HandleImplicitTransactionAsync(request, next, cancellationToken, activity).ConfigureAwait(false);
     }
+
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
     private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken,
         Activity? activity, IExplicitUnitOfWork explicitUow)

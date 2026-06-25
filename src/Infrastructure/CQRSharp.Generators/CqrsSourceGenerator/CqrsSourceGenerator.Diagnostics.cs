@@ -126,7 +126,8 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            if (TryDescribeRequest(requestType, out var binding))");
         sb.AppendLine("                return binding;");
         sb.AppendLine();
-        sb.AppendLine("            throw new InvalidOperationException($\"Unknown request type '{requestType.FullName}'. Ensure it is included in the source-generated registry.\");");
+        sb.AppendLine(
+            "            throw new InvalidOperationException($\"Unknown request type '{requestType.FullName}'. Ensure it is included in the source-generated registry.\");");
         sb.AppendLine("        }");
         sb.AppendLine();
 

@@ -22,23 +22,23 @@ namespace CQRSharp.Tests.Analyzers;
 public class SendStreamRequestCodeFixTests
 {
     private const string StreamSendSource = """
-        using System.Threading.Tasks;
-        using CQRSharp.Abstractions.Interfaces.Context;
-        using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-        using CQRSharp.Abstractions.Models.Requests;
-        using CQRSharp.Core.Mediation;
+                                            using System.Threading.Tasks;
+                                            using CQRSharp.Abstractions.Interfaces.Context;
+                                            using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+                                            using CQRSharp.Abstractions.Models.Requests;
+                                            using CQRSharp.Core.Mediation;
 
-        public sealed class MyStream : IStreamRequest<int>
-        {
-            public IRequestContext? Context { get; set; }
-            public RequestMetadata? Metadata { get; set; }
-        }
+                                            public sealed class MyStream : IStreamRequest<int>
+                                            {
+                                                public IRequestContext? Context { get; set; }
+                                                public RequestMetadata? Metadata { get; set; }
+                                            }
 
-        public class Consumer
-        {
-            public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyStream());
-        }
-        """;
+                                            public class Consumer
+                                            {
+                                                public async Task Run(ICqrsDispatcher dispatcher) => await dispatcher.Send(new MyStream());
+                                            }
+                                            """;
 
     /// <summary>
     ///     Builds an in-memory <see cref="Document" /> referencing the real CQRSharp assemblies (plus the trusted
@@ -58,8 +58,8 @@ public class SendStreamRequestCodeFixTests
 
         var references = paths.Select(p => (MetadataReference)MetadataReference.CreateFromFile(p)).ToArray();
 
-        var projectId = ProjectId.CreateNewId(debugName: "CodeFixUnderTest");
-        var documentId = DocumentId.CreateNewId(projectId, debugName: "Snippet.cs");
+        var projectId = ProjectId.CreateNewId("CodeFixUnderTest");
+        var documentId = DocumentId.CreateNewId(projectId, "Snippet.cs");
 
         var solution = workspace.CurrentSolution
             .AddProject(projectId, "CodeFixUnderTest", "CodeFixUnderTest", LanguageNames.CSharp)

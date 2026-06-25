@@ -5,13 +5,13 @@ namespace CQRSharp.Sample.Infrastructure.SelfTest;
 
 public sealed class SampleDiagnostics
 {
-    private readonly ConcurrentDictionary<Type, int> _loggedRequests = new();
-    private readonly ConcurrentDictionary<Type, int> _notificationPipelineBefore = new();
-    private readonly ConcurrentDictionary<Type, int> _notificationPipelineAfter = new();
-    private readonly ConcurrentDictionary<Type, int> _interceptorPre = new();
-    private readonly ConcurrentDictionary<Type, int> _interceptorPost = new();
     private readonly ConcurrentDictionary<Type, int> _exceptionActions = new();
     private readonly ConcurrentDictionary<Type, int> _exceptionHandlers = new();
+    private readonly ConcurrentDictionary<Type, int> _interceptorPost = new();
+    private readonly ConcurrentDictionary<Type, int> _interceptorPre = new();
+    private readonly ConcurrentDictionary<Type, int> _loggedRequests = new();
+    private readonly ConcurrentDictionary<Type, int> _notificationPipelineAfter = new();
+    private readonly ConcurrentDictionary<Type, int> _notificationPipelineBefore = new();
 
     private readonly ConcurrentQueue<UserCreatedNotification> _userCreated = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<UserCreatedNotification>> _userCreatedWaiters = new();
@@ -70,10 +70,8 @@ public sealed class SampleDiagnostics
     public Task<UserCreatedNotification> WaitForUserCreatedAsync(Guid userId, TimeSpan timeout, CancellationToken cancellationToken)
     {
         foreach (var existing in _userCreated)
-        {
             if (existing.UserId == userId)
                 return Task.FromResult(existing);
-        }
 
         var tcs = new TaskCompletionSource<UserCreatedNotification>(TaskCreationOptions.RunContinuationsAsynchronously);
         _userCreatedWaiters[userId] = tcs;

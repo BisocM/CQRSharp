@@ -38,4 +38,3 @@ public sealed class RequestExceptionHookRegistry : IRequestExceptionHookRegistry
     public bool TryGetInvoker(Type requestType, out RequestExceptionHookInvoker invoker)
         => _invokers.TryGetValue(requestType, out invoker!);
 }
-

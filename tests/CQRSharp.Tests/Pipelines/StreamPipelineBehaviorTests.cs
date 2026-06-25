@@ -19,35 +19,20 @@ namespace CQRSharp.Tests.Pipelines;
 ///     non-stream variants but accounting for the streaming-specific policy. Covers:
 ///     <list type="bullet">
 ///         <item><see cref="StreamRateLimitingBehavior{TRequest,TItem}" /> — allows/blocks streams per the limiter.</item>
-///         <item><see cref="StreamTimeoutBehavior{TRequest,TItem}" /> — cancels a stream that exceeds the budget,
-///         passes one within it.</item>
-///         <item><see cref="StreamResilienceBehavior{TRequest,TItem}" /> — retries only for an
-///         <see cref="IRetryableRequest" /> that fails before yielding any items; rate-limit, timeout, cancellation,
-///         post-yield faults, and non-retryable requests are all terminal.</item>
+///         <item>
+///             <see cref="StreamTimeoutBehavior{TRequest,TItem}" /> — cancels a stream that exceeds the budget,
+///             passes one within it.
+///         </item>
+///         <item>
+///             <see cref="StreamResilienceBehavior{TRequest,TItem}" /> — retries only for an
+///             <see cref="IRetryableRequest" /> that fails before yielding any items; rate-limit, timeout, cancellation,
+///             post-yield faults, and non-retryable requests are all terminal.
+///         </item>
 ///     </list>
 ///     Timings are kept tiny and token-honoring to stay deterministic.
 /// </summary>
 public class StreamPipelineBehaviorTests
 {
-    // ---- Fixtures ---------------------------------------------------------
-
-    /// <summary>A streaming request whose context is an <see cref="IRateLimitedContext" />.</summary>
-    private sealed class StreamRateLimitedRequest : RequestBase<IRateLimitedContext>;
-
-    /// <summary>A plain (non-retryable) streaming request.</summary>
-    private sealed class StreamPlainRequest : IRequest
-    {
-        public IRequestContext? Context { get; set; }
-        public RequestMetadata? Metadata { get; set; }
-    }
-
-    /// <summary>An opt-in retryable streaming request.</summary>
-    private sealed class StreamRetryableRequest : IRetryableRequest
-    {
-        public IRequestContext? Context { get; set; }
-        public RequestMetadata? Metadata { get; set; }
-    }
-
     /// <summary>Yields the given items, honoring cancellation between each, with a tiny async hop.</summary>
     private static async IAsyncEnumerable<int> Produce(
         IEnumerable<int> items,
@@ -87,7 +72,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream rate limiting: a request under the limit is allowed and streams all items")]
     public async Task RateLimiting_UnderLimit_AllowsStream()
     {
-        using var limiter = CreateLimiter(maxTokens: 3);
+        using var limiter = CreateLimiter(3);
         var behavior = CreateRateLimitingBehavior(limiter);
         var request = new StreamRateLimitedRequest { Context = new TestRateLimitedContext("r1", "u1") };
 
@@ -99,7 +84,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream rate limiting: once tokens are exhausted the stream is blocked with RateLimitExceededException")]
     public async Task RateLimiting_OverLimit_BlocksStream()
     {
-        using var limiter = CreateLimiter(maxTokens: 2);
+        using var limiter = CreateLimiter(2);
         var behavior = CreateRateLimitingBehavior(limiter);
         var ctx = new TestRateLimitedContext("r2", "u2");
         var request = new StreamRateLimitedRequest { Context = ctx };
@@ -119,7 +104,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream rate limiting: a request without IRateLimitedContext is a no-op")]
     public async Task RateLimiting_NoRateLimitedContext_NoOp()
     {
-        using var limiter = CreateLimiter(maxTokens: 1);
+        using var limiter = CreateLimiter(1);
         var behavior = new StreamRateLimitingBehavior<StreamPlainRequest, int>(
             NullLogger<StreamRateLimitingBehavior<StreamPlainRequest, int>>.Instance, limiter);
 
@@ -134,7 +119,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream rate limiting: missing user identifier throws InvalidOperationException")]
     public async Task RateLimiting_MissingUser_Throws()
     {
-        using var limiter = CreateLimiter(maxTokens: 3);
+        using var limiter = CreateLimiter(3);
         var behavior = CreateRateLimitingBehavior(limiter);
         var request = new StreamRateLimitedRequest { Context = new TestRateLimitedContext("r0", string.Empty) };
 
@@ -230,7 +215,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream resilience: a retryable stream failing before any item is retried until it succeeds")]
     public async Task Resilience_Retryable_RetriesUntilSuccess_WhenFailsBeforeYield()
     {
-        var behavior = CreateResilienceBehavior<StreamRetryableRequest>(maxRetries: 3);
+        var behavior = CreateResilienceBehavior<StreamRetryableRequest>(3);
         var attempts = 0;
 
         async IAsyncEnumerable<int> Source([EnumeratorCancellation] CancellationToken ct = default)
@@ -290,7 +275,7 @@ public class StreamPipelineBehaviorTests
             throw new InvalidOperationException("post-yield");
         }
 
-        Func<Task> act = async () =>
+        var act = async () =>
         {
             await foreach (var item in behavior.Handle(new StreamRetryableRequest(), Source, CancellationToken.None).ConfigureAwait(false))
                 seen.Add(item);
@@ -371,7 +356,7 @@ public class StreamPipelineBehaviorTests
     [Fact(DisplayName = "Stream resilience: a retryable stream still failing before yield after all retries propagates the failure")]
     public async Task Resilience_Retryable_RetriesExhausted_Throws()
     {
-        var behavior = CreateResilienceBehavior<StreamRetryableRequest>(maxRetries: 2);
+        var behavior = CreateResilienceBehavior<StreamRetryableRequest>(2);
         var attempts = 0;
 
         async IAsyncEnumerable<int> Source([EnumeratorCancellation] CancellationToken ct = default)
@@ -389,5 +374,23 @@ public class StreamPipelineBehaviorTests
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("always");
         // 1 initial attempt + MaxRetries(2) retries = 3 total enumerations.
         attempts.Should().Be(3, "the initial attempt plus MaxRetries retries are all consumed before propagating");
+    }
+    // ---- Fixtures ---------------------------------------------------------
+
+    /// <summary>A streaming request whose context is an <see cref="IRateLimitedContext" />.</summary>
+    private sealed class StreamRateLimitedRequest : RequestBase<IRateLimitedContext>;
+
+    /// <summary>A plain (non-retryable) streaming request.</summary>
+    private sealed class StreamPlainRequest : IRequest
+    {
+        public IRequestContext? Context { get; set; }
+        public RequestMetadata? Metadata { get; set; }
+    }
+
+    /// <summary>An opt-in retryable streaming request.</summary>
+    private sealed class StreamRetryableRequest : IRetryableRequest
+    {
+        public IRequestContext? Context { get; set; }
+        public RequestMetadata? Metadata { get; set; }
     }
 }

@@ -13,31 +13,6 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public class NotificationFaultTests
 {
-    private sealed record FaultNotification : INotification;
-
-    private sealed class SyncThrowHandler : INotificationHandler<FaultNotification>
-    {
-        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
-            => throw new InvalidOperationException("A");
-    }
-
-    private sealed class AsyncThrowHandler : INotificationHandler<FaultNotification>
-    {
-        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
-            => Task.FromException(new InvalidOperationException("B"));
-    }
-
-    private sealed class FlagHandler : INotificationHandler<FaultNotification>
-    {
-        public bool Ran { get; private set; }
-
-        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
-        {
-            Ran = true;
-            return Task.CompletedTask;
-        }
-    }
-
     [Fact(DisplayName = "Multiple handler faults are surfaced together as an AggregateException")]
     public async Task Publish_MultipleFaults_SurfacesAll()
     {
@@ -85,5 +60,30 @@ public class NotificationFaultTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("A");
         flag.Ran.Should().BeFalse("sequential dispatch must stop at the first failing handler");
+    }
+
+    private sealed record FaultNotification : INotification;
+
+    private sealed class SyncThrowHandler : INotificationHandler<FaultNotification>
+    {
+        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("A");
+    }
+
+    private sealed class AsyncThrowHandler : INotificationHandler<FaultNotification>
+    {
+        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
+            => Task.FromException(new InvalidOperationException("B"));
+    }
+
+    private sealed class FlagHandler : INotificationHandler<FaultNotification>
+    {
+        public bool Ran { get; private set; }
+
+        public Task Handle(FaultNotification notification, CancellationToken cancellationToken)
+        {
+            Ran = true;
+            return Task.CompletedTask;
+        }
     }
 }

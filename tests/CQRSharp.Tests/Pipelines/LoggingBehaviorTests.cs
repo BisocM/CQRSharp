@@ -6,41 +6,13 @@ using Microsoft.Extensions.Logging;
 namespace CQRSharp.Tests.Pipelines;
 
 /// <summary>
-///     Tests for <see cref="LoggingBehavior{TRequest, TResult}" /> and
+///     Tests for <see cref="LoggingBehavior{TRequest,TResult}" /> and
 ///     <see cref="StreamLoggingBehavior{TRequest, TItem}" />: the behaviors are transparent (they invoke the next
 ///     delegate and return its result/items unchanged) and they log around the request — on the success path and when
 ///     the next delegate throws.
 /// </summary>
 public class LoggingBehaviorTests
 {
-    /// <summary>
-    ///     A minimal in-memory <see cref="ILogger{T}" /> that captures every log entry. Verifying log output through a
-    ///     real-ish logger is more robust than mocking <c>ILogger.Log&lt;TState&gt;</c> directly, because the
-    ///     <c>LogInformation</c>/<c>LogError</c> extension methods funnel through the generic <c>Log</c> method.
-    /// </summary>
-    private sealed class CapturingLogger<T> : ILogger<T>
-    {
-        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
-
-        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-            => Entries.Add((logLevel, formatter(state, exception), exception));
-
-        private sealed class NullScope : IDisposable
-        {
-            public static readonly NullScope Instance = new();
-            public void Dispose() { }
-        }
-    }
-
     // -------------------------------------------------------------------------------------------------------------
     // LoggingBehavior<TRequest, TResult>
     // -------------------------------------------------------------------------------------------------------------
@@ -129,9 +101,7 @@ public class LoggingBehaviorTests
                                return ToAsync(source);
                            },
                            CancellationToken.None))
-        {
             collected.Add(item);
-        }
 
         nextCalled.Should().Be(1, "the inner stream factory is invoked exactly once during enumeration");
         collected.Should().Equal(source, "items must flow through the behavior unchanged and in order");
@@ -151,7 +121,9 @@ public class LoggingBehaviorTests
         // The start log only happens once enumeration begins (it lives inside the async iterator).
         logger.Entries.Should().BeEmpty("nothing is logged until the stream is enumerated");
 
-        await foreach (var _ in enumerated) { }
+        await foreach (var _ in enumerated)
+        {
+        }
 
         logger.Entries.Should().HaveCount(2, "logs once at start of enumeration and once after completion");
         logger.Entries.Should().OnlyContain(e => e.Level == LogLevel.Information);
@@ -166,7 +138,7 @@ public class LoggingBehaviorTests
         var behavior = new StreamLoggingBehavior<TestStreamRequest, int>(logger);
         var boom = new InvalidOperationException("stream-boom");
 
-        Func<Task> act = async () =>
+        var act = async () =>
         {
             await foreach (var _ in behavior.Handle(
                                new TestStreamRequest(0),
@@ -205,5 +177,36 @@ public class LoggingBehaviorTests
         await Task.Yield();
         yield return 1;
         throw ex;
+    }
+
+    /// <summary>
+    ///     A minimal in-memory <see cref="ILogger{T}" /> that captures every log entry. Verifying log output through a
+    ///     real-ish logger is more robust than mocking <c>ILogger.Log&lt;TState&gt;</c> directly, because the
+    ///     <c>LogInformation</c>/<c>LogError</c> extension methods funnel through the generic <c>Log</c> method.
+    /// </summary>
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception), exception));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 }

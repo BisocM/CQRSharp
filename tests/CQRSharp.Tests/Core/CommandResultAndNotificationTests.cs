@@ -3,7 +3,6 @@ using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
-using Xunit;
 
 namespace CQRSharp.Tests.Core;
 

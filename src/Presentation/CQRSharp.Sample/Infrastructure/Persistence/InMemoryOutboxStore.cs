@@ -8,9 +8,6 @@ public sealed class InMemoryOutboxStore : IOutboxStore
 {
     private readonly ConcurrentDictionary<Guid, OutboxMessage> _messages = new();
 
-    public IReadOnlyCollection<OutboxMessage> Snapshot()
-        => _messages.Values.ToArray();
-
     public Task StoreAsync(IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
     {
         foreach (var message in messages)
@@ -45,13 +42,11 @@ public sealed class InMemoryOutboxStore : IOutboxStore
     public Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken)
     {
         if (_messages.TryGetValue(messageId, out var message))
-        {
             _messages[messageId] = message with
             {
                 Status = OutboxMessageStatus.Processed,
                 ProcessedAt = DateTime.UtcNow
             };
-        }
 
         return Task.CompletedTask;
     }
@@ -82,4 +77,7 @@ public sealed class InMemoryOutboxStore : IOutboxStore
 
         return Task.CompletedTask;
     }
+
+    public IReadOnlyCollection<OutboxMessage> Snapshot()
+        => _messages.Values.ToArray();
 }

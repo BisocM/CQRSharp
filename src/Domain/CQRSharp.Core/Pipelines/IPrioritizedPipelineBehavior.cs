@@ -17,4 +17,3 @@ public interface IPrioritizedPipelineBehavior
     /// </summary>
     int PipelineExecutionPriority { get; }
 }
-

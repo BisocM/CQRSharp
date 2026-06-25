@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Composition;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
@@ -33,9 +32,9 @@ public sealed class SendStreamRequestCodeFixProvider : CodeFixProvider
 
         context.RegisterCodeFix(
             CodeAction.Create(
-                title: "Use Stream(...)",
-                createChangedDocument: _ => Task.FromResult(ReplaceWithStream(context.Document, root, name)),
-                equivalenceKey: "CQRA004_UseStream"),
+                "Use Stream(...)",
+                _ => Task.FromResult(ReplaceWithStream(context.Document, root, name)),
+                "CQRA004_UseStream"),
             context.Diagnostics);
     }
 

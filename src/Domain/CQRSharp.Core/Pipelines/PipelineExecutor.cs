@@ -1,5 +1,4 @@
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -44,15 +43,14 @@ public sealed class PipelineExecutor(
     IOptions<DispatcherOptions> dispatcherOptions,
     IBackgroundTaskManager backgroundTaskManager) : IPipelineExecutor
 {
+    private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
     private static readonly ConcurrentDictionary<Type, IPreHandlerAttribute[]> SortedPreHandlerCache = new();
     private static readonly ConcurrentDictionary<Type, IPostHandlerAttribute[]> SortedPostHandlerCache = new();
-
-    private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
+    private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
+    private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
+    private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
     private readonly IServiceProvider _services = serviceProvider;
-    private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-    private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
-    private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
 
     /// <summary>
     ///     Executes a query. When <see cref="RunMode.Async" /> is configured the work is handed to the background
@@ -88,46 +86,6 @@ public sealed class PipelineExecutor(
         }
 
         return ExecuteQueryImmediateAsync<TRequest, TResult>(query, ct);
-    }
-
-    private Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
-        TRequest query, CancellationToken ct)
-        where TRequest : IQuery<TResult>
-    {
-        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
-            ? ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, ct)
-            : ExecuteQueryInProviderAsync<TRequest, TResult>(query, _services, ct);
-    }
-
-    private async Task<TResult> ExecuteQueryInNewScopeAsync<TRequest, TResult>(
-        TRequest query,
-        CancellationToken ct)
-        where TRequest : IQuery<TResult>
-    {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        return await ExecuteQueryInProviderAsync<TRequest, TResult>(query, scope.ServiceProvider, ct).ConfigureAwait(false);
-    }
-
-    private async Task<TResult> ExecuteQueryInProviderAsync<TRequest, TResult>(
-        TRequest query,
-        IServiceProvider provider,
-        CancellationToken ct)
-        where TRequest : IQuery<TResult>
-    {
-        using var activity = CqrsActivitySource.StartRequest("CQRS Query", typeof(TRequest));
-        try
-        {
-            InitializeRequestContext(query, provider);
-            var handler = GetHandler(typeof(TRequest), provider);
-            var result = await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
-            activity?.SetStatus(ActivityStatusCode.Ok);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            throw;
-        }
     }
 
     /// <summary>
@@ -177,6 +135,46 @@ public sealed class PipelineExecutor(
         return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
             ? ExecuteStreamInNewScope<TRequest, TItem>(request, ct)
             : ExecuteStreamInProvider<TRequest, TItem>(request, _services, ct);
+    }
+
+    private Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
+        TRequest query, CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
+        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
+            ? ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, ct)
+            : ExecuteQueryInProviderAsync<TRequest, TResult>(query, _services, ct);
+    }
+
+    private async Task<TResult> ExecuteQueryInNewScopeAsync<TRequest, TResult>(
+        TRequest query,
+        CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        return await ExecuteQueryInProviderAsync<TRequest, TResult>(query, scope.ServiceProvider, ct).ConfigureAwait(false);
+    }
+
+    private async Task<TResult> ExecuteQueryInProviderAsync<TRequest, TResult>(
+        TRequest query,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : IQuery<TResult>
+    {
+        using var activity = CqrsActivitySource.StartRequest("CQRS Query", typeof(TRequest));
+        try
+        {
+            InitializeRequestContext(query, provider);
+            var handler = GetHandler(typeof(TRequest), provider);
+            var result = await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
     }
 
     private IAsyncEnumerable<TItem> ExecuteStreamInNewScope<TRequest, TItem>(
@@ -727,10 +725,11 @@ public sealed class PipelineExecutor(
 
     private sealed class PreHandlerPriorityComparer : IComparer<IPreHandlerAttribute>
     {
-        public static PreHandlerPriorityComparer Instance { get; } = new();
         private PreHandlerPriorityComparer()
         {
         }
+
+        public static PreHandlerPriorityComparer Instance { get; } = new();
 
         public int Compare(IPreHandlerAttribute? x, IPreHandlerAttribute? y)
         {
@@ -744,10 +743,11 @@ public sealed class PipelineExecutor(
 
     private sealed class PostHandlerPriorityComparer : IComparer<IPostHandlerAttribute>
     {
-        public static PostHandlerPriorityComparer Instance { get; } = new();
         private PostHandlerPriorityComparer()
         {
         }
+
+        public static PostHandlerPriorityComparer Instance { get; } = new();
 
         public int Compare(IPostHandlerAttribute? x, IPostHandlerAttribute? y)
         {
@@ -761,11 +761,11 @@ public sealed class PipelineExecutor(
 
     private sealed class BehaviorPriorityComparer<TRequest, TResult> : IComparer<IPipelineBehavior<TRequest, TResult>> where TRequest : IRequest
     {
-        public static BehaviorPriorityComparer<TRequest, TResult> Instance { get; } = new();
-
         private BehaviorPriorityComparer()
         {
         }
+
+        public static BehaviorPriorityComparer<TRequest, TResult> Instance { get; } = new();
 
         public int Compare(IPipelineBehavior<TRequest, TResult>? x, IPipelineBehavior<TRequest, TResult>? y)
         {
@@ -782,11 +782,11 @@ public sealed class PipelineExecutor(
     private sealed class StreamBehaviorPriorityComparer<TRequest, TItem> : IComparer<IStreamPipelineBehavior<TRequest, TItem>>
         where TRequest : IRequest
     {
-        public static StreamBehaviorPriorityComparer<TRequest, TItem> Instance { get; } = new();
-
         private StreamBehaviorPriorityComparer()
         {
         }
+
+        public static StreamBehaviorPriorityComparer<TRequest, TItem> Instance { get; } = new();
 
         public int Compare(IStreamPipelineBehavior<TRequest, TItem>? x, IStreamPipelineBehavior<TRequest, TItem>? y)
         {

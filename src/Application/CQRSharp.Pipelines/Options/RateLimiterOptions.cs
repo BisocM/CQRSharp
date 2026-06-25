@@ -1,4 +1,4 @@
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
+﻿using CQRSharp.Pipelines.Behaviors.RateLimiting;
 
 namespace CQRSharp.Pipelines.Options;
 

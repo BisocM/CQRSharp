@@ -2,9 +2,9 @@ using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

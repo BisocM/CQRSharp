@@ -82,11 +82,9 @@ public sealed class CqrsAotHintGenerator : IIncrementalGenerator
         // --- Find all concrete ICommand and IQuery implementations ---
         static bool IsAccessibleFromGeneratedCode(INamedTypeSymbol typeSymbol)
         {
-            for (INamedTypeSymbol? current = typeSymbol; current is not null; current = current.ContainingType)
-            {
+            for (var current = typeSymbol; current is not null; current = current.ContainingType)
                 if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
                     return false;
-            }
 
             return true;
         }

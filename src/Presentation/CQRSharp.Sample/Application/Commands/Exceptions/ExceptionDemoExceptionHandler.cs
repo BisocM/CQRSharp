@@ -20,4 +20,3 @@ public sealed class ExceptionDemoExceptionHandler(SampleDiagnostics diagnostics)
         return Task.CompletedTask;
     }
 }
-

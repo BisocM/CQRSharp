@@ -7,4 +7,3 @@ public sealed class ValidatedCommand(string? value) : CommandBase<SampleRequestC
 {
     public string? Value { get; } = value;
 }
-

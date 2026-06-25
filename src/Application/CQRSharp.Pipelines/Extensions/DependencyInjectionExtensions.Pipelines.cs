@@ -1,6 +1,5 @@
-using CQRSharp.Abstractions.Interfaces.Transactions;
+﻿using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Behaviors.Exceptions;
 using CQRSharp.Pipelines.Behaviors.Idempotency;
 using CQRSharp.Pipelines.Behaviors.Logging;
@@ -9,6 +8,7 @@ using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Pipelines.Behaviors.Timeout;
 using CQRSharp.Pipelines.Behaviors.Transactions;
 using CQRSharp.Pipelines.Behaviors.Validation;
+using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Pipelines.Extensions;

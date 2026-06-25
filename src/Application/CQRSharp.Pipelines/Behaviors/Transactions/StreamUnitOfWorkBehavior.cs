@@ -1,6 +1,5 @@
 using System.Data;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;

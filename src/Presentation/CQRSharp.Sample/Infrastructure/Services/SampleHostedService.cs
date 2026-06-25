@@ -1,17 +1,17 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Models.Outbox;
 using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Abstractions.Models.Outbox;
 using CQRSharp.Abstractions.Models.Validation;
-using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Background.TaskQueue;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Sample.Application.Commands.Requests;
 using CQRSharp.Sample.Application.Commands.Handlers;
+using CQRSharp.Sample.Application.Commands.Requests;
+using CQRSharp.Sample.Application.Pipelines;
 using CQRSharp.Sample.Application.Queries.Handlers;
 using CQRSharp.Sample.Application.Queries.Requests;
-using CQRSharp.Sample.Application.Pipelines;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Domain.Events;
 using CQRSharp.Sample.Infrastructure.Interceptors;
@@ -53,17 +53,17 @@ public sealed class SampleHostedService(
             await RunScopeSemanticsTestAsync(cqrs, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
 
             var userId = Guid.NewGuid();
-	            await RunOutboxAndRequestTestAsync(cqrs, outboxStore, diagnostics, userContext.UserId, userId, stoppingToken)
-	                .ConfigureAwait(false);
+            await RunOutboxAndRequestTestAsync(cqrs, outboxStore, diagnostics, userContext.UserId, userId, stoppingToken)
+                .ConfigureAwait(false);
 
             await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
             await RunDynamicSendTestAsync(cqrs, userId, stoppingToken).ConfigureAwait(false);
             await RunStreamingTestAsync(cqrs, diagnostics, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
             await RunStreamExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
-	            await RunValidationTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
-	            await RunPipelineExemptionTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
-	            await RunInterceptorTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
-	            await RunRateLimitingTestAsync(cqrs, userContext, stoppingToken).ConfigureAwait(false);
+            await RunValidationTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
+            await RunPipelineExemptionTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
+            await RunInterceptorTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
+            await RunRateLimitingTestAsync(cqrs, userContext, stoppingToken).ConfigureAwait(false);
             await RunResilienceTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunTimeoutTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
@@ -93,10 +93,10 @@ public sealed class SampleHostedService(
         Require(actual == expected, $"Background queue returned {actual} (expected {expected}).");
 
         await WaitUntilAsync(
-            condition: () => diagnostics.GetNotificationPipelineAfterCount(typeof(TaskEnqueuedNotification)) > 0,
-            timeout: TimeSpan.FromSeconds(5),
-            pollInterval: TimeSpan.FromMilliseconds(25),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            () => diagnostics.GetNotificationPipelineAfterCount(typeof(TaskEnqueuedNotification)) > 0,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(25),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task RunOutboxAndRequestTestAsync(
@@ -118,20 +118,20 @@ public sealed class SampleHostedService(
             $"CreateUserCommand context userId '{context.UserId}' did not match expected '{expectedUserId}'.");
 
         await WaitUntilAsync(
-            condition: () => outboxStore.Snapshot().Any(m => m.NotificationType == SampleNotificationNames.UserCreated),
-            timeout: TimeSpan.FromSeconds(5),
-            pollInterval: TimeSpan.FromMilliseconds(25),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            () => outboxStore.Snapshot().Any(m => m.NotificationType == SampleNotificationNames.UserCreated),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(25),
+            cancellationToken).ConfigureAwait(false);
 
         await WaitUntilAsync(
-            condition: () =>
+            () =>
             {
                 var msg = GetUserCreatedOutboxMessage(outboxStore);
                 return msg is { Status: OutboxMessageStatus.Processed };
             },
-            timeout: TimeSpan.FromSeconds(5),
-            pollInterval: TimeSpan.FromMilliseconds(25),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(25),
+            cancellationToken).ConfigureAwait(false);
 
         var userCreated = await diagnostics.WaitForUserCreatedAsync(userId, TimeSpan.FromSeconds(5), cancellationToken)
             .ConfigureAwait(false);
@@ -156,33 +156,33 @@ public sealed class SampleHostedService(
             $"Expected request to execute in current scope. Marker id was '{observed}', expected '{expectedMarkerId}'.");
     }
 
-	    private static async Task RunQueryTestAsync(
-	        ICqrsDispatcher cqrs,
-	        SampleDiagnostics diagnostics,
-	        Guid userId,
+    private static async Task RunQueryTestAsync(
+        ICqrsDispatcher cqrs,
+        SampleDiagnostics diagnostics,
+        Guid userId,
         CancellationToken cancellationToken)
     {
         var user = await cqrs.Send(new GetUserQuery(userId), cancellationToken).ConfigureAwait(false);
         if (user is null) throw new InvalidOperationException("GetUserQuery returned null.");
         Require(user.Id == userId, "GetUserQuery returned the wrong user.");
 
-	        RequireNotificationPipelineExecuted(diagnostics, typeof(QueryInitiatedNotification<User?>));
-	        RequireNotificationPipelineExecuted(diagnostics, typeof(QueryCompletedNotification<User?>));
-	    }
+        RequireNotificationPipelineExecuted(diagnostics, typeof(QueryInitiatedNotification<User?>));
+        RequireNotificationPipelineExecuted(diagnostics, typeof(QueryCompletedNotification<User?>));
+    }
 
     private static async Task RunDynamicSendTestAsync(
-	        ICqrsDispatcher cqrs,
-	        Guid userId,
-	        CancellationToken cancellationToken)
-	    {
-	        object ping = new PingCommand();
-	        var pingResult = await cqrs.Send(ping, cancellationToken).ConfigureAwait(false);
-	        Require(pingResult is CommandResult { IsSuccess: true }, "Dynamic Send(object) did not succeed for PingCommand.");
+        ICqrsDispatcher cqrs,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        object ping = new PingCommand();
+        var pingResult = await cqrs.Send(ping, cancellationToken).ConfigureAwait(false);
+        Require(pingResult is CommandResult { IsSuccess: true }, "Dynamic Send(object) did not succeed for PingCommand.");
 
-	        object query = new GetUserQuery(userId);
-	        var user = await cqrs.Send(query, cancellationToken).ConfigureAwait(false);
-	        Require(user is User { Id: var id } && id == userId, "Dynamic Send(object) returned the wrong user.");
-	    }
+        object query = new GetUserQuery(userId);
+        var user = await cqrs.Send(query, cancellationToken).ConfigureAwait(false);
+        Require(user is User { Id: var id } && id == userId, "Dynamic Send(object) returned the wrong user.");
+    }
 
     private static async Task RunStreamingTestAsync(
         ICqrsDispatcher cqrs,
@@ -233,9 +233,9 @@ public sealed class SampleHostedService(
             "Expected exception handler to execute for ExceptionDemoStreamRequest.");
     }
 
-	    private static async Task RunValidationTestAsync(
-	        ICqrsDispatcher cqrs,
-	        SampleDiagnostics diagnostics,
+    private static async Task RunValidationTestAsync(
+        ICqrsDispatcher cqrs,
+        SampleDiagnostics diagnostics,
         CancellationToken cancellationToken)
     {
         Require(diagnostics.GetValidatedCommandHandlerInvocationCount() == 0,
@@ -295,7 +295,6 @@ public sealed class SampleHostedService(
         var successes = 0;
         var failures = 0;
         for (var i = 0; i < 10; i++)
-        {
             try
             {
                 await cqrs.Send(new PingCommand(), cancellationToken).ConfigureAwait(false);
@@ -305,7 +304,6 @@ public sealed class SampleHostedService(
             {
                 failures++;
             }
-        }
 
         Require(successes > 0, "Expected at least one PingCommand to succeed under rate limiting.");
         Require(failures > 0, "Expected at least one PingCommand to be rate limited.");

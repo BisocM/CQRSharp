@@ -28,37 +28,6 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public class PublishStrategyTests
 {
-    private sealed record StrategyNotification : INotification;
-
-    /// <summary>Records that it ran, then throws asynchronously with a distinguishable message.</summary>
-    private sealed class ThrowingHandler : INotificationHandler<StrategyNotification>
-    {
-        private readonly string _message;
-        public bool Ran { get; private set; }
-
-        public ThrowingHandler(string message) => _message = message;
-
-        public Task Handle(StrategyNotification notification, CancellationToken cancellationToken)
-        {
-            Ran = true;
-            // Async (faulted-task) throw so that, under the parallel strategies, starting this handler does not
-            // synchronously short-circuit the loop that starts its siblings.
-            return Task.FromException(new InvalidOperationException(_message));
-        }
-    }
-
-    /// <summary>Records that it ran and completes successfully.</summary>
-    private sealed class SuccessHandler : INotificationHandler<StrategyNotification>
-    {
-        public bool Ran { get; private set; }
-
-        public Task Handle(StrategyNotification notification, CancellationToken cancellationToken)
-        {
-            Ran = true;
-            return Task.CompletedTask;
-        }
-    }
-
     private static (ServiceProvider provider, DirectNotificationDispatcher dispatcher) Build(
         PublishStrategy strategy,
         params INotificationHandler<StrategyNotification>[] handlers)
@@ -159,5 +128,36 @@ public class PublishStrategyTests
         assertion.Which.Message.Should().Be("solo");
         failing.Ran.Should().BeTrue();
         succeeding.Ran.Should().BeTrue("all handlers run regardless of how many fail");
+    }
+
+    private sealed record StrategyNotification : INotification;
+
+    /// <summary>Records that it ran, then throws asynchronously with a distinguishable message.</summary>
+    private sealed class ThrowingHandler : INotificationHandler<StrategyNotification>
+    {
+        private readonly string _message;
+
+        public ThrowingHandler(string message) => _message = message;
+        public bool Ran { get; private set; }
+
+        public Task Handle(StrategyNotification notification, CancellationToken cancellationToken)
+        {
+            Ran = true;
+            // Async (faulted-task) throw so that, under the parallel strategies, starting this handler does not
+            // synchronously short-circuit the loop that starts its siblings.
+            return Task.FromException(new InvalidOperationException(_message));
+        }
+    }
+
+    /// <summary>Records that it ran and completes successfully.</summary>
+    private sealed class SuccessHandler : INotificationHandler<StrategyNotification>
+    {
+        public bool Ran { get; private set; }
+
+        public Task Handle(StrategyNotification notification, CancellationToken cancellationToken)
+        {
+            Ran = true;
+            return Task.CompletedTask;
+        }
     }
 }

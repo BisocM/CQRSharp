@@ -21,7 +21,7 @@ public static class CqrsActivitySource
     /// </summary>
     internal static Activity? StartRequest(string operation, Type requestType)
     {
-        var activity = Instance.StartActivity($"{operation} {requestType.Name}", ActivityKind.Internal);
+        var activity = Instance.StartActivity($"{operation} {requestType.Name}");
         activity?.SetTag("cqrsharp.request_type", requestType.FullName);
         return activity;
     }

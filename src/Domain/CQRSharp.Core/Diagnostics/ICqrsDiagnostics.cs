@@ -21,4 +21,3 @@ public interface ICqrsDiagnostics
     /// </summary>
     IReadOnlyList<CqrsRequestBinding> DescribeAllRequests();
 }
-

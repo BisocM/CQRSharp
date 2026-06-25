@@ -1,10 +1,11 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Pipelines.Extensions;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
+using CQRSharp.Pipelines.Extensions;
+using CQRSharp.Pipelines.Options;
 using CQRSharp.Tests.Shared;
+using CQRSharp.Tests.Shared.CollisionsA;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -93,8 +94,8 @@ public class RateLimitingBehaviorTests
     {
         // Arrange
         var uid = "u4";
-        var cmd1 = new CQRSharp.Tests.Shared.CollisionsA.CollisionCommand { Context = new TestRateLimitedContext("r4a", uid) };
-        var cmd2 = new CQRSharp.Tests.Shared.CollisionsB.CollisionCommand { Context = new TestRateLimitedContext("r4b", uid) };
+        var cmd1 = new CollisionCommand { Context = new TestRateLimitedContext("r4a", uid) };
+        var cmd2 = new Shared.CollisionsB.CollisionCommand { Context = new TestRateLimitedContext("r4b", uid) };
         for (var i = 0; i < _options.MaxTokens; i++) await _behavior.Handle(cmd1, _ => Task.FromResult<object>(null!), CancellationToken.None);
 
         // Act

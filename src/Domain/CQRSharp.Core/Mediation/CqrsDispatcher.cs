@@ -11,9 +11,9 @@ namespace CQRSharp.Core.Mediation;
 /// </summary>
 public sealed class CqrsDispatcher : ICqrsDispatcher
 {
+    private readonly INotificationDispatcher _notificationDispatcher;
     private readonly IRequestDispatcher _requestDispatcher;
     private readonly IStreamRequestDispatcher _streamRequestDispatcher;
-    private readonly INotificationDispatcher _notificationDispatcher;
 
     /// <summary>
     ///     Initializes a new <see cref="CqrsDispatcher" /> that forwards requests, streams, and notifications

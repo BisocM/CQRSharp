@@ -11,4 +11,3 @@ public readonly record struct ValidationFailure(
     string Message,
     string? MemberName = null
 );
-

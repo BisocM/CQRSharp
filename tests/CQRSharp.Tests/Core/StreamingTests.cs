@@ -58,4 +58,3 @@ public sealed class StreamingTests
             .WithMessage("Stream requests must be executed via Stream(*)*");
     }
 }
-

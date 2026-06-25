@@ -61,13 +61,15 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
                 var def = iface.OriginalDefinition;
 
                 if (IsAny(def, commandHandler, queryHandler, streamHandler))
-                {
-                    lock (gate) handledRequests.Add(iface.TypeArguments[0]);
-                }
+                    lock (gate)
+                    {
+                        handledRequests.Add(iface.TypeArguments[0]);
+                    }
                 else if (notificationHandler is not null && SymbolEqualityComparer.Default.Equals(def, notificationHandler))
-                {
-                    lock (gate) handledNotifications.Add(iface.TypeArguments[0]);
-                }
+                    lock (gate)
+                    {
+                        handledNotifications.Add(iface.TypeArguments[0]);
+                    }
             }
         }, SymbolKind.NamedType);
 
@@ -87,10 +89,18 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
             switch (method.Name)
             {
                 case "Send" or "Stream" when Implements(argType, requestMarker):
-                    lock (gate) sendSites.Add((argType, location));
+                    lock (gate)
+                    {
+                        sendSites.Add((argType, location));
+                    }
+
                     break;
                 case "Publish" when Implements(argType, notificationMarker):
-                    lock (gate) publishSites.Add((argType, location));
+                    lock (gate)
+                    {
+                        publishSites.Add((argType, location));
+                    }
+
                     break;
             }
         }, OperationKind.Invocation);
@@ -122,7 +132,8 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
                 var attrClass = attribute.AttributeClass;
                 if (handledRequestAttr is not null && SymbolEqualityComparer.Default.Equals(attrClass, handledRequestAttr) && TryGetTypeArgument(attribute, out var request))
                     handledRequests.Add(request!);
-                else if (handledNotificationAttr is not null && SymbolEqualityComparer.Default.Equals(attrClass, handledNotificationAttr) && TryGetTypeArgument(attribute, out var notification))
+                else if (handledNotificationAttr is not null && SymbolEqualityComparer.Default.Equals(attrClass, handledNotificationAttr) &&
+                         TryGetTypeArgument(attribute, out var notification))
                     handledNotifications.Add(notification!);
             }
         }
@@ -141,14 +152,16 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
     private static bool IsAny(INamedTypeSymbol def, params INamedTypeSymbol?[] candidates)
     {
         foreach (var candidate in candidates)
-            if (candidate is not null && SymbolEqualityComparer.Default.Equals(def, candidate)) return true;
+            if (candidate is not null && SymbolEqualityComparer.Default.Equals(def, candidate))
+                return true;
         return false;
     }
 
     private static bool Implements(ITypeSymbol type, INamedTypeSymbol iface)
     {
         foreach (var implemented in type.AllInterfaces)
-            if (SymbolEqualityComparer.Default.Equals(implemented.OriginalDefinition, iface)) return true;
+            if (SymbolEqualityComparer.Default.Equals(implemented.OriginalDefinition, iface))
+                return true;
         return false;
     }
 

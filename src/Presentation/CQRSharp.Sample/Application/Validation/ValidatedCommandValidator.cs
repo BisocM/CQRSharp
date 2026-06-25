@@ -9,17 +9,14 @@ public sealed class ValidatedCommandValidator : IRequestValidator<ValidatedComma
     public Task<ValidationFailure[]> ValidateAsync(ValidatedCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Value))
-        {
             return Task.FromResult(new[]
             {
                 new ValidationFailure(
-                    Code: "required",
-                    Message: "Value is required.",
-                    MemberName: nameof(ValidatedCommand.Value))
+                    "required",
+                    "Value is required.",
+                    nameof(ValidatedCommand.Value))
             });
-        }
 
         return Task.FromResult(Array.Empty<ValidationFailure>());
     }
 }
-

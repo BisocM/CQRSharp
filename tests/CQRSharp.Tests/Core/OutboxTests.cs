@@ -10,10 +10,6 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public sealed class OutboxTests
 {
-    private sealed record Ping : INotification;
-
-    private sealed record Pong : INotification;
-
     [Fact(DisplayName = "Outbox: Add then GetNotifications returns them in order")]
     public void Add_Then_GetNotifications_ReturnsInOrder()
     {
@@ -52,4 +48,8 @@ public sealed class OutboxTests
         var act = () => outbox.Add(null!);
         act.Should().Throw<ArgumentNullException>();
     }
+
+    private sealed record Ping : INotification;
+
+    private sealed record Pong : INotification;
 }

@@ -7,4 +7,3 @@ public sealed class ScopeProbeCommand : CommandBase<SampleRequestContext>
 {
     public Guid? HandlerScopeId { get; set; }
 }
-

@@ -11,9 +11,9 @@ namespace CQRSharp.Tests.Shared;
 public sealed class ExceptionHookProbe
 {
     private int _actionCalls;
-    private int _handledHandlerCalls;
-    private int _derivedHandlerCalls;
     private int _baseHandlerCalls;
+    private int _derivedHandlerCalls;
+    private int _handledHandlerCalls;
 
     public int ActionCalls => Volatile.Read(ref _actionCalls);
     public int HandledHandlerCalls => Volatile.Read(ref _handledHandlerCalls);

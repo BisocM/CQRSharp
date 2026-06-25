@@ -15,4 +15,3 @@ public enum ExecutionScopeMode
     /// </summary>
     New
 }
-

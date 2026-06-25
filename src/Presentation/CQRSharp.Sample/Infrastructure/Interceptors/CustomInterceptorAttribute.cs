@@ -1,8 +1,8 @@
 using CQRSharp.Abstractions.Attributes.Pipelines;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using CQRSharp.Sample.Infrastructure.SelfTest;
 
 namespace CQRSharp.Sample.Infrastructure.Interceptors;
 

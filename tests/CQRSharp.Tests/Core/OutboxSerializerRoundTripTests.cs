@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json;
 using CQRSharp.Abstractions.Attributes.Notifications;
 using CQRSharp.Abstractions.Interfaces.Notifications;
@@ -21,28 +20,14 @@ public sealed class OutboxSerializerRoundTripTests
 
     private const string StableName = "outbox.roundtrip.notification";
 
-    /// <summary>
-    ///     A notification with a stable name and a parameterless constructor plus settable properties, mirroring the
-    ///     shape the AOT serializer supports (string, Guid, int, bool). Public so the generator (which only emits for
-    ///     accessible types) picks it up.
-    /// </summary>
-    [NotificationName(StableName)]
-    public sealed class RoundTripNotification : INotification
-    {
-        public string Name { get; set; } = string.Empty;
-        public Guid UserId { get; set; }
-        public int Count { get; set; }
-        public bool Enabled { get; set; }
-    }
-
     private static INotificationSerializer GetGeneratedSerializer()
     {
-        var type = typeof(RoundTripNotification).Assembly.GetType(GeneratedSerializerTypeName, throwOnError: false);
+        var type = typeof(RoundTripNotification).Assembly.GetType(GeneratedSerializerTypeName, false);
         type.Should().NotBeNull(
             $"the CQRSharp source generator should emit '{GeneratedSerializerTypeName}' into the test assembly " +
             "because at least one notification carries [NotificationName]");
 
-        var instance = Activator.CreateInstance(type!, nonPublic: true);
+        var instance = Activator.CreateInstance(type!, true);
         return instance.Should().BeAssignableTo<INotificationSerializer>().Subject;
     }
 
@@ -103,5 +88,19 @@ public sealed class OutboxSerializerRoundTripTests
 
         // Assert - a corrupt payload for a KNOWN name throws (it must not silently collapse to null).
         act.Should().Throw<JsonException>();
+    }
+
+    /// <summary>
+    ///     A notification with a stable name and a parameterless constructor plus settable properties, mirroring the
+    ///     shape the AOT serializer supports (string, Guid, int, bool). Public so the generator (which only emits for
+    ///     accessible types) picks it up.
+    /// </summary>
+    [NotificationName(StableName)]
+    public sealed class RoundTripNotification : INotification
+    {
+        public string Name { get; set; } = string.Empty;
+        public Guid UserId { get; set; }
+        public int Count { get; set; }
+        public bool Enabled { get; set; }
     }
 }

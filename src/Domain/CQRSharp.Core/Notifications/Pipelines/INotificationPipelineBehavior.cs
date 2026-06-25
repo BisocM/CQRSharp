@@ -20,4 +20,3 @@ public interface INotificationPipelineBehavior<in TNotification>
         Func<CancellationToken, Task> next,
         CancellationToken cancellationToken);
 }
-

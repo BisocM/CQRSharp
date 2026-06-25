@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.Options;
-using System.Threading;
 
 namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
 
@@ -27,10 +26,10 @@ namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
 public sealed class RateLimiter : IDisposable
 {
     private readonly ShardedLruCache<object, TokenBucket> _cache;
+    private readonly long _cleanupCadenceTicks;
     private readonly Timer? _cleanupTimer;
     private readonly RateLimiterOptions _config;
     private readonly bool _usesTimer;
-    private readonly long _cleanupCadenceTicks;
     private long _lastCleanupCheckpoint;
 
     /// <summary>
@@ -146,11 +145,6 @@ public sealed class RateLimiter : IDisposable
             throw new ArgumentException("MaxEntries must be > 0", nameof(config.MaxEntries));
     }
 
-    /// <summary>
-    ///     Composite key for per-command rate limiting.
-    /// </summary>
-    private sealed record UserCommandKey(string UserIdentifier, object CommandKey);
-
     private void CleanupStaleBucketsIfNeeded()
     {
         if (_usesTimer || _config.MaxIdleTime <= TimeSpan.Zero) return;
@@ -175,6 +169,11 @@ public sealed class RateLimiter : IDisposable
         var ticks = span.TotalSeconds * Stopwatch.Frequency;
         return ticks <= 1 ? 1 : (long)ticks;
     }
+
+    /// <summary>
+    ///     Composite key for per-command rate limiting.
+    /// </summary>
+    private sealed record UserCommandKey(string UserIdentifier, object CommandKey);
 }
 
 /// <summary>
@@ -284,12 +283,12 @@ internal class TokenBucket(int maxTokens, double replenishRatePerSecond)
 {
     private static readonly double TickToSeconds = 1.0 / Stopwatch.Frequency;
     private readonly object _sync = new();
-    private long _lastRefillTs = Stopwatch.GetTimestamp();
-    private double _tokens = maxTokens;
 
     // Backed by a 64-bit field accessed atomically: the cleanup sweep reads LastAccessed WITHOUT holding _sync, so a
     // plain DateTime field could tear on 32-bit runtimes.
     private long _lastAccessedTicks = DateTime.UtcNow.Ticks;
+    private long _lastRefillTs = Stopwatch.GetTimestamp();
+    private double _tokens = maxTokens;
 
     public DateTime LastAccessed => new(Interlocked.Read(ref _lastAccessedTicks), DateTimeKind.Utc);
 

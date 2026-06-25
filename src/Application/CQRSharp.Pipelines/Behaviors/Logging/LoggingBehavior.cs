@@ -15,8 +15,6 @@ public sealed class LoggingBehavior<TRequest, TResult>(
     ILogger<LoggingBehavior<TRequest, TResult>> logger) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging;
-
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
     {
@@ -38,4 +36,6 @@ public sealed class LoggingBehavior<TRequest, TResult>(
             throw;
         }
     }
+
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging;
 }

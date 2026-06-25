@@ -1,5 +1,5 @@
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
+using CQRSharp.Pipelines.Options;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 

@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -20,10 +20,6 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
     IOptions<ResilienceOptions> options) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    // Runs OUTSIDE the unit-of-work behavior (priority 100) so that each retry executes against a fresh transaction
-    // rather than replaying work against an already-aborted one.
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
-
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
         Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
@@ -93,4 +89,8 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 throw;
             }
     }
+
+    // Runs OUTSIDE the unit-of-work behavior (priority 100) so that each retry executes against a fresh transaction
+    // rather than replaying work against an already-aborted one.
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
 }

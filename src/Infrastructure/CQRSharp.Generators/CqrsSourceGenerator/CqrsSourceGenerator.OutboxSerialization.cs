@@ -16,88 +16,7 @@ public sealed partial class CqrsSourceGenerator
         "Notification '{0}' cannot be source-generated for AOT-safe outbox JSON: {1}. Either change the notification shape or register a custom INotificationSerializer.",
         "CQRSharp.Generators",
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
-    private enum OutboxJsonValueKind
-    {
-        String,
-        Guid,
-        Boolean,
-        Int32,
-        Int64,
-        Double,
-        Decimal,
-        DateTime,
-        DateTimeOffset,
-        Enum
-    }
-
-    private sealed class OutboxPropertyInfo
-    {
-        public OutboxPropertyInfo(
-            string propertyName,
-            string jsonName,
-            string localName,
-            string typeName,
-            OutboxJsonValueKind valueKind,
-            bool isNullableValueType,
-            bool isNullableReferenceType,
-            string? enumUnderlyingTypeName,
-            bool isConstructorParameter,
-            bool canInitialize)
-        {
-            PropertyName = propertyName;
-            JsonName = jsonName;
-            LocalName = localName;
-            TypeName = typeName;
-            ValueKind = valueKind;
-            IsNullableValueType = isNullableValueType;
-            IsNullableReferenceType = isNullableReferenceType;
-            EnumUnderlyingTypeName = enumUnderlyingTypeName;
-            IsConstructorParameter = isConstructorParameter;
-            CanInitialize = canInitialize;
-        }
-
-        public string PropertyName { get; }
-        public string JsonName { get; }
-        public string LocalName { get; }
-        public string TypeName { get; }
-        public OutboxJsonValueKind ValueKind { get; }
-        public bool IsNullableValueType { get; }
-        public bool IsNullableReferenceType { get; }
-        public string? EnumUnderlyingTypeName { get; }
-        public bool IsConstructorParameter { get; }
-        public bool CanInitialize { get; }
-    }
-
-    private sealed class StableNotificationInfo
-    {
-        public StableNotificationInfo(
-            string stableName,
-            string typeName,
-            string deserializeMethodName,
-            string serializeMethodName,
-            string constructorExpression,
-            OutboxPropertyInfo[] properties,
-            string[] constructorLocalNames)
-        {
-            StableName = stableName;
-            TypeName = typeName;
-            DeserializeMethodName = deserializeMethodName;
-            SerializeMethodName = serializeMethodName;
-            ConstructorExpression = constructorExpression;
-            Properties = properties;
-            ConstructorLocalNames = constructorLocalNames;
-        }
-
-        public string StableName { get; }
-        public string TypeName { get; }
-        public string DeserializeMethodName { get; }
-        public string SerializeMethodName { get; }
-        public string ConstructorExpression { get; }
-        public OutboxPropertyInfo[] Properties { get; }
-        public string[] ConstructorLocalNames { get; }
-    }
+        true);
 
     private static bool IsAccessibleFromGeneratedCode(IMethodSymbol methodSymbol)
     {
@@ -179,7 +98,7 @@ public sealed partial class CqrsSourceGenerator
                     "Duplicate [NotificationName] '{0}' found on: {1}. Stable names must be unique for outbox serialization.",
                     "CQRSharp.Generators",
                     DiagnosticSeverity.Error,
-                    isEnabledByDefault: true),
+                    true),
                 Location.None,
                 group.Key,
                 types));
@@ -221,7 +140,7 @@ public sealed partial class CqrsSourceGenerator
             .Where(p =>
                 jsonIgnoreAttributeSymbol is null ||
                 !p.GetAttributes().Any(a => a.AttributeClass is not null &&
-                                           SymbolEqualityComparer.Default.Equals(a.AttributeClass, jsonIgnoreAttributeSymbol)))
+                                            SymbolEqualityComparer.Default.Equals(a.AttributeClass, jsonIgnoreAttributeSymbol)))
             .OrderBy(p => p.Name, StringComparer.Ordinal)
             .ToArray();
 
@@ -262,8 +181,8 @@ public sealed partial class CqrsSourceGenerator
                 isNullableValueType,
                 isNullableReferenceType,
                 enumUnderlyingTypeName,
-                isConstructorParameter: false,
-                canInitialize: canInitialize);
+                false,
+                canInitialize);
         }
 
         if (typeInfoErrors.Length > 0)
@@ -349,8 +268,8 @@ public sealed partial class CqrsSourceGenerator
                 existing.IsNullableValueType,
                 existing.IsNullableReferenceType,
                 existing.EnumUnderlyingTypeName,
-                isConstructorParameter: true,
-                canInitialize: existing.CanInitialize);
+                true,
+                existing.CanInitialize);
             ctorLocalNames[p] = existing.LocalName;
         }
 
@@ -577,13 +496,9 @@ public sealed partial class CqrsSourceGenerator
                 (c >= 'A' && c <= 'Z') ||
                 (c >= '0' && c <= '9') ||
                 c == '_')
-            {
                 sb.Append(c);
-            }
             else
-            {
                 sb.Append('_');
-            }
         }
 
         sb.Append('_');
@@ -646,7 +561,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            {");
         foreach (var notification in stableNotifications)
         {
-            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, quote: true);
+            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, true);
             sb.AppendLine(
                 $"                {nameLiteral} => {notification.DeserializeMethodName}(payload),");
         }
@@ -672,9 +587,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        {");
         foreach (var notification in stableNotifications)
         {
-            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, quote: true);
+            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, true);
             sb.AppendLine($"            if (notificationType == typeof({notification.TypeName})) return {nameLiteral};");
         }
+
         sb.AppendLine("            return null;");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -690,7 +606,7 @@ public sealed partial class CqrsSourceGenerator
 
             foreach (var prop in notification.Properties)
             {
-                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, quote: true);
+                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, true);
                 var access = $"notification.{prop.PropertyName}";
 
                 if (prop.IsNullableValueType)
@@ -743,8 +659,8 @@ public sealed partial class CqrsSourceGenerator
 
             foreach (var prop in notification.Properties)
             {
-                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, quote: true);
-                var propertyNameLiteral = SymbolDisplay.FormatLiteral(prop.PropertyName, quote: true);
+                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, true);
+                var propertyNameLiteral = SymbolDisplay.FormatLiteral(prop.PropertyName, true);
 
                 sb.AppendLine($"                    case {jsonNameLiteral}:");
                 if (!string.Equals(prop.JsonName, prop.PropertyName, StringComparison.Ordinal))
@@ -779,6 +695,7 @@ public sealed partial class CqrsSourceGenerator
                     var comma = i == initAssignments.Length - 1 ? string.Empty : ",";
                     sb.AppendLine($"                {initAssignments[i]}{comma}");
                 }
+
                 sb.AppendLine("            };");
             }
 
@@ -855,13 +772,9 @@ public sealed partial class CqrsSourceGenerator
         {
             case OutboxJsonValueKind.String:
                 if (prop.IsNullableReferenceType)
-                {
                     sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();");
-                }
                 else
-                {
                     sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? string.Empty : (reader.GetString() ?? string.Empty);");
-                }
                 return;
 
             case OutboxJsonValueKind.Guid:
@@ -956,5 +869,86 @@ public sealed partial class CqrsSourceGenerator
             return prop.TypeName.Substring(prefix.Length, prop.TypeName.Length - prefix.Length - 1);
 
         return prop.TypeName.TrimEnd('?');
+    }
+
+    private enum OutboxJsonValueKind
+    {
+        String,
+        Guid,
+        Boolean,
+        Int32,
+        Int64,
+        Double,
+        Decimal,
+        DateTime,
+        DateTimeOffset,
+        Enum
+    }
+
+    private sealed class OutboxPropertyInfo
+    {
+        public OutboxPropertyInfo(
+            string propertyName,
+            string jsonName,
+            string localName,
+            string typeName,
+            OutboxJsonValueKind valueKind,
+            bool isNullableValueType,
+            bool isNullableReferenceType,
+            string? enumUnderlyingTypeName,
+            bool isConstructorParameter,
+            bool canInitialize)
+        {
+            PropertyName = propertyName;
+            JsonName = jsonName;
+            LocalName = localName;
+            TypeName = typeName;
+            ValueKind = valueKind;
+            IsNullableValueType = isNullableValueType;
+            IsNullableReferenceType = isNullableReferenceType;
+            EnumUnderlyingTypeName = enumUnderlyingTypeName;
+            IsConstructorParameter = isConstructorParameter;
+            CanInitialize = canInitialize;
+        }
+
+        public string PropertyName { get; }
+        public string JsonName { get; }
+        public string LocalName { get; }
+        public string TypeName { get; }
+        public OutboxJsonValueKind ValueKind { get; }
+        public bool IsNullableValueType { get; }
+        public bool IsNullableReferenceType { get; }
+        public string? EnumUnderlyingTypeName { get; }
+        public bool IsConstructorParameter { get; }
+        public bool CanInitialize { get; }
+    }
+
+    private sealed class StableNotificationInfo
+    {
+        public StableNotificationInfo(
+            string stableName,
+            string typeName,
+            string deserializeMethodName,
+            string serializeMethodName,
+            string constructorExpression,
+            OutboxPropertyInfo[] properties,
+            string[] constructorLocalNames)
+        {
+            StableName = stableName;
+            TypeName = typeName;
+            DeserializeMethodName = deserializeMethodName;
+            SerializeMethodName = serializeMethodName;
+            ConstructorExpression = constructorExpression;
+            Properties = properties;
+            ConstructorLocalNames = constructorLocalNames;
+        }
+
+        public string StableName { get; }
+        public string TypeName { get; }
+        public string DeserializeMethodName { get; }
+        public string SerializeMethodName { get; }
+        public string ConstructorExpression { get; }
+        public OutboxPropertyInfo[] Properties { get; }
+        public string[] ConstructorLocalNames { get; }
     }
 }

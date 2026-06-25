@@ -14,22 +14,18 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public sealed class CqrsBindingsHealthCheckTests
 {
-    private sealed class HealthCheckTarget;
-
-    private sealed class OtherHealthCheckTarget;
-
     private static CqrsRequestBinding Binding(Type requestType, params CqrsBindingIssue[] issues)
         => new(
-            RequestType: requestType,
-            ResponseType: typeof(object),
-            HandlerType: null,
-            ContextType: null,
-            PipelineExemptions: Array.Empty<Type>(),
-            PreHandlers: Array.Empty<CqrsInterceptorBinding>(),
-            PostHandlers: Array.Empty<CqrsInterceptorBinding>(),
-            Pipeline: Array.Empty<CqrsPipelineBehaviorBinding>(),
-            ExemptedPipeline: Array.Empty<CqrsPipelineBehaviorBinding>(),
-            Issues: issues);
+            requestType,
+            typeof(object),
+            null,
+            null,
+            Array.Empty<Type>(),
+            Array.Empty<CqrsInterceptorBinding>(),
+            Array.Empty<CqrsInterceptorBinding>(),
+            Array.Empty<CqrsPipelineBehaviorBinding>(),
+            Array.Empty<CqrsPipelineBehaviorBinding>(),
+            issues);
 
     private static CqrsBindingsHealthCheck CreateCheck(params CqrsRequestBinding[] bindings)
     {
@@ -46,8 +42,8 @@ public sealed class CqrsBindingsHealthCheckTests
             Registration = new HealthCheckRegistration(
                 "cqrsharp.bindings",
                 _ => throw new InvalidOperationException("not used"),
-                failureStatus: HealthStatus.Unhealthy,
-                tags: null)
+                HealthStatus.Unhealthy,
+                null)
         };
 
     [Fact]
@@ -205,4 +201,8 @@ public sealed class CqrsBindingsHealthCheckTests
         result.Data.Should().ContainKey("errors");
         result.Data.Should().NotContainKey("warnings");
     }
+
+    private sealed class HealthCheckTarget;
+
+    private sealed class OtherHealthCheckTarget;
 }

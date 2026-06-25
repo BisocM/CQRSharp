@@ -21,24 +21,21 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public sealed class OutboxProcessorTests
 {
-    private readonly Mock<IOutboxStore> _store = new(MockBehavior.Strict);
-    private readonly Mock<INotificationSerializer> _serializer = new(MockBehavior.Strict);
     private readonly Mock<IDirectNotificationDispatcher> _dispatcher = new(MockBehavior.Strict);
-
-    // A minimal notification used only as the deserializer's return value; its concrete shape is irrelevant here.
-    private sealed record OutboxProcessorTestNotification : INotification;
+    private readonly Mock<INotificationSerializer> _serializer = new(MockBehavior.Strict);
+    private readonly Mock<IOutboxStore> _store = new(MockBehavior.Strict);
 
     private static OutboxMessage Message(int attemptCount = 0, string type = "outbox.proc.test") => new(
-        Id: Guid.NewGuid(),
-        NotificationType: type,
-        Payload: "{}"u8.ToArray(),
-        CreatedAt: DateTime.UtcNow,
-        Status: OutboxMessageStatus.InProgress,
-        ProcessedAt: null,
-        LastError: null,
-        AttemptCount: attemptCount,
-        NextRetryAt: null,
-        TraceParent: null);
+        Guid.NewGuid(),
+        type,
+        "{}"u8.ToArray(),
+        DateTime.UtcNow,
+        OutboxMessageStatus.InProgress,
+        null,
+        null,
+        attemptCount,
+        null,
+        null);
 
     private OutboxProcessor CreateProcessor(int maxRetryAttempts = 3)
     {
@@ -125,10 +122,11 @@ public sealed class OutboxProcessorTests
             .Callback(() => incremented.TrySetResult());
 
         // Act
-        await RunOneCycleAsync(CreateProcessor(maxRetryAttempts: 3), incremented.Task);
+        await RunOneCycleAsync(CreateProcessor(3), incremented.Task);
 
         // Assert
-        _store.Verify(s => s.IncrementAttemptAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("handler boom")), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.IncrementAttemptAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("handler boom")), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
         _store.Verify(s => s.MarkAsFailedAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -137,7 +135,7 @@ public sealed class OutboxProcessorTests
     public async Task HandlerThrows_AtLimit_MarksAsFailed()
     {
         // Arrange - IncrementAttemptAsync returns the attempt count that reaches MaxRetryAttempts (3) -> dead-letter.
-        var message = Message(attemptCount: 2);
+        var message = Message(2);
         // Typed as INotification so the mock setup binds the non-generic Publish(INotification, ...) overload the
         // processor actually calls (a 'var' here would bind the generic Publish<T> overload and the strict mock would miss).
         INotification notification = new OutboxProcessorTestNotification();
@@ -157,7 +155,7 @@ public sealed class OutboxProcessorTests
             .Callback(() => failed.TrySetResult());
 
         // Act
-        await RunOneCycleAsync(CreateProcessor(maxRetryAttempts: 3), failed.Task);
+        await RunOneCycleAsync(CreateProcessor(3), failed.Task);
 
         // Assert
         _store.Verify(s => s.IncrementAttemptAsync(message.Id, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -213,7 +211,9 @@ public sealed class OutboxProcessorTests
 
         // Assert - the JsonException path records the exception's own text (jsonEx.ToString()), not the generic
         // "Failed to deserialize" message used for the unknown-type (null) path.
-        _store.Verify(s => s.MarkAsFailedAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("Unexpected token while reading outbox payload.")), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(
+            s => s.MarkAsFailedAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("Unexpected token while reading outbox payload.")), It.IsAny<CancellationToken>()),
+            Times.Once);
         _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
         _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         _dispatcher.Verify(d => d.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -256,6 +256,9 @@ public sealed class OutboxProcessorTests
         _store.Verify(s => s.MarkAsProcessedAsync(healthy.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // A minimal notification used only as the deserializer's return value; its concrete shape is irrelevant here.
+    private sealed record OutboxProcessorTestNotification : INotification;
+
     /// <summary>
     ///     A minimal <see cref="IServiceScopeFactory" /> that resolves the three outbox collaborators the processor
     ///     pulls from each scope (<see cref="IOutboxStore" />, <see cref="INotificationSerializer" />,
@@ -271,7 +274,10 @@ public sealed class OutboxProcessorTests
         private sealed class Scope(IServiceProvider provider) : IServiceScope
         {
             public IServiceProvider ServiceProvider { get; } = provider;
-            public void Dispose() { }
+
+            public void Dispose()
+            {
+            }
         }
 
         private sealed class Provider(

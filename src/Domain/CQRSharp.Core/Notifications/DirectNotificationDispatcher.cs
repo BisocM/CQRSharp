@@ -1,4 +1,4 @@
-using System.Runtime.ExceptionServices;
+﻿using System.Runtime.ExceptionServices;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications.Pipelines;
 using CQRSharp.Core.Options;
@@ -16,9 +16,9 @@ namespace CQRSharp.Core.Notifications;
 public class DirectNotificationDispatcher : IDirectNotificationDispatcher
 {
     private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
+    private readonly PublishStrategy _publishStrategy;
 
     private readonly IServiceProvider _services;
-    private readonly PublishStrategy _publishStrategy;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DirectNotificationDispatcher" /> class.
@@ -28,7 +28,7 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _publishStrategy = services.GetService<IOptions<DispatcherOptions>>()?.Value.PublishStrategy
-            ?? PublishStrategy.ParallelWhenAllAggregate;
+                           ?? PublishStrategy.ParallelWhenAllAggregate;
     }
 
     /// <inheritdoc />
@@ -91,7 +91,6 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
             // that already started; capture it as a faulted task and surface it with the rest.
             var tasks = new List<Task>(handlers.Length);
             foreach (var handler in handlers)
-            {
                 try
                 {
                     tasks.Add(handler.Handle(n, ct));
@@ -100,7 +99,6 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
                 {
                     tasks.Add(Task.FromException(ex));
                 }
-            }
 
             var whenAll = Task.WhenAll(tasks);
 
@@ -129,11 +127,11 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     private sealed class BehaviorPriorityComparer<TNotification> : IComparer<INotificationPipelineBehavior<TNotification>>
         where TNotification : INotification
     {
-        public static BehaviorPriorityComparer<TNotification> Instance { get; } = new();
-
         private BehaviorPriorityComparer()
         {
         }
+
+        public static BehaviorPriorityComparer<TNotification> Instance { get; } = new();
 
         public int Compare(INotificationPipelineBehavior<TNotification>? x, INotificationPipelineBehavior<TNotification>? y)
         {

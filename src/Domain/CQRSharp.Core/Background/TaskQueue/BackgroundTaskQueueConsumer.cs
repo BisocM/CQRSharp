@@ -15,7 +15,6 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 {
     private readonly SemaphoreSlim _concurrencyLimiter;
     private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
-    private readonly IBackgroundTaskQueue _taskQueue;
 
     /// <summary>
     ///     A collection of tasks that are currently being processed. Used to ensure graceful shutdown.
@@ -24,6 +23,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     private readonly List<Task> _processingTasks = new();
 
     private readonly TimeSpan _shutdownTimeout;
+    private readonly IBackgroundTaskQueue _taskQueue;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="BackgroundTaskQueueConsumer" /> class.

@@ -1,8 +1,8 @@
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Models.Requests;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Behaviors.Resilience;
+using CQRSharp.Pipelines.Options;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -20,18 +20,6 @@ public class ResilienceBehaviorTests
         => new(
             NullLogger<ResilienceBehavior<TRequest, object>>.Instance,
             Options.Create(new ResilienceOptions { MaxRetries = maxRetries, BaseDelay = TimeSpan.Zero }));
-
-    private sealed class PlainRequest : IRequest
-    {
-        public IRequestContext? Context { get; set; }
-        public RequestMetadata? Metadata { get; set; }
-    }
-
-    private sealed class RetryableRequest : IRetryableRequest
-    {
-        public IRequestContext? Context { get; set; }
-        public RequestMetadata? Metadata { get; set; }
-    }
 
     [Fact(DisplayName = "Non-retryable request: handler failure is propagated without retrying")]
     public async Task NonRetryable_DoesNotRetry()
@@ -55,7 +43,7 @@ public class ResilienceBehaviorTests
     [Fact(DisplayName = "Retryable request: transient failures are retried until success")]
     public async Task Retryable_RetriesUntilSuccess()
     {
-        var behavior = CreateBehavior<RetryableRequest>(maxRetries: 3);
+        var behavior = CreateBehavior<RetryableRequest>(3);
         var calls = 0;
 
         var result = await behavior.Handle(
@@ -108,5 +96,17 @@ public class ResilienceBehaviorTests
 
         await act.Should().ThrowAsync<TimeoutException>();
         calls.Should().Be(1, "retrying a timeout would multiply the configured time budget");
+    }
+
+    private sealed class PlainRequest : IRequest
+    {
+        public IRequestContext? Context { get; set; }
+        public RequestMetadata? Metadata { get; set; }
+    }
+
+    private sealed class RetryableRequest : IRetryableRequest
+    {
+        public IRequestContext? Context { get; set; }
+        public RequestMetadata? Metadata { get; set; }
     }
 }

@@ -11,8 +11,6 @@ public sealed class LoggingPipelineBehavior<TRequest, TResult>(
     SampleDiagnostics diagnostics)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => -100;
-
     public async Task<TResult> Handle(
         TRequest request,
         Func<CancellationToken, Task<TResult>> next,
@@ -41,4 +39,6 @@ public sealed class LoggingPipelineBehavior<TRequest, TResult>(
                 stopwatch.ElapsedMilliseconds);
         }
     }
+
+    public int PipelineExecutionPriority => -100;
 }
