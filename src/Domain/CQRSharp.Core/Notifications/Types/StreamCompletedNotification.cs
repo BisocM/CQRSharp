@@ -9,6 +9,11 @@ namespace CQRSharp.Core.Notifications.Types;
 /// <typeparam name="TItem">The streamed element type.</typeparam>
 public sealed class StreamCompletedNotification<TItem> : INotification
 {
+    /// <summary>
+    ///     Creates a notification describing a streaming request that completed successfully.
+    /// </summary>
+    /// <param name="request">The streaming request that was consumed to completion.</param>
+    /// <param name="itemsYielded">The total number of items the stream produced before finishing.</param>
     public StreamCompletedNotification(IStreamRequest<TItem> request, long itemsYielded)
     {
         Request = request;
@@ -16,9 +21,18 @@ public sealed class StreamCompletedNotification<TItem> : INotification
         ItemsYielded = itemsYielded;
     }
 
+    /// <summary>
+    ///     The streaming request instance that was fully consumed.
+    /// </summary>
     public IStreamRequest<TItem> Request { get; }
 
+    /// <summary>
+    ///     The runtime type name of the completed streaming request.
+    /// </summary>
     public string RequestName { get; }
 
+    /// <summary>
+    ///     The total number of items yielded by the stream before it completed.
+    /// </summary>
     public long ItemsYielded { get; }
 }

@@ -1,5 +1,7 @@
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -66,5 +68,22 @@ public class NotificationFaultTests
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("A");
         flag.Ran.Should().BeTrue("the sibling handler must run even though an earlier handler threw synchronously");
+    }
+
+    [Fact(DisplayName = "Sequential publish strategy stops at the first failing handler")]
+    public async Task Publish_Sequential_StopsAtFirstFailure()
+    {
+        var flag = new FlagHandler();
+        var services = new ServiceCollection();
+        services.Configure<DispatcherOptions>(o => o.PublishStrategy = PublishStrategy.Sequential);
+        services.AddSingleton<INotificationHandler<FaultNotification>, SyncThrowHandler>();
+        services.AddSingleton<INotificationHandler<FaultNotification>>(flag);
+        using var provider = services.BuildServiceProvider();
+        var dispatcher = new DirectNotificationDispatcher(provider);
+
+        var act = () => dispatcher.Publish(new FaultNotification(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("A");
+        flag.Ran.Should().BeFalse("sequential dispatch must stop at the first failing handler");
     }
 }

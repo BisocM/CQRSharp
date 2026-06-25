@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using CQRSharp.Abstractions.Attributes.Pipelines;
@@ -13,6 +14,7 @@ using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Notifications.Types;
@@ -69,9 +71,13 @@ public sealed class PipelineExecutor(
     {
         if (_dispatcherOptions.Value.RunMode == RunMode.Async)
         {
+            // Capture the caller's trace context so the queued execution's spans link back to the originating request.
+            var parentContext = Activity.Current?.Context ?? default;
             return _backgroundTaskManager.EnqueueAsync<TResult>(
                 async workerToken =>
                 {
+                    using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
+
                     if (!ct.CanBeCanceled)
                         return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
 
@@ -108,9 +114,20 @@ public sealed class PipelineExecutor(
         CancellationToken ct)
         where TRequest : IQuery<TResult>
     {
-        InitializeRequestContext(query, provider);
-        var handler = GetHandler(typeof(TRequest), provider);
-        return await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
+        using var activity = CqrsActivitySource.StartRequest("CQRS Query", typeof(TRequest));
+        try
+        {
+            InitializeRequestContext(query, provider);
+            var handler = GetHandler(typeof(TRequest), provider);
+            var result = await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
     }
 
     /// <summary>
@@ -129,9 +146,13 @@ public sealed class PipelineExecutor(
     {
         if (_dispatcherOptions.Value.RunMode == RunMode.Async)
         {
+            // Capture the caller's trace context so the queued execution's spans link back to the originating request.
+            var parentContext = Activity.Current?.Context ?? default;
             return _backgroundTaskManager.EnqueueAsync<CommandResult>(
                 async workerToken =>
                 {
+                    using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
+
                     if (!ct.CanBeCanceled)
                         return await ExecuteCommandInNewScopeAsync(command, workerToken).ConfigureAwait(false);
 
@@ -144,6 +165,7 @@ public sealed class PipelineExecutor(
         return ExecuteCommandImmediateAsync(command, ct);
     }
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> ExecuteStreamAsync<TRequest, TItem>(TRequest request, CancellationToken ct)
         where TRequest : IStreamRequest<TItem>
     {
@@ -207,7 +229,16 @@ public sealed class PipelineExecutor(
 
         var handler = GetHandler(typeof(TRequest), provider);
 
-        return ExecuteStreamPipeline<TRequest, TItem>(request, handler, provider, cancellationToken);
+        var pipeline = ExecuteStreamPipeline<TRequest, TItem>(request, handler, provider, cancellationToken);
+        return WithActivity(pipeline);
+
+        async IAsyncEnumerable<TItem> WithActivity(IAsyncEnumerable<TItem> source)
+        {
+            using var activity = CqrsActivitySource.StartRequest("CQRS Stream", typeof(TRequest));
+            await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+                yield return item;
+            activity?.SetStatus(ActivityStatusCode.Ok);
+        }
     }
 
     private Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
@@ -234,10 +265,24 @@ public sealed class PipelineExecutor(
         CancellationToken ct)
         where TRequest : ICommand
     {
-        InitializeRequestContext(command, provider);
-        var handler = GetHandler(typeof(TRequest), provider);
-        return await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
+        using var activity = CqrsActivitySource.StartRequest("CQRS Command", typeof(TRequest));
+        try
+        {
+            InitializeRequestContext(command, provider);
+            var handler = GetHandler(typeof(TRequest), provider);
+            var result = await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
     }
+
+    private static Activity? StartQueuedDispatchActivity<TRequest>(ActivityContext parentContext)
+        => CqrsActivitySource.Instance.StartActivity($"CQRS Queued {typeof(TRequest).Name}", ActivityKind.Internal, parentContext);
 
     private IAsyncEnumerable<TItem> ExecuteStreamPipeline<TRequest, TItem>(
         TRequest request,
@@ -596,6 +641,7 @@ public sealed class PipelineExecutor(
     ///     This ensures the request is enriched with necessary information before it enters the pipeline.
     /// </summary>
     /// <param name="requestBase">The request object.</param>
+    /// <param name="services">The scoped service provider used to resolve the context factory.</param>
     /// <exception cref="InvalidOperationException">Thrown if metadata or a required context factory is not found.</exception>
     private void InitializeRequestContext(IRequest requestBase, IServiceProvider services)
     {

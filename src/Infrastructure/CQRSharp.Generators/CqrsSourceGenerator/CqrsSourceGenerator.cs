@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -29,7 +30,10 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 	
 	            try
 	            {
-	                var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
+	                // Surface well-known-type resolution problems loudly instead of silently emitting an empty registry.
+                ReportWellKnownTypeIssues(CqrsKnownSymbols.For(compilation), spc);
+
+                var stableNotifications = CollectStableNotifications(compilation, candidateClasses!, spc);
 	
 	                // Generate the DI registration helper
 	                var registrarSourceCode = GenerateRegistrations(compilation, candidateClasses!, stableNotifications, spc, config);
@@ -62,6 +66,14 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 // Generate the diagnostics/introspection API (request bindings)
                 var diagnosticsSourceCode = GenerateDiagnostics(compilation, candidateClasses!);
                 spc.AddSource("GeneratedCqrsDiagnostics.g.cs", SourceText.From(diagnosticsSourceCode, Encoding.UTF8));
+
+                // Emit assembly markers (one per handled request/notification) so analyzers can discover handlers
+                // across referenced assemblies.
+                var markersSourceCode = GenerateAssemblyMarkers(compilation, candidateClasses!);
+                spc.AddSource("CqrsGeneratedAssemblyMarkers.g.cs", SourceText.From(markersSourceCode, Encoding.UTF8));
+
+                // Report handlers that are dropped from generated registration solely for accessibility (CQRGEN006).
+                ReportInaccessibleHandlers(compilation, candidateClasses!, spc);
             }
             catch (Exception ex)
             {
@@ -71,5 +83,39 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                     Location.None, ex.ToString()));
             }
         });
+    }
+
+    private static readonly DiagnosticDescriptor WellKnownTypeUnresolvedDiagnostic = new(
+        "CQRGEN007",
+        "CQRSharp well-known type could not be resolved",
+        "The CQRSharp framework type for role '{0}' could not be resolved from the referenced CQRSharp assemblies. Source generation will be incomplete; ensure the CQRSharp package versions are consistent.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor CoreNotReferencedDiagnostic = new(
+        "CQRGEN008",
+        "CQRSharp.Core is not referenced",
+        "CQRSharp.Abstractions is referenced but CQRSharp.Core is not, so CQRSharp source generation is skipped. Reference CQRSharp.Core (or the CQRSharp meta-package) to enable it.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true);
+
+    // Turns the former silent no-op (an empty registry when a well-known type fails to resolve) into a build signal.
+    private static void ReportWellKnownTypeIssues(CqrsKnownSymbols known, SourceProductionContext context)
+    {
+        // Not a CQRSharp consumer at all: nothing to report.
+        if (!known.AbstractionsPresent) return;
+
+        // Abstractions referenced but not Core (a legitimate abstractions-only/analyzer-only setup): one info note.
+        if (!known.CoreReferenced)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(CoreNotReferencedDiagnostic, Location.None));
+            return;
+        }
+
+        // Core referenced but a required role is missing: genuine drift or a CQRSharp version mismatch.
+        foreach (var roleName in known.GetMissingRequiredRoleNames())
+            context.ReportDiagnostic(Diagnostic.Create(WellKnownTypeUnresolvedDiagnostic, Location.None, roleName));
     }
 }

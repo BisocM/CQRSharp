@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <RootNamespace>CQRSharp.Analyzers</RootNamespace>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <!-- Shipped embedded in the CQRSharp meta-package's analyzers/dotnet/cs, not as a standalone package. -->
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="AnalyzerReleases.Shipped.md"/>
+        <AdditionalFiles Include="AnalyzerReleases.Unshipped.md"/>
+    </ItemGroup>
+
+    <!-- The well-known-type resolver is shared, verbatim, with CQRSharp.Generators (source-linked, not a reference,
+         so neither Roslyn component takes a dependency on the other). -->
+    <ItemGroup>
+        <Compile Include="..\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
+    </ItemGroup>
+
+</Project>

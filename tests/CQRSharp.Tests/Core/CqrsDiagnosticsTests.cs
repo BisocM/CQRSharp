@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Attributes.Pipelines;
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Handlers;
@@ -246,7 +247,7 @@ internal sealed class DiagnosticsSortedStreamRequest : StreamRequestBase<int>;
 
 internal sealed class DiagnosticsSortedStreamRequestHandler : IStreamRequestHandler<DiagnosticsSortedStreamRequest, int>
 {
-    public async IAsyncEnumerable<int> Handle(DiagnosticsSortedStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<int> Handle(DiagnosticsSortedStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return 1;
         await Task.Yield();

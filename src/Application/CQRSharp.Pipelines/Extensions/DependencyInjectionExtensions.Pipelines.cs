@@ -2,6 +2,8 @@ using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Behaviors.Exceptions;
+using CQRSharp.Pipelines.Behaviors.Idempotency;
+using CQRSharp.Pipelines.Behaviors.Logging;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Pipelines.Behaviors.Timeout;
@@ -20,6 +22,31 @@ public static class DependencyInjectionExtensions
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamExceptionHandlingBehavior<,>));
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the idempotency behavior, which enforces at-most-once processing for requests implementing
+    ///     <c>IIdempotentRequest</c>. A duplicate request is rejected with a <c>DuplicateRequestException</c>.
+    /// </summary>
+    /// <remarks>
+    ///     The caller must also register an
+    ///     <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" /> implementation.
+    /// </remarks>
+    public static IServiceCollection AddIdempotency(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the logging behavior, which logs the start, completion (with elapsed time), and failure of each
+    ///     request and streaming request. Opt-in (off by default); runs outermost.
+    /// </summary>
+    public static IServiceCollection AddLoggingBehavior(this IServiceCollection services)
+    {
+        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
         return services;
     }
 
@@ -163,6 +190,9 @@ public static class DependencyInjectionExtensions
 
         if (pack.IncludeValidation)
             services.AddValidationBehavior();
+
+        if (pack.IncludeLogging)
+            services.AddLoggingBehavior();
 
         if (pack.ConfigureRateLimiting is not null)
             services.AddRateLimiting(pack.ConfigureRateLimiting);

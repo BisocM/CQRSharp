@@ -29,4 +29,13 @@ public sealed class DispatcherOptions
     ///     allowing nested sends/publishes to share scoped services (DbContext/UnitOfWork/etc.).
     /// </remarks>
     public ExecutionScopeMode ScopeMode { get; set; } = ExecutionScopeMode.Current;
+
+    /// <summary>
+    ///     Controls how a notification is dispatched to its multiple handlers.
+    /// </summary>
+    /// <remarks>
+    ///     The default is <see cref="PublishStrategy.ParallelWhenAllAggregate" />, which runs handlers concurrently and
+    ///     surfaces every failure.
+    /// </remarks>
+    public PublishStrategy PublishStrategy { get; set; } = PublishStrategy.ParallelWhenAllAggregate;
 }

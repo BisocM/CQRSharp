@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Abstractions.Interfaces.Markers.Query;
 using CQRSharp.Abstractions.Interfaces.Markers.Stream;
@@ -68,7 +69,7 @@ public sealed class NestedSendScopeStreamRequest : StreamRequestBase<bool>;
 public sealed class NestedSendScopeStreamRequestHandler(ScopedMarker marker, ICqrsDispatcher cqrs)
     : IStreamRequestHandler<NestedSendScopeStreamRequest, bool>
 {
-    public async IAsyncEnumerable<bool> Handle(NestedSendScopeStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<bool> Handle(NestedSendScopeStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var innerId = await cqrs.Send(new GetScopedMarkerIdQuery(), cancellationToken);
         yield return innerId == marker.Id;
@@ -99,7 +100,7 @@ public sealed class StreamScopeDisposalRequest : StreamRequestBase<Guid>;
 
 public sealed class StreamScopeDisposalRequestHandler(ScopedDisposalProbe probe) : IStreamRequestHandler<StreamScopeDisposalRequest, Guid>
 {
-    public async IAsyncEnumerable<Guid> Handle(StreamScopeDisposalRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<Guid> Handle(StreamScopeDisposalRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return probe.Id;
         await Task.Delay(50, cancellationToken);

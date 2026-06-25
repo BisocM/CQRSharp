@@ -2,7 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -112,8 +112,9 @@ public sealed partial class CqrsSourceGenerator
         ImmutableArray<INamedTypeSymbol> candidateClasses,
         SourceProductionContext context)
     {
-        var notificationSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotification);
-        var notificationNameAttributeSymbol = compilation.GetTypeByMetadataName(TypeStrings.NotificationNameAttribute);
+        var known = CqrsKnownSymbols.For(compilation);
+        var notificationSymbol = known.INotification;
+        var notificationNameAttributeSymbol = known.NotificationNameAttribute;
 
         var jsonPropertyNameAttributeSymbol =
             compilation.GetTypeByMetadataName("System.Text.Json.Serialization.JsonPropertyNameAttribute");
@@ -635,11 +636,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("        public INotification? Deserialize(string notificationName, byte[] payload)");
         sb.AppendLine("        {");
+        sb.AppendLine("            // A null result means the notification name is unknown. A corrupt payload for a KNOWN");
+        sb.AppendLine("            // name throws (e.g. JsonException), so callers can distinguish 'unknown type' from");
+        sb.AppendLine("            // 'corrupt payload' rather than having both collapse to null.");
         sb.AppendLine("            if (string.IsNullOrWhiteSpace(notificationName)) return null;");
         sb.AppendLine("            if (payload is null || payload.Length == 0) return null;");
         sb.AppendLine();
-        sb.AppendLine("            try");
-        sb.AppendLine("            {");
         sb.AppendLine("            return notificationName switch");
         sb.AppendLine("            {");
         foreach (var notification in stableNotifications)
@@ -651,11 +653,6 @@ public sealed partial class CqrsSourceGenerator
 
         sb.AppendLine("                _ => null");
         sb.AppendLine("            };");
-        sb.AppendLine("            }");
-        sb.AppendLine("            catch");
-        sb.AppendLine("            {");
-        sb.AppendLine("                return null;");
-        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        public string GetNotificationName(Type notificationType)");

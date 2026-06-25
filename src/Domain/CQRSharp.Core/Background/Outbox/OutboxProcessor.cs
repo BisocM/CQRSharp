@@ -1,6 +1,9 @@
+using System.Diagnostics;
+using System.Text.Json;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -83,6 +86,9 @@ internal sealed class OutboxProcessor : BackgroundService
         {
             if (stoppingToken.IsCancellationRequested) break;
 
+            // Restore the originating request's trace context so the outbox dispatch links to the same trace.
+            using var activity = StartOutboxActivity(message);
+
             try
             {
                 var notification = serializer.Deserialize(message.NotificationType, message.Payload);
@@ -105,6 +111,21 @@ internal sealed class OutboxProcessor : BackgroundService
                 _logger.LogInformation(
                     "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
                     message.NotificationType, message.Id);
+            }
+            catch (JsonException jsonEx)
+            {
+                // A corrupt payload for a known notification type is deterministic; dead-letter it immediately with
+                // the real cause rather than wasting retries. (Unknown types deserialize to null and are handled above.)
+                _logger.LogError(jsonEx, "Corrupt payload for notification {NotificationType} (ID: {MessageId}); marking as failed.",
+                    message.NotificationType, message.Id);
+                try
+                {
+                    await outboxStore.MarkAsFailedAsync(message.Id, jsonEx.ToString(), stoppingToken).ConfigureAwait(false);
+                }
+                catch (Exception storeEx) when (storeEx is not OperationCanceledException)
+                {
+                    _logger.LogError(storeEx, "Failed to mark corrupt outbox message {MessageId} as failed.", message.Id);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -147,5 +168,14 @@ internal sealed class OutboxProcessor : BackgroundService
     {
         var seconds = Math.Min(Math.Pow(2, Math.Min(attempt, 20)), 300d);
         return DateTime.UtcNow.AddSeconds(seconds);
+    }
+
+    private static Activity? StartOutboxActivity(OutboxMessage message)
+    {
+        var activity = ActivityContext.TryParse(message.TraceParent, null, out var parent)
+            ? CqrsActivitySource.Instance.StartActivity("CQRS Outbox Dispatch", ActivityKind.Producer, parent)
+            : CqrsActivitySource.Instance.StartActivity("CQRS Outbox Dispatch", ActivityKind.Producer);
+        activity?.SetTag("cqrsharp.notification_type", message.NotificationType);
+        return activity;
     }
 }

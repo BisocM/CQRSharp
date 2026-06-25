@@ -6,6 +6,9 @@
         <IsPackable>false</IsPackable>
         <LangVersion>default</LangVersion>
         <TargetFrameworks>net8.0</TargetFrameworks>
+        <!-- The analyzer/generator diagnostics are exercised by unit tests; suppress them on this project's own code.
+             CQRGEN006 fires on the intentionally-private test handler fixtures (which are registered manually). -->
+        <NoWarn>$(NoWarn);CQRA001;CQRA003;CQRA004;CQRA005;CQRA006;CQRGEN006</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
@@ -22,6 +25,7 @@
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="FluentAssertions" Version="8.1.1"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
         <PackageReference Include="Moq" Version="4.20.72"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
@@ -45,6 +49,13 @@
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"/>
         <ProjectReference Include="..\..\src\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
+    </ItemGroup>
+
+    <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator
+         and analyzers run (the .editorconfig beside the file keeps its neutral namespace intact). -->
+    <ItemGroup>
+        <Compile Include="..\..\src\Infrastructure\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
     </ItemGroup>
 
 </Project>

@@ -9,6 +9,9 @@ public sealed class CqrsPipelinePackOptions
 
     public bool IncludeValidation { get; set; } = true;
 
+    /// <summary>Registers the logging behavior. Off by default.</summary>
+    public bool IncludeLogging { get; set; } = false;
+
     public Func<IServiceProvider, IUnitOfWork>? UnitOfWorkFactory { get; set; }
     public Action<UnitOfWorkOptions>? ConfigureUnitOfWork { get; set; }
 

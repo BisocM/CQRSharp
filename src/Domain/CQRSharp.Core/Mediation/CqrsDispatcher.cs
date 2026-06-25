@@ -15,6 +15,13 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
     private readonly IStreamRequestDispatcher _streamRequestDispatcher;
     private readonly INotificationDispatcher _notificationDispatcher;
 
+    /// <summary>
+    ///     Initializes a new <see cref="CqrsDispatcher" /> that forwards requests, streams, and notifications
+    ///     to the supplied underlying dispatchers.
+    /// </summary>
+    /// <param name="requestDispatcher">Dispatcher used to execute non-streaming requests.</param>
+    /// <param name="streamRequestDispatcher">Dispatcher used to execute streaming requests.</param>
+    /// <param name="notificationDispatcher">Dispatcher used to publish notifications.</param>
     public CqrsDispatcher(
         IRequestDispatcher requestDispatcher,
         IStreamRequestDispatcher streamRequestDispatcher,
@@ -25,6 +32,7 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         _notificationDispatcher = notificationDispatcher ?? throw new ArgumentNullException(nameof(notificationDispatcher));
     }
 
+    /// <inheritdoc />
     public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -35,6 +43,7 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         return _requestDispatcher.ExecuteAsync(request, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task<object?> Send(object request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -48,12 +57,14 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         return _requestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
     }
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Stream<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         return _streamRequestDispatcher.ExecuteAsync(request, cancellationToken);
     }
 
+    /// <inheritdoc />
     public IAsyncEnumerable<object?> Stream(object request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -64,6 +75,7 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         return _streamRequestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
         where TNotification : INotification
     {

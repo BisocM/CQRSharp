@@ -8,7 +8,6 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <EnableAotAnalyzer>true</EnableAotAnalyzer>
-        <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('netstandard'))">
@@ -24,27 +23,13 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <Version>3.0.0</Version>
-        <Authors>BisocM</Authors>
-        <Company>BisocM</Company>
         <PackageTags>CQRS;CQRSharp</PackageTags>
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
-        <Description>Shared contracts for CQRSharp, including marker interfaces, pipeline attribute contracts, validation and exception hook abstractions, and outbox interfaces.</Description>
-        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
-        <RepositoryType>git</RepositoryType>
-        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
             Version 3.0.0. Breaking changes: removed SensitiveData attribute and updated request metadata.
         </PackageReleaseNotes>
     </PropertyGroup>
-
-    <ItemGroup>
-        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
-    </ItemGroup>
 
     <!--
         netstandard2.0 lacks IAsyncDisposable / IAsyncEnumerable in the BCL; this polyfill supplies them.

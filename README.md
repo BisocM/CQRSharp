@@ -7,12 +7,24 @@
 ![Alt](https://repobeats.axiom.co/api/embed/1d9c645b87f2a7c1c24211e12b02407a8df0ff87.svg "Repobeats Analytics")
 
 A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET
-applications, with complete Native AoT support.
+applications, with complete Native AOT support.
 
 A Roslyn source generator wires up dispatching and registration at compile time, so there is no runtime reflection and
 the whole framework is trimming- and Native-AOT-friendly.
 
 For more information, please advise the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
+
+---
+
+## Features
+
+- **Native AOT & trimming-safe** — a Roslyn source generator wires up all dispatch and registration at compile time; zero runtime reflection.
+- **Attribute-driven** — define commands, queries, streaming requests, and notifications with simple marker interfaces and handlers.
+- **One façade** — dispatch everything through `ICqrsDispatcher` (`Send` / `Stream` / `Publish`).
+- **Build-time analyzers** — catch missing handlers, the wrong dispatch method, and mis-wired pipeline exemptions as you type (CQRA diagnostics), with code fixes.
+- **Opt-in pipeline behaviors** — validation, resilience/retries, timeouts, rate limiting, idempotency, unit-of-work, and logging via `AddCqrsPipelinePack`.
+- **Reliable messaging** — a background task queue and a transactional outbox with at-least-once delivery and distributed-tracing propagation.
+- **Introspection** — a diagnostics API and health checks that describe exactly how each request is bound.
 
 ---
 
@@ -38,9 +50,9 @@ services.AddCqrsGenerated();
 Define a command and its handler:
 
 ```csharp
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Models.Commands;
 
 public sealed class CreateUser : ICommand
 {

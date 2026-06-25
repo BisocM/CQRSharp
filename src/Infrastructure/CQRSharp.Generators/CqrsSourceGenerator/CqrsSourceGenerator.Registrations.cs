@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 
 namespace CQRSharp.Generators.CqrsSourceGenerator;
@@ -151,14 +151,14 @@ public sealed partial class CqrsSourceGenerator
             "            var exceptionHookMappings = new ConcurrentDictionary<Type, global::CQRSharp.Core.Exceptions.RequestExceptionHookInvoker>();");
 
         var exceptionActionDef =
-            compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionAction2)?.OriginalDefinition;
+            CqrsKnownSymbols.For(compilation).IRequestExceptionAction2;
         var exceptionHandlerDef =
-            compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionHandler3)?.OriginalDefinition;
-	        var commandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
-	        var querySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-            var streamRequestSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamRequest);
+            CqrsKnownSymbols.For(compilation).IRequestExceptionHandler3;
+	        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
+	        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
+            var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
             var asyncEnumerableSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
-	        var commandResultSymbol = compilation.GetTypeByMetadataName(TypeStrings.CommandResult);
+	        var commandResultSymbol = CqrsKnownSymbols.For(compilation).CommandResult;
 	        var systemExceptionSymbol = compilation.GetTypeByMetadataName("System.Exception");
 
         if (exceptionActionDef is null ||
@@ -333,9 +333,9 @@ public sealed partial class CqrsSourceGenerator
         Compilation compilation,
         ImmutableArray<INamedTypeSymbol> candidateClasses)
     {
-        var commandHandlerDef = compilation.GetTypeByMetadataName(TypeStrings.ICommandHandler2)?.OriginalDefinition;
-        var queryHandlerDef = compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler3)?.OriginalDefinition;
-        var streamHandlerDef = compilation.GetTypeByMetadataName(TypeStrings.IStreamRequestHandler3)?.OriginalDefinition;
+        var commandHandlerDef = CqrsKnownSymbols.For(compilation).ICommandHandler2;
+        var queryHandlerDef = CqrsKnownSymbols.For(compilation).IQueryHandler3;
+        var streamHandlerDef = CqrsKnownSymbols.For(compilation).IStreamRequestHandler3;
         var asyncEnumerableDef = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
 
         var bindingsByRequest = new Dictionary<string, List<HandlerBinding>>(StringComparer.Ordinal);
@@ -476,17 +476,17 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            // Registering Request Registry");
         sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, RequestMetadata>();");
 
-        var preHandlerInterfaceSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPreHandlerAttribute);
-        var postHandlerInterfaceSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPostHandlerAttribute);
-        var pipelineExemptionAttributeSymbol = compilation.GetTypeByMetadataName(TypeStrings.PipelineExemptionAttribute);
+        var preHandlerInterfaceSymbol = CqrsKnownSymbols.For(compilation).IPreHandlerAttribute;
+        var postHandlerInterfaceSymbol = CqrsKnownSymbols.For(compilation).IPostHandlerAttribute;
+        var pipelineExemptionAttributeSymbol = CqrsKnownSymbols.For(compilation).PipelineExemptionAttribute;
 
         if (preHandlerInterfaceSymbol is null || postHandlerInterfaceSymbol is null || pipelineExemptionAttributeSymbol is null)
             return;
 
         // Diagnostics: request types declared in this compilation should have exactly one handler.
-        var commandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
-        var querySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var streamRequestSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamRequest);
+        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
+        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
+        var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
 	        if (!config.SuppressMissingRequestHandlerDiagnostics &&
 	            commandSymbol is not null && querySymbol is not null)
 	        {
@@ -535,15 +535,15 @@ public sealed partial class CqrsSourceGenerator
             var requestTypeSymbol = selected.RequestType;
             var requestTypeName = requestTypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
-	            var preHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, preHandlerInterfaceSymbol, $"global::{TypeStrings.IPreHandlerAttribute}");
-	            var postHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, postHandlerInterfaceSymbol, $"global::{TypeStrings.IPostHandlerAttribute}");
-	            var pipelineExemptionsCode = GenerateAttributeArrayCode(requestTypeSymbol, pipelineExemptionAttributeSymbol, $"global::{TypeStrings.PipelineExemptionAttribute}");
+	            var preHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, preHandlerInterfaceSymbol, preHandlerInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+	            var postHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, postHandlerInterfaceSymbol, postHandlerInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+	            var pipelineExemptionsCode = GenerateAttributeArrayCode(requestTypeSymbol, pipelineExemptionAttributeSymbol, pipelineExemptionAttributeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
 	
 	            var resultTypeCode = selected.ResultType is not null
 	                ? $"typeof({selected.ResultType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
 	                : "null";
 
-            var defaultContextType = compilation.GetTypeByMetadataName(TypeStrings.RequestContextBase);
+            var defaultContextType = CqrsKnownSymbols.For(compilation).RequestContextBase;
             var contextTypeSymbol = GetRequestContextType(requestTypeSymbol, compilation) ?? defaultContextType;
             if (contextTypeSymbol is null || !IsAccessibleFromGeneratedCode(contextTypeSymbol))
                 contextTypeSymbol = defaultContextType;
@@ -586,7 +586,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            // Registering Context Factory Registry");
         sb.AppendLine("            var factoryMappings = new ConcurrentDictionary<Type, Func<System.IServiceProvider, object?>>();");
 
-        var factoryInterfaceSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IRequestContextFactory);
+        var factoryInterfaceSymbol = CqrsKnownSymbols.For(compilation).IRequestContextFactory;
         if (factoryInterfaceSymbol is null) return;
 
         var contextTypes = candidateClasses
@@ -605,7 +605,7 @@ public sealed partial class CqrsSourceGenerator
 
         // Always register the default RequestContextBase factory (provided by CQRSharp.Core).
         sb.AppendLine(
-            $"            factoryMappings.TryAdd(typeof(global::{TypeStrings.RequestContextBase}), sp => sp.GetService<global::CQRSharp.Core.Factories.IRequestContextFactory>());");
+            $"            factoryMappings.TryAdd(typeof({CqrsKnownSymbols.For(compilation).RequestContextBase!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}), sp => sp.GetService<global::CQRSharp.Core.Factories.IRequestContextFactory>());");
 
         sb.AppendLine("            services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(factoryMappings));");
     }
@@ -630,8 +630,8 @@ public sealed partial class CqrsSourceGenerator
 	        sb.AppendLine("            return request switch");
 	        sb.AppendLine("            {");
 
-	        var commandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
-	        var querySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
+	        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
+	        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
 	        var typeFormat = SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
 	            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
 	            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
@@ -733,7 +733,7 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine("            return request switch");
             sb.AppendLine("            {");
 
-            var streamRequestSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamRequest);
+            var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
             var typeFormat = SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
                 SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
                 SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);

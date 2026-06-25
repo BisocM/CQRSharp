@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 
 namespace CQRSharp.Generators.CqrsSourceGenerator;
@@ -49,30 +49,17 @@ public sealed partial class CqrsSourceGenerator
 
     private static IEnumerable<INamedTypeSymbol> GetAllKnownHandlerSymbols(Compilation compilation)
     {
-        var commandHandlerSymbols = new[]
-        {
-            compilation.GetTypeByMetadataName(TypeStrings.ICommandHandler1),
-            compilation.GetTypeByMetadataName(TypeStrings.ICommandHandler2)
-        };
+        var known = CqrsKnownSymbols.For(compilation);
+        var commandHandlerSymbols = new[] { known.ICommandHandler1, known.ICommandHandler2 };
+        var queryHandlerSymbols = new[] { known.IQueryHandler2, known.IQueryHandler3 };
+        var streamHandlerSymbols = new[] { known.IStreamRequestHandler2, known.IStreamRequestHandler3 };
 
-        var queryHandlerSymbols = new[]
-        {
-            compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler2),
-            compilation.GetTypeByMetadataName(TypeStrings.IQueryHandler3)
-        };
-
-        var streamHandlerSymbols = new[]
-        {
-            compilation.GetTypeByMetadataName(TypeStrings.IStreamRequestHandler2),
-            compilation.GetTypeByMetadataName(TypeStrings.IStreamRequestHandler3)
-        };
-
-        var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
-        var requestValidatorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestValidator1);
-        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IPipelineBehavior);
-        var streamPipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IStreamPipelineBehavior);
-        var requestExceptionHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionHandler3);
-        var requestExceptionActionSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionAction2);
+        var notificationHandlerSymbol = known.INotificationHandler;
+        var requestValidatorSymbol = known.IRequestValidator1;
+        var pipelineBehaviorSymbol = known.IPipelineBehavior;
+        var streamPipelineBehaviorSymbol = known.IStreamPipelineBehavior;
+        var requestExceptionHandlerSymbol = known.IRequestExceptionHandler3;
+        var requestExceptionActionSymbol = known.IRequestExceptionAction2;
 
         return commandHandlerSymbols
             .Concat(queryHandlerSymbols)
@@ -91,7 +78,7 @@ public sealed partial class CqrsSourceGenerator
 
     private static ITypeSymbol? GetRequestContextType(ITypeSymbol requestTypeSymbol, Compilation compilation)
     {
-        var requestBaseSymbol = compilation.GetTypeByMetadataName(TypeStrings.RequestBaseGeneric);
+        var requestBaseSymbol = CqrsKnownSymbols.For(compilation).RequestBaseGeneric;
         if (requestBaseSymbol is null) return null;
 
         var current = requestTypeSymbol;

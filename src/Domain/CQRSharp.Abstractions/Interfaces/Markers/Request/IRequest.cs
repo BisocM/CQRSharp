@@ -27,6 +27,10 @@ public interface IRequest
     public RequestMetadata? Metadata { get; set; }
 }
 
+/// <summary>
+///     Marker interface for a request that produces a response of type <typeparamref name="TResponse" /> when dispatched.
+/// </summary>
+/// <typeparam name="TResponse">The type of the response returned by handling the request.</typeparam>
 public interface IRequest<out TResponse> : IRequest
 {
 }

@@ -4,8 +4,22 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace CQRSharp.Core.Diagnostics.HealthChecks;
 
+/// <summary>
+///     A health check that inspects every registered CQRSharp request binding and reports
+///     unhealthy when any binding has errors, degraded when any has warnings, and healthy otherwise.
+/// </summary>
 public sealed class CqrsBindingsHealthCheck(ICqrsDiagnostics diagnostics) : IHealthCheck
 {
+    /// <summary>
+    ///     Evaluates all request bindings, aggregating their error and warning issues into a
+    ///     <see cref="HealthCheckResult" /> whose status and data reflect the worst severity found.
+    /// </summary>
+    /// <param name="context">The context under which the health check is being run.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>
+    ///     A completed task containing an unhealthy result when any binding has errors, a degraded
+    ///     result when any has warnings, or a healthy result when all bindings are valid.
+    /// </returns>
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)

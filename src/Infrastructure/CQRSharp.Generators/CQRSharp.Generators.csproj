@@ -11,30 +11,30 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
 
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
 
-        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageLicenseFile>LICENSE</PackageLicenseFile>
-        <Version>3.0.0</Version>
-        <Authors>BisocM</Authors>
+        <!-- Analyzer-only package: no lib output, so no symbol package and no lib/ref TFM (NU5128 is expected). -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <!-- RS2000/RS2008 (analyzer release tracking) target DiagnosticAnalyzer.SupportedDiagnostics; this is an
+             IIncrementalGenerator that reports CQRGEN* diagnostics inline, so release tracking does not apply. -->
+        <NoWarn>$(NoWarn);NU5128;RS2000;RS2008</NoWarn>
+
         <Title>CQRSharp Source Generators</Title>
-        <Description>Analyzer-only source generators for CQRSharp that generate handler registrations, AOT hints, and outbox notification serialization.</Description>
+        <Description>The CQRSharp Roslyn source generator: emits handler registration, the AOT-safe dispatcher and notification wiring, Native-AOT trimming hints, and outbox JSON serialization at compile time. Pulled in transitively by the CQRSharp meta-package.</Description>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
-
-    </ItemGroup>
-
-    <ItemGroup>
-        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all"/>
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all"/>
+    </ItemGroup>
+
+    <!-- The well-known-type resolver is shared, verbatim, with CQRSharp.Analyzers (source-linked, not a reference,
+         so neither Roslyn component takes a dependency on the other). -->
+    <ItemGroup>
+        <Compile Include="..\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
     </ItemGroup>
 
 </Project>

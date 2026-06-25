@@ -20,6 +20,10 @@ namespace CQRSharp.Abstractions.Models.Outbox;
 ///     The earliest UTC time at which a failed message becomes eligible to be claimed again, or null to make it
 ///     immediately eligible. Used to back off between retries.
 /// </param>
+/// <param name="TraceParent">
+///     The W3C <c>traceparent</c> of the request that produced this message, captured at enqueue time so the outbox
+///     dispatch span can link back to the originating trace. Null when no trace was active.
+/// </param>
 public sealed record OutboxMessage(
     Guid Id,
     string NotificationType,
@@ -29,5 +33,6 @@ public sealed record OutboxMessage(
     DateTime? ProcessedAt,
     string? LastError,
     int AttemptCount = 0,
-    DateTime? NextRetryAt = null
+    DateTime? NextRetryAt = null,
+    string? TraceParent = null
 );

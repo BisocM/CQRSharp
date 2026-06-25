@@ -1,0 +1,37 @@
+<Project>
+
+    <!--
+        Shared package metadata and build settings for all CQRSharp projects. Project-specific values
+        (PackageId, Title, Description, PackageTags, TargetFrameworks, PackageReleaseNotes) remain in each project.
+    -->
+    <PropertyGroup>
+        <Authors>BisocM</Authors>
+        <Company>BisocM</Company>
+        <Version>3.0.0</Version>
+        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
+        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+
+        <!-- All packages land in the repo-root .nupkgs, matching the "Local Packages" source in nuget.config. -->
+        <PackageOutputPath>$(MSBuildThisFileDirectory).nupkgs</PackageOutputPath>
+
+        <!-- Deterministic, source-linked, symbol-bearing packages. -->
+        <Deterministic>true</Deterministic>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    </PropertyGroup>
+
+    <!-- Pack the icon, license, and README into every CQRSharp package (inert for non-packable projects). -->
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false"/>
+    </ItemGroup>
+
+</Project>

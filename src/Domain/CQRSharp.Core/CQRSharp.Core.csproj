@@ -7,7 +7,6 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <PackageOutputPath>$(MSBuildThisFileDirectory)..\.nupkgs</PackageOutputPath>
 
         <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
         <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
@@ -22,27 +21,13 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <Version>3.0.0</Version>
-        <Authors>BisocM</Authors>
-        <Company>BisocM</Company>
         <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
-        <Description>Core runtime for CQRSharp: request dispatching, notification publishing, pipeline execution, background queue/outbox processing, and NativeAOT-friendly generated registries.</Description>
-        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
-        <RepositoryType>git</RepositoryType>
-        <PackageIcon>CQRSharp_Icon.png</PackageIcon>
-        <PackageLicenseFile>LICENSE</PackageLicenseFile>
+        <Description>The CQRSharp runtime: the ICqrsDispatcher facade, pipeline execution, notification publishing, background task queue and transactional outbox processing, distributed-tracing hooks, health checks, and the source-generated, Native-AOT-friendly handler registries.</Description>
         <PackageReleaseNotes>
             Version 3.0.0. Adds unified dispatch, notification pipelines, exception hooks, and AOT hardening.
         </PackageReleaseNotes>
     </PropertyGroup>
-
-    <ItemGroup>
-        <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
-        <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>
-    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>

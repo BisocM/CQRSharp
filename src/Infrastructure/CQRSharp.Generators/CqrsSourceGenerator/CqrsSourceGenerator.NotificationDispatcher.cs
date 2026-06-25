@@ -1,7 +1,7 @@
 ﻿using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 
 namespace CQRSharp.Generators.CqrsSourceGenerator;
@@ -29,7 +29,7 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
             sb.AppendLine("            return notification switch");
             sb.AppendLine("            {");
 
-        var notificationHandlerDef = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler)?.OriginalDefinition;
+        var notificationHandlerDef = CqrsKnownSymbols.For(compilation).INotificationHandler;
         if (notificationHandlerDef is not null)
         {
             var notificationTypes = candidateClasses

@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -64,10 +64,11 @@ public sealed class CqrsAotHintGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
 
         // --- Get all necessary CQRS type symbols from the compilation ---
-        var iCommandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
-        var iQuerySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IPipelineBehavior);
-        var commandResultSymbol = compilation.GetTypeByMetadataName(TypeStrings.CommandResult);
+        var known = CqrsKnownSymbols.For(compilation);
+        var iCommandSymbol = known.ICommand;
+        var iQuerySymbol = known.IQuery;
+        var pipelineBehaviorSymbol = known.IPipelineBehavior;
+        var commandResultSymbol = known.CommandResult;
 
         // If core types aren't available, we can't generate hints.
         if (iCommandSymbol is null || iQuerySymbol is null || pipelineBehaviorSymbol is null || commandResultSymbol is null)

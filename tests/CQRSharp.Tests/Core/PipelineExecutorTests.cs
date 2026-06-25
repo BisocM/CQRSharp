@@ -107,7 +107,7 @@ namespace CQRSharp.Tests.Core;
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
+        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
 	                del = (h, r, c) =>
@@ -142,7 +142,7 @@ namespace CQRSharp.Tests.Core;
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
+        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
 	                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
@@ -183,7 +183,7 @@ namespace CQRSharp.Tests.Core;
 
         var handled = false;
         _mockHandlerRegistry
-            .Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
+            .Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
 	                del = (h, r, c) =>
@@ -252,7 +252,7 @@ namespace CQRSharp.Tests.Core;
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate>.IsAny))
+        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
             .Returns((Type _, out HandlerInvokerDelegate del) =>
             {
 	                del = (h, r, c) =>

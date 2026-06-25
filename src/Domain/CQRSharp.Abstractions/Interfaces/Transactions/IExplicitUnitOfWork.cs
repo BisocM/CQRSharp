@@ -8,10 +8,10 @@ namespace CQRSharp.Abstractions.Interfaces.Transactions;
 /// </summary>
 /// <remarks>
 ///     This interface is intended for scenarios where the default transactional behavior, managed by
-///     <see cref="UnitOfWorkBehavior{TRequest, TResult}" />, is insufficient. It allows handlers to manually
+///     <c>UnitOfWorkBehavior&lt;TRequest, TResult&gt;</c>, is insufficient. It allows handlers to manually
 ///     begin, commit, or roll back transactions, and to create nested points of recovery within a
 ///     single transaction using savepoints. When an implementation of this interface is used, the
-///     <see cref="UnitOfWorkBehavior{TRequest, TResult}" /> will delegate transaction management to it.
+///     <c>UnitOfWorkBehavior&lt;TRequest, TResult&gt;</c> will delegate transaction management to it.
 /// </remarks>
 public interface IExplicitUnitOfWork : IUnitOfWork
 {

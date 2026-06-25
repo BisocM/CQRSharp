@@ -1,8 +1,11 @@
 using System.Runtime.ExceptionServices;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications.Pipelines;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Notifications;
 
@@ -15,6 +18,7 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
 
     private readonly IServiceProvider _services;
+    private readonly PublishStrategy _publishStrategy;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DirectNotificationDispatcher" /> class.
@@ -23,6 +27,8 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     public DirectNotificationDispatcher(IServiceProvider services)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
+        _publishStrategy = services.GetService<IOptions<DispatcherOptions>>()?.Value.PublishStrategy
+            ?? PublishStrategy.ParallelWhenAllAggregate;
     }
 
     /// <inheritdoc />
@@ -69,15 +75,23 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
 
         async Task DispatchToHandlers(TNotification n, CancellationToken ct)
         {
-            var handlers = _services.GetServices<INotificationHandler<TNotification>>();
+            var resolved = _services.GetServices<INotificationHandler<TNotification>>();
+            var handlers = resolved as INotificationHandler<TNotification>[] ?? resolved.ToArray();
+            if (handlers.Length == 0) return;
 
-            List<Task>? tasks = null;
+            // Sequential: invoke handlers one at a time, in order, stopping at the first failure.
+            if (_publishStrategy == PublishStrategy.Sequential)
+            {
+                foreach (var handler in handlers)
+                    await handler.Handle(n, ct).ConfigureAwait(false);
+                return;
+            }
+
+            // Parallel strategies: start every handler, isolating a synchronous throw so it doesn't abandon siblings
+            // that already started; capture it as a faulted task and surface it with the rest.
+            var tasks = new List<Task>(handlers.Length);
             foreach (var handler in handlers)
             {
-                tasks ??= [];
-
-                // Isolate a synchronous throw from a handler so it doesn't abandon sibling handlers that already
-                // started; capture it as a faulted task and surface it alongside the rest below.
                 try
                 {
                     tasks.Add(handler.Handle(n, ct));
@@ -88,11 +102,16 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
                 }
             }
 
-            if (tasks is null) return;
-
-            // Await all handlers. Task.WhenAll's await rethrows only the first fault, so when more than one handler
-            // fails we surface the full AggregateException instead of silently discarding the others.
             var whenAll = Task.WhenAll(tasks);
+
+            // Parallel: the first failure surfaces (await's default; siblings are observed via the WhenAll task).
+            if (_publishStrategy == PublishStrategy.Parallel)
+            {
+                await whenAll.ConfigureAwait(false);
+                return;
+            }
+
+            // ParallelWhenAllAggregate (default): surface every failure, since await rethrows only the first.
             try
             {
                 await whenAll.ConfigureAwait(false);

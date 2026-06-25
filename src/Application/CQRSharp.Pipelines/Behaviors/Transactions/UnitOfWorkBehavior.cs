@@ -138,6 +138,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         if (outboxStore is null || serializer is null)
             throw new InvalidOperationException("IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
 
+        var traceParent = Activity.Current?.Id;
         var messages = notifications.Select(n => new OutboxMessage(
             Guid.NewGuid(),
             serializer.GetNotificationName(n.GetType()),
@@ -145,7 +146,8 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
             DateTime.UtcNow,
             OutboxMessageStatus.Pending,
             null,
-            null
+            null,
+            TraceParent: traceParent
         ));
 
         await outboxStore.StoreAsync(messages, cancellationToken).ConfigureAwait(false);

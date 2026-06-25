@@ -179,6 +179,7 @@ jobs:
           dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
 
       - name: Validate package contents
+        id: validate
         run: |
           python3 - <<'PY'
           import glob
@@ -273,10 +274,23 @@ jobs:
               if version in flatcontainer_versions(package_id):
                   existing.append(package_id)
 
+          # Publish only when this version is genuinely new — i.e. at least one package does not yet have this
+          # version on NuGet. A push to Release that did not change the version leaves every package already
+          # published, so should_publish is false and the publish step is skipped.
+          should_publish = len(existing) < len(observed)
+
+          gh_output = os.environ.get("GITHUB_OUTPUT")
+          if gh_output:
+              with open(gh_output, "a", encoding="utf-8") as fh:
+                  fh.write(f"should_publish={'true' if should_publish else 'false'}\n")
+                  fh.write(f"package_version={version}\n")
+
           if existing:
               print(f"::warning::Version '{version}' already exists on NuGet for: {', '.join(sorted(existing))}")
+          if not should_publish:
+              print(f"::notice::Version '{version}' is already published for all packages; nothing to publish (no version change).")
 
-          print(f"Validated {len(packages)} packages, version {version}: {', '.join(sorted(ids))}")
+          print(f"Validated {len(packages)} packages, version {version} (publish={should_publish}): {', '.join(sorted(ids))}")
           PY
 
       - name: Upload packages
@@ -287,7 +301,7 @@ jobs:
           path: ${{ env.PACKAGE_OUTPUT }}
 
       - name: Publish to NuGet.org
-        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
+        if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && steps.validate.outputs.should_publish == 'true' }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |

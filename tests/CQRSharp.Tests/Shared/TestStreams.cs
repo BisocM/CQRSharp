@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 
@@ -10,7 +11,7 @@ public sealed class TestStreamRequest(int count) : StreamRequestBase<int>
 
 public sealed class TestStreamRequestHandler : IStreamRequestHandler<TestStreamRequest, int>
 {
-    public async IAsyncEnumerable<int> Handle(TestStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<int> Handle(TestStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         for (var i = 0; i < request.Count; i++)
         {

@@ -1,0 +1,6 @@
+# The files in this folder are source-linked into multiple Roslyn component projects (CQRSharp.Generators,
+# CQRSharp.Analyzers, and the test project) which have different root namespaces. Keep their neutral namespace;
+# never let "adjust namespaces to match folder" rewrite it (the rewrite would silently diverge the copies).
+[*.cs]
+dotnet_style_namespace_match_folder = false
+dotnet_diagnostic.IDE0130.severity = none

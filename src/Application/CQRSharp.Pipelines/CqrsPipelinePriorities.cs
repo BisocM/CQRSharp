@@ -8,10 +8,21 @@ namespace CQRSharp.Pipelines;
 public static class CqrsPipelinePriorities
 {
     /// <summary>
+    ///     Logging behavior. Runs outermost so it measures and reports the full pipeline (including retries).
+    /// </summary>
+    public const int Logging = -100;
+
+    /// <summary>
     ///     Resilience / retry behavior. Runs outermost (before the unit of work) so each retry executes against a
     ///     fresh transaction.
     /// </summary>
     public const int Resilience = 50;
+
+    /// <summary>
+    ///     Idempotency / duplicate-detection behavior. Runs inside resilience (so a released claim can be retried) but
+    ///     before the unit of work, so a duplicate request short-circuits before any transaction is opened.
+    /// </summary>
+    public const int Idempotency = 75;
 
     /// <summary>Unit-of-work / transaction behavior.</summary>
     public const int UnitOfWork = 100;

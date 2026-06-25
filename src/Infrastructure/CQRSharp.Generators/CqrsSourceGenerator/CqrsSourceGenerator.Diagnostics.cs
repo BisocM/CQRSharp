@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Generators.SourceGeneration;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 
 namespace CQRSharp.Generators.CqrsSourceGenerator;
@@ -52,9 +52,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("            // NOTE: These bindings are source-generated and AOT-safe.");
 
-        var commandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
-        var querySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var streamRequestSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamRequest);
+        var known = CqrsKnownSymbols.For(compilation);
+        var commandSymbol = known.ICommand;
+        var querySymbol = known.IQuery;
+        var streamRequestSymbol = known.IStreamRequest;
         var typeFormat = SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
             SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
             SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);

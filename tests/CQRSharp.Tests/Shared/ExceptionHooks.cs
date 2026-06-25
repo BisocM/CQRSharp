@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using CQRSharp.Abstractions.Interfaces.Exceptions;
 using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Abstractions.Interfaces.Markers.Command;
@@ -123,7 +124,7 @@ public sealed class DerivedExceptionStreamRequest : StreamRequestBase<int>;
 
 public sealed class ActionOnlyExceptionStreamRequestHandler : IStreamRequestHandler<ActionOnlyExceptionStreamRequest, int>
 {
-    public async IAsyncEnumerable<int> Handle(ActionOnlyExceptionStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<int> Handle(ActionOnlyExceptionStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return 0;
         await Task.Yield();
@@ -133,7 +134,7 @@ public sealed class ActionOnlyExceptionStreamRequestHandler : IStreamRequestHand
 
 public sealed class HandledExceptionStreamRequestHandler : IStreamRequestHandler<HandledExceptionStreamRequest, int>
 {
-    public async IAsyncEnumerable<int> Handle(HandledExceptionStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<int> Handle(HandledExceptionStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         await Task.Yield();
         if (cancellationToken.IsCancellationRequested) yield break;
@@ -143,7 +144,7 @@ public sealed class HandledExceptionStreamRequestHandler : IStreamRequestHandler
 
 public sealed class DerivedExceptionStreamRequestHandler : IStreamRequestHandler<DerivedExceptionStreamRequest, int>
 {
-    public async IAsyncEnumerable<int> Handle(DerivedExceptionStreamRequest request, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<int> Handle(DerivedExceptionStreamRequest request, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         yield return 1;
         await Task.Yield();
