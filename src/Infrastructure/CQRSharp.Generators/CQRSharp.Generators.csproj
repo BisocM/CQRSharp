@@ -27,12 +27,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Avoid runtime dependencies for analyzer load; include shared constants as source. -->
-        <Compile Include="..\..\Domain\CQRSharp.Abstractions\SourceGeneration\TypeStrings.cs"
-                 Link="SourceGeneration\TypeStrings.cs" />
-    </ItemGroup>
-
-    <ItemGroup>
         <None Include="..\..\..\CQRSharp_Icon.png" Pack="true" PackagePath="\"/>
         <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\"/>
         <None Include="..\..\..\NUGET_README.txt" Pack="true" PackagePath="\"/>

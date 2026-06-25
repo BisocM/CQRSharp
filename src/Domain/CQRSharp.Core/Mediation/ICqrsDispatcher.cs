@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Mediation;
 

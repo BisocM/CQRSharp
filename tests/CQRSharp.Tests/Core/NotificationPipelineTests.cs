@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications;

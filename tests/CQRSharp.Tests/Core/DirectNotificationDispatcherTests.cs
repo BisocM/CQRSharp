@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;

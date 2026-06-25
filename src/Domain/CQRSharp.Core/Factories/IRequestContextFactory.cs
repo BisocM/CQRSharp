@@ -1,5 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Context;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Factories;
 

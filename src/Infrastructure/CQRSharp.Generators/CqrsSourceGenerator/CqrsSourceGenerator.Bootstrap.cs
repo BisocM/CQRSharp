@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -18,11 +18,11 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("    public static class CqrsGeneratedBootstrap");
         sb.AppendLine("    {");
         sb.AppendLine(
-            "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null)");
+            "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
         sb.AppendLine();
-        sb.AppendLine("            services.AddCqrs(configureQueue, configureOutbox);");
+        sb.AppendLine("            services.AddCqrs(configureQueue, configureOutbox, configureDispatcher);");
         sb.AppendLine("            services.AddGenerated();");
         sb.AppendLine("            return services;");
         sb.AppendLine("        }");

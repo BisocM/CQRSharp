@@ -1,4 +1,4 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Pipelines;
 

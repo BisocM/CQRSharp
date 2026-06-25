@@ -1,13 +1,14 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using System.Runtime.ExceptionServices;
+using CQRSharp.Abstractions.Attributes.Pipelines;
+using CQRSharp.Abstractions.Interfaces.Context;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
@@ -44,7 +45,7 @@ public sealed class PipelineExecutor(
     private static readonly ConcurrentDictionary<Type, IPreHandlerAttribute[]> SortedPreHandlerCache = new();
     private static readonly ConcurrentDictionary<Type, IPostHandlerAttribute[]> SortedPostHandlerCache = new();
 
-    private const int DefaultBehaviorPriority = int.MaxValue / 2;
+    private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
 
     private readonly IServiceProvider _services = serviceProvider;
     private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
@@ -52,9 +53,10 @@ public sealed class PipelineExecutor(
     private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
 
     /// <summary>
-    ///     Executes the complete pipeline for a given query.
-    ///     It initializes the request context, builds the pipeline by chaining behaviors,
-    ///     and invokes the final query handler.
+    ///     Executes a query. When <see cref="RunMode.Async" /> is configured the work is handed to the background
+    ///     task queue and the returned task completes when the queued work finishes; otherwise it runs inline.
+    ///     In both cases the request context is initialized, the behavior pipeline is chained, and the final
+    ///     query handler is invoked.
     /// </summary>
     /// <typeparam name="TRequest">The type of the query, which must implement <see cref="IQuery{TResult}" />.</typeparam>
     /// <typeparam name="TResult">The expected result type of the query.</typeparam>
@@ -106,20 +108,16 @@ public sealed class PipelineExecutor(
         CancellationToken ct)
         where TRequest : IQuery<TResult>
     {
-        // Ensure the request has its metadata and a valid context before processing.
         InitializeRequestContext(query, provider);
-
-        // Resolve the specific handler for this request from the selected provider.
         var handler = GetHandler(typeof(TRequest), provider);
-
-        // Execute the request through the resolved pipeline behaviors and handler.
         return await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Executes the complete pipeline for a given command.
-    ///     It initializes the request context, builds the pipeline by chaining behaviors,
-    ///     and invokes the final command handler.
+    ///     Executes a command. When <see cref="RunMode.Async" /> is configured the work is handed to the background
+    ///     task queue and the returned task completes when the queued work finishes; otherwise it runs inline.
+    ///     In both cases the request context is initialized, the behavior pipeline is chained, and the final
+    ///     command handler is invoked.
     /// </summary>
     /// <typeparam name="TRequest">The type of the command, which must implement <see cref="ICommand" />.</typeparam>
     /// <param name="command">The command object to be executed.</param>
@@ -236,13 +234,8 @@ public sealed class PipelineExecutor(
         CancellationToken ct)
         where TRequest : ICommand
     {
-        // Ensure the request has its metadata and a valid context before processing.
         InitializeRequestContext(command, provider);
-
-        // Resolve the specific handler for this request from the selected provider.
         var handler = GetHandler(typeof(TRequest), provider);
-
-        // Execute the request through the resolved pipeline behaviors and handler.
         return await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
     }
 
@@ -394,8 +387,27 @@ public sealed class PipelineExecutor(
         // Execute any pre-handler logic defined via attributes on the request class.
         await InvokePreHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
 
-        // Invoke the actual handler to process the request.
-        var result = await HandleRequest<TResult>(request, handler, cancellationToken).ConfigureAwait(false);
+        // Invoke the actual handler to process the request. On failure publish the matching *Failed notification so a
+        // started request always has a terminal lifecycle notification, then propagate the original exception.
+        TResult result;
+        try
+        {
+            result = await HandleRequest<TResult>(request, handler, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            switch (request)
+            {
+                case ICommand cmdFailed:
+                    await notificationDispatcher.Publish(new CommandFailedNotification(cmdFailed, ex), cancellationToken).ConfigureAwait(false);
+                    break;
+                case IQuery<TResult> qryFailed:
+                    await notificationDispatcher.Publish(new QueryFailedNotification<TResult>(qryFailed, ex), cancellationToken).ConfigureAwait(false);
+                    break;
+            }
+
+            throw;
+        }
 
         // Execute any post-handler logic defined via attributes.
         await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
@@ -435,26 +447,51 @@ public sealed class PipelineExecutor(
 
             var yielded = 0L;
             var completed = false;
+            Exception? failure = null;
 
-            try
+            // Enumerate manually: yield return is not allowed inside a try/catch, so this is the only way to capture a
+            // fault from the handler's stream and surface a terminal StreamFailedNotification before rethrowing it.
+            await using (var enumerator = stream.GetAsyncEnumerator(cancellationToken))
             {
-                await foreach (var item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
+                while (true)
                 {
+                    try
+                    {
+                        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                        {
+                            completed = true;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failure = ex;
+                        break;
+                    }
+
                     yielded++;
-                    yield return item;
+                    yield return enumerator.Current;
                 }
+            }
 
-                completed = true;
-            }
-            finally
+            if (completed)
             {
-                if (completed)
-                {
-                    await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
-                    await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
-                        .ConfigureAwait(false);
-                }
+                await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+                await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
+                    .ConfigureAwait(false);
             }
+            else if (failure is not null)
+            {
+                // Plain cancellation is not a fault and the token would also block the publish; just propagate it.
+                if (failure is not OperationCanceledException)
+                    await notificationDispatcher.Publish(new StreamFailedNotification<TItem>(request, yielded, failure), cancellationToken)
+                        .ConfigureAwait(false);
+
+                ExceptionDispatchInfo.Capture(failure).Throw();
+            }
+
+            // If neither branch ran the consumer stopped enumerating early without an error; per the documented
+            // contract no terminal Completed/Failed notification is published in that case.
         }
     }
 
@@ -630,6 +667,18 @@ public sealed class PipelineExecutor(
         return sorted;
     }
 
+    /// <summary>
+    ///     Shared total-ordering tie-break used by the pipeline/handler comparers: order by priority, then by type
+    ///     full name so the order is deterministic for equal priorities.
+    /// </summary>
+    private static int CompareByPriorityThenName(int leftPriority, int rightPriority, object left, object right)
+    {
+        var byPriority = leftPriority.CompareTo(rightPriority);
+        return byPriority != 0
+            ? byPriority
+            : string.CompareOrdinal(left.GetType().FullName, right.GetType().FullName);
+    }
+
     private sealed class PreHandlerPriorityComparer : IComparer<IPreHandlerAttribute>
     {
         public static PreHandlerPriorityComparer Instance { get; } = new();
@@ -643,10 +692,7 @@ public sealed class PipelineExecutor(
             if (x is null) return -1;
             if (y is null) return 1;
 
-            var byPriority = x.PreHandlerExecutionPriority.CompareTo(y.PreHandlerExecutionPriority);
-            if (byPriority != 0) return byPriority;
-
-            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
+            return CompareByPriorityThenName(x.PreHandlerExecutionPriority, y.PreHandlerExecutionPriority, x, y);
         }
     }
 
@@ -663,10 +709,7 @@ public sealed class PipelineExecutor(
             if (x is null) return -1;
             if (y is null) return 1;
 
-            var byPriority = x.PostHandlerExecutionPriority.CompareTo(y.PostHandlerExecutionPriority);
-            if (byPriority != 0) return byPriority;
-
-            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
+            return CompareByPriorityThenName(x.PostHandlerExecutionPriority, y.PostHandlerExecutionPriority, x, y);
         }
     }
 
@@ -686,10 +729,7 @@ public sealed class PipelineExecutor(
 
             var left = x is IPrioritizedPipelineBehavior lp ? lp.PipelineExecutionPriority : DefaultBehaviorPriority;
             var right = y is IPrioritizedPipelineBehavior rp ? rp.PipelineExecutionPriority : DefaultBehaviorPriority;
-            var byPriority = left.CompareTo(right);
-            if (byPriority != 0) return byPriority;
-
-            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
+            return CompareByPriorityThenName(left, right, x, y);
         }
     }
 
@@ -710,10 +750,7 @@ public sealed class PipelineExecutor(
 
             var left = x is IPrioritizedPipelineBehavior lp ? lp.PipelineExecutionPriority : DefaultBehaviorPriority;
             var right = y is IPrioritizedPipelineBehavior rp ? rp.PipelineExecutionPriority : DefaultBehaviorPriority;
-            var byPriority = left.CompareTo(right);
-            if (byPriority != 0) return byPriority;
-
-            return string.CompareOrdinal(x.GetType().FullName, y.GetType().FullName);
+            return CompareByPriorityThenName(left, right, x, y);
         }
     }
 }

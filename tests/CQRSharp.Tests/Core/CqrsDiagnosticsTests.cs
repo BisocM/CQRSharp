@@ -1,10 +1,10 @@
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Attributes.Pipelines;
+using CQRSharp.Abstractions.Interfaces.Context;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Diagnostics.HealthChecks;
 using CQRSharp.Core.Extensions;

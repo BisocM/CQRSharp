@@ -1,10 +1,10 @@
 ﻿using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
     public sealed partial class CqrsSourceGenerator
     {
@@ -16,7 +16,7 @@ namespace CQRSharp.Generators.Cqrs;
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Threading;");
             sb.AppendLine("using System.Threading.Tasks;");
-            sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Notifications;");
+            sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
             sb.AppendLine("using CQRSharp.Core.Notifications;");
             sb.AppendLine();
             sb.AppendLine("namespace CQRSharp.Core.Notifications.Generated");

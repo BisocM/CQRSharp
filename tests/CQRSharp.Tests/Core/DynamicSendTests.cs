@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Tests.Shared;

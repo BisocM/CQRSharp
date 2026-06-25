@@ -1,12 +1,12 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
-using CQRSharp.Pipelines.Types.Exceptions;
-using CQRSharp.Pipelines.Types.RateLimiting;
-using CQRSharp.Pipelines.Types.Resilience;
-using CQRSharp.Pipelines.Types.Timeout;
-using CQRSharp.Pipelines.Types.Transactions;
-using CQRSharp.Pipelines.Types.Validation;
+using CQRSharp.Pipelines.Behaviors.Exceptions;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
+using CQRSharp.Pipelines.Behaviors.Resilience;
+using CQRSharp.Pipelines.Behaviors.Timeout;
+using CQRSharp.Pipelines.Behaviors.Transactions;
+using CQRSharp.Pipelines.Behaviors.Validation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Pipelines.Extensions;
@@ -33,7 +33,11 @@ public static class DependencyInjectionExtensions
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Resilience configuration must be provided.");
 
-        services.Configure<ResilienceOptions>(configureOptions.Invoke);
+        services.AddOptions<ResilienceOptions>()
+            .Configure(configureOptions.Invoke)
+            .Validate(o => o.MaxRetries >= 0, "ResilienceOptions.MaxRetries must be non-negative.")
+            .Validate(o => o.BaseDelay >= TimeSpan.Zero, "ResilienceOptions.BaseDelay must be non-negative.")
+            .ValidateOnStart();
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamResilienceBehavior<,>));
@@ -51,7 +55,10 @@ public static class DependencyInjectionExtensions
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Timeout configuration must be provided.");
 
-        services.Configure<TimeoutOptions>(configureOptions.Invoke);
+        services.AddOptions<TimeoutOptions>()
+            .Configure(configureOptions.Invoke)
+            .Validate(o => o.Timeout > TimeSpan.Zero, "TimeoutOptions.Timeout must be greater than zero.")
+            .ValidateOnStart();
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamTimeoutBehavior<,>));

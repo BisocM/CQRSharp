@@ -1,5 +1,5 @@
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Sample.Application.Commands.Exceptions;
 using CQRSharp.Sample.Application.Commands.Requests;
 

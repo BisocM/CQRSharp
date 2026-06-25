@@ -1,10 +1,10 @@
 // CQRSharp.Tests/Core/PipelineExecutorTests.cs
 
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
-using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Abstractions.Data.Models.Requests;
+using CQRSharp.Abstractions.Attributes.Pipelines;
+using CQRSharp.Abstractions.Interfaces.Context;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Abstractions.Models.Requests;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;

@@ -1,9 +1,9 @@
 using System.Data;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Transactions;
-using CQRSharp.Pipelines.Types.RateLimiting.Context;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
 
 namespace CQRSharp.Tests.Shared;
 

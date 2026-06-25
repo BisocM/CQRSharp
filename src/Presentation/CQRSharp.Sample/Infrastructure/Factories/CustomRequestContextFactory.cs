@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Factories;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Infrastructure.SelfTest;

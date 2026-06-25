@@ -9,7 +9,64 @@
 A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET
 applications, with complete Native AoT support.
 
+A Roslyn source generator wires up dispatching and registration at compile time, so there is no runtime reflection and
+the whole framework is trimming- and Native-AOT-friendly.
+
 For more information, please advise the [wiki](https://github.com/BisocM/CQRSharp/wiki) page!
+
+---
+
+## Installation
+
+```bash
+dotnet add package CQRSharp
+```
+
+The `CQRSharp` meta-package pulls in the abstractions, core runtime, and the source generator for a plug-and-play setup.
+
+## Quick Start
+
+Register CQRSharp on your host. `AddCqrsGenerated` is emitted by the source generator and wires up every discovered
+handler:
+
+```csharp
+using CQRSharp.Core.Extensions;
+
+services.AddCqrsGenerated();
+```
+
+Define a command and its handler:
+
+```csharp
+using CQRSharp.Abstractions.Data.Interfaces.Handlers;
+using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Data.Models.Commands;
+
+public sealed class CreateUser : ICommand
+{
+    public required string Name { get; init; }
+}
+
+public sealed class CreateUserHandler : ICommandHandler<CreateUser>
+{
+    public Task<CommandResult> Handle(CreateUser command, CancellationToken ct)
+        => Task.FromResult(CommandResult.FromSuccess());
+}
+```
+
+Dispatch it through the single injected façade, `ICqrsDispatcher`:
+
+```csharp
+public sealed class UsersController(ICqrsDispatcher dispatcher)
+{
+    public Task Create(string name)
+        => dispatcher.Send(new CreateUser { Name = name });
+}
+```
+
+Queries (`IQuery<TResult>` / `IQueryHandler<,>`), streaming requests (`IStreamRequest<TItem>` via `dispatcher.Stream`),
+and notifications (`INotification` via `dispatcher.Publish`) follow the same pattern. Cross-cutting behaviors
+(validation, rate limiting, timeout, resilience, unit-of-work) are opt-in via `AddCqrsPipelinePack`.
 
 ---
 

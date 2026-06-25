@@ -28,4 +28,33 @@ public sealed class ResilienceOptions
     ///     Maximum delay cap when using backoff.
     /// </summary>
     public TimeSpan MaxDelay { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     Computes the delay before a given retry attempt from <see cref="BaseDelay" />,
+    ///     <see cref="BackoffMultiplier" />, and the <see cref="MaxDelay" /> cap. Returns <see cref="TimeSpan.Zero" />
+    ///     when delays are disabled (non-positive base delay).
+    /// </summary>
+    /// <param name="retryAttempt">The 1-based retry attempt number.</param>
+    public TimeSpan ComputeRetryDelay(int retryAttempt)
+    {
+        if (retryAttempt <= 0) return TimeSpan.Zero;
+
+        var baseDelay = BaseDelay;
+        if (baseDelay <= TimeSpan.Zero) return TimeSpan.Zero;
+
+        var backoffMultiplier = BackoffMultiplier;
+        if (double.IsNaN(backoffMultiplier) || double.IsInfinity(backoffMultiplier) || backoffMultiplier < 1.0)
+            backoffMultiplier = 1.0;
+
+        var delayMs = baseDelay.TotalMilliseconds * Math.Pow(backoffMultiplier, retryAttempt - 1);
+
+        var maxDelay = MaxDelay;
+        if (maxDelay > TimeSpan.Zero)
+            delayMs = Math.Min(delayMs, maxDelay.TotalMilliseconds);
+
+        if (double.IsNaN(delayMs) || double.IsInfinity(delayMs) || delayMs <= 0)
+            return baseDelay;
+
+        return TimeSpan.FromMilliseconds(delayMs);
+    }
 }

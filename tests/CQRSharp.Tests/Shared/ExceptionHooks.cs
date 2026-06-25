@@ -1,9 +1,9 @@
-using CQRSharp.Abstractions.Data.Interfaces.Exceptions;
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Abstractions.Data.Models.Exceptions;
+using CQRSharp.Abstractions.Interfaces.Exceptions;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Abstractions.Models.Exceptions;
 
 namespace CQRSharp.Tests.Shared;
 

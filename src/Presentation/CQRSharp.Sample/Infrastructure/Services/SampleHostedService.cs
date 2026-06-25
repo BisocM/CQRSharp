@@ -1,12 +1,12 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Models.Outbox;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Abstractions.Data.Models.Validation;
+using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Abstractions.Models.Validation;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications.Types;
-using CQRSharp.Pipelines.Types.RateLimiting;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Sample.Application.Commands.Requests;
 using CQRSharp.Sample.Application.Commands.Handlers;
 using CQRSharp.Sample.Application.Queries.Handlers;

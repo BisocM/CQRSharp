@@ -1,7 +1,7 @@
 // CQRSharp.Sample/Notifications/UserCreatedNotification.cs
 
-using CQRSharp.Abstractions.Data.Attributes.Notifications;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Attributes.Notifications;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 
 namespace CQRSharp.Sample.Domain.Events;
 

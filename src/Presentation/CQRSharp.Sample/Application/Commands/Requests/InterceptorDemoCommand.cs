@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Infrastructure.Interceptors;
 

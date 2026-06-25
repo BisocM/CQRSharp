@@ -61,6 +61,12 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                // Acquire a concurrency slot BEFORE dequeuing. If we dequeued first and cancellation then interrupted
+                // the slot wait, the dequeued task would be dropped without its work item ever running, and the caller
+                // awaiting its Task (e.g. Send under RunMode.Async) would hang forever — its completion source is only
+                // driven by executing the work item.
+                await _concurrencyLimiter.WaitAsync(stoppingToken).ConfigureAwait(false);
+
                 QueuedTask queuedTask;
                 try
                 {
@@ -68,17 +74,21 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
                 }
                 catch (ChannelClosedException)
                 {
-                    // The queue was completed/disposed.
+                    // The queue was completed/disposed. Release the slot we just took and stop.
+                    _concurrencyLimiter.Release();
                     break;
                 }
+                catch
+                {
+                    // Dequeue failed/cancelled after acquiring the slot but before the task is tracked; release the
+                    // slot (the TrackTask continuation never ran to release it) and let the outer handler observe it.
+                    _concurrencyLimiter.Release();
+                    throw;
+                }
 
-                // Wait for a concurrency slot to become available.
-                await _concurrencyLimiter.WaitAsync(stoppingToken).ConfigureAwait(false);
-
-                // Create a task to process the work item.
+                // Create a task to process the work item, and track it for graceful shutdown. The slot is released by
+                // the TrackTask continuation when the work item completes.
                 var processingTask = ProcessWorkItemAsync(queuedTask, stoppingToken);
-
-                // Track the running task for graceful shutdown.
                 TrackTask(processingTask);
             }
         }

@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using System.Diagnostics;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Pipelines.Telemetry;
 

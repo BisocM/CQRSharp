@@ -1,5 +1,5 @@
-﻿using System.Threading.Channels;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using System.Threading.Channels;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Notifications;
@@ -31,6 +31,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     private readonly SemaphoreSlim? _freeSlots;
     private readonly CancellationTokenSource _completion = new();
     private readonly CancellationToken _shutdownToken;
+    private readonly Task _pumpTask;
 
     private long _sequenceCounter;
     private int _disposed;
@@ -99,8 +100,14 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
 
         _notifSem = new SemaphoreSlim(Environment.ProcessorCount, Environment.ProcessorCount);
 
-        // Start the background process for handling notifications.
-        _ = ProcessNotificationsAsync(_shutdownToken);
+        // Start the notification pump and keep a handle on it so Dispose can drain it and so a fault is observed
+        // rather than swallowed by a fire-and-forget task.
+        _pumpTask = ProcessNotificationsAsync(_shutdownToken);
+        _ = _pumpTask.ContinueWith(
+            t => _logger.LogCritical(t.Exception, "The notification pump terminated unexpectedly."),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     /// <inheritdoc />
@@ -135,6 +142,19 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         DrainAndCancelPending();
 
         _notificationChannel.Writer.TryComplete();
+
+        // Best-effort: let the notification pump observe channel completion / cancellation and finish any in-flight
+        // dispatches before we tear down the semaphore those dispatches release into. Delivery is best-effort during
+        // shutdown; this bounds how long Dispose waits.
+        try
+        {
+            _pumpTask.Wait(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex) when (ex is AggregateException or OperationCanceledException)
+        {
+            // The pump faulted or was cancelled during shutdown; its fault continuation already logged any error.
+        }
+
         _notifSem.Dispose();
         _itemsAvailable.Dispose();
         _freeSlots?.Dispose();
@@ -514,8 +534,10 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         {
         }
 
+        // Use the completion token, which Complete() has already cancelled, so drained callers observe a genuinely
+        // cancelled token rather than _shutdownToken (which may not be cancelled yet on an explicit Dispose).
         for (var i = 0; i < pendingCount; i++)
-            pending[i].Cancel(_shutdownToken);
+            pending[i].Cancel(_completion.Token);
     }
 
     private void EnqueueLocked(QueueEntry entry)
@@ -596,62 +618,75 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     /// <param name="token">The cancellation token.</param>
     private async Task DispatchAsync(INotification notif, CancellationToken token)
     {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var dispatcher = scope.ServiceProvider.GetService<IDirectNotificationDispatcher>();
-        if (dispatcher is null)
-        {
-            _logger.LogWarning(
-                "IDirectNotificationDispatcher is not registered. Background task queue notifications will not be dispatched.");
-            return;
-        }
-
+        // The matching _notifSem permit was acquired by the pump before invoking this method. Release it exactly once
+        // here no matter how we exit — including the early null-dispatcher return and any scope-creation fault —
+        // otherwise the pump's permits leak and it eventually blocks forever, silently stopping all queue notifications.
         try
         {
-            for (var attempt = 1; attempt <= _options.NotificationMaxRetries; attempt++)
-                try
-                {
-                    // Attempt to publish the notification.
-                    await PublishNotificationAsync(dispatcher, notif, token).ConfigureAwait(false);
-                    return; // On success, exit the method.
-                }
-                catch (OperationCanceledException)
-                {
-                    // If cancellation is requested, stop immediately.
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    // Check if this was the last attempt.
-                    if (attempt == _options.NotificationMaxRetries)
-                    {
-                        // Last attempt failed. Log as an error and give up.
-                        _logger.LogError(ex,
-                            "Notification {NotificationType} failed permanently after {MaxAttempts} attempts and will be discarded.",
-                            notif.GetType().Name, _options.NotificationMaxRetries);
-                        return; // Exit without rethrowing; the error is handled.
-                    }
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dispatcher = scope.ServiceProvider.GetService<IDirectNotificationDispatcher>();
+            if (dispatcher is null)
+            {
+                _logger.LogWarning(
+                    "IDirectNotificationDispatcher is not registered. Background task queue notifications will not be dispatched.");
+                return;
+            }
 
-                    // Not the last attempt. Log as a warning and delay before retrying.
-                    _logger.LogWarning(ex,
-                        "Publish attempt {Attempt} for {NotificationType} failed; retrying in {Delay}ms.",
-                        attempt, notif.GetType().Name, _options.NotificationRetryDelay.TotalMilliseconds);
-                    await Task.Delay(_options.NotificationRetryDelay, token).ConfigureAwait(false);
-                }
-        }
-        catch (OperationCanceledException)
-        {
-            // Catches cancellation that happens during the Task.Delay.
-            _logger.LogWarning("Notification dispatch for {NotificationType} was canceled during a retry delay.", notif.GetType().Name);
-        }
-        catch (Exception ex)
-        {
-            // Safety net for unexpected errors in the dispatch logic itself.
-            _logger.LogCritical(ex, "An unexpected error occurred in the notification dispatch loop for {NotificationType}.", notif.GetType().Name);
+            try
+            {
+                for (var attempt = 1; attempt <= _options.NotificationMaxRetries; attempt++)
+                    try
+                    {
+                        // Attempt to publish the notification.
+                        await PublishNotificationAsync(dispatcher, notif, token).ConfigureAwait(false);
+                        return; // On success, exit the method.
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // If cancellation is requested, stop immediately.
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Check if this was the last attempt.
+                        if (attempt == _options.NotificationMaxRetries)
+                        {
+                            // Last attempt failed. Log as an error and give up.
+                            _logger.LogError(ex,
+                                "Notification {NotificationType} failed permanently after {MaxAttempts} attempts and will be discarded.",
+                                notif.GetType().Name, _options.NotificationMaxRetries);
+                            return; // Exit without rethrowing; the error is handled.
+                        }
+
+                        // Not the last attempt. Log as a warning and delay before retrying.
+                        _logger.LogWarning(ex,
+                            "Publish attempt {Attempt} for {NotificationType} failed; retrying in {Delay}ms.",
+                            attempt, notif.GetType().Name, _options.NotificationRetryDelay.TotalMilliseconds);
+                        await Task.Delay(_options.NotificationRetryDelay, token).ConfigureAwait(false);
+                    }
+            }
+            catch (OperationCanceledException)
+            {
+                // Catches cancellation that happens during the Task.Delay.
+                _logger.LogWarning("Notification dispatch for {NotificationType} was canceled during a retry delay.", notif.GetType().Name);
+            }
+            catch (Exception ex)
+            {
+                // Safety net for unexpected errors in the dispatch logic itself.
+                _logger.LogCritical(ex, "An unexpected error occurred in the notification dispatch loop for {NotificationType}.", notif.GetType().Name);
+            }
         }
         finally
         {
-            // CRITICAL: Always release the semaphore slot.
-            _notifSem.Release();
+            // Always release the semaphore slot. Tolerate disposal during shutdown (the queue may have torn the
+            // semaphore down while this dispatch was still in flight).
+            try
+            {
+                _notifSem.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
         }
     }
 

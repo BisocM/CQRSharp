@@ -1,5 +1,5 @@
-﻿using System.Threading.Channels;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using System.Threading.Channels;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 
 namespace CQRSharp.Core.Notifications.Types;
 

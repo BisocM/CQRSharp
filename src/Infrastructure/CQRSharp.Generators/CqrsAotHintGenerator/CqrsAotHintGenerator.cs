@@ -1,12 +1,12 @@
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsAotHintGenerator;
 
 /// <summary>
 ///     A source generator that creates hints for the Native AOT compiler.
@@ -66,7 +66,7 @@ public sealed class CqrsAotHintGenerator : IIncrementalGenerator
         // --- Get all necessary CQRS type symbols from the compilation ---
         var iCommandSymbol = compilation.GetTypeByMetadataName(TypeStrings.ICommand);
         var iQuerySymbol = compilation.GetTypeByMetadataName(TypeStrings.IQuery);
-        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
+        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IPipelineBehavior);
         var commandResultSymbol = compilation.GetTypeByMetadataName(TypeStrings.CommandResult);
 
         // If core types aren't available, we can't generate hints.

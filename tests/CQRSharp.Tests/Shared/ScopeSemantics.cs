@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Interfaces.Markers.Query;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Mediation;
 
 namespace CQRSharp.Tests.Shared;

@@ -1,7 +1,6 @@
-﻿using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
-using CQRSharp.Abstractions.Data.Interfaces.Outbox;
-using CQRSharp.Abstractions.Data.Models.Outbox;
+using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Abstractions.Models.Outbox;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +18,6 @@ internal sealed class OutboxProcessor : BackgroundService
 {
     private readonly ILogger<OutboxProcessor> _logger;
     private readonly OutboxProcessorOptions _options;
-    private readonly ConcurrentDictionary<Guid, int> _retryTracker = new();
     private readonly IServiceScopeFactory _scopeFactory;
 
     /// <summary>
@@ -90,11 +88,11 @@ internal sealed class OutboxProcessor : BackgroundService
                 var notification = serializer.Deserialize(message.NotificationType, message.Payload);
                 if (notification is null)
                 {
+                    // An unknown / undeserializable notification can never succeed; fail it immediately (no retry).
                     await outboxStore.MarkAsFailedAsync(
                         message.Id,
                         $"Failed to deserialize notification '{message.NotificationType}'.",
-                        stoppingToken);
-                    _retryTracker.TryRemove(message.Id, out _);
+                        stoppingToken).ConfigureAwait(false);
                     _logger.LogError(
                         "Failed to deserialize notification {NotificationType} (ID: {MessageId}). Marked as failed.",
                         message.NotificationType,
@@ -102,24 +100,52 @@ internal sealed class OutboxProcessor : BackgroundService
                     continue;
                 }
 
-                await dispatcher.Publish(notification, stoppingToken);
-                await outboxStore.MarkAsProcessedAsync(message.Id, stoppingToken);
-                _retryTracker.TryRemove(message.Id, out _);
-                _logger.LogInformation("Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).", message.NotificationType, message.Id);
+                await dispatcher.Publish(notification, stoppingToken).ConfigureAwait(false);
+                await outboxStore.MarkAsProcessedAsync(message.Id, stoppingToken).ConfigureAwait(false);
+                _logger.LogInformation(
+                    "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
+                    message.NotificationType, message.Id);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Failed to process notification {NotificationType} (ID: {MessageId}).", message.NotificationType, message.Id);
-                _retryTracker.AddOrUpdate(message.Id, 1, (_, count) => count + 1);
+                _logger.LogError(ex, "Failed to process notification {NotificationType} (ID: {MessageId}).",
+                    message.NotificationType, message.Id);
 
-                if (_retryTracker.TryGetValue(message.Id, out var attempts) && attempts >= _options.MaxRetryAttempts)
+                // Record the failed attempt durably so retry limits survive restarts, and dead-letter the message once
+                // attempts are exhausted. Guard these store calls: if the store itself is the failing dependency we
+                // must not abort the rest of the batch.
+                try
                 {
-                    await outboxStore.MarkAsFailedAsync(message.Id, ex.ToString(), stoppingToken);
-                    _retryTracker.TryRemove(message.Id, out _);
-                    _logger.LogCritical("Notification {NotificationType} (ID: {MessageId}) has reached max retry attempts and is marked as failed.", message.NotificationType,
+                    var attempt = message.AttemptCount + 1;
+                    var recordedAttempts = await outboxStore
+                        .IncrementAttemptAsync(message.Id, ex.ToString(), ComputeNextRetryAt(attempt), stoppingToken)
+                        .ConfigureAwait(false);
+
+                    if (recordedAttempts >= _options.MaxRetryAttempts)
+                    {
+                        await outboxStore.MarkAsFailedAsync(message.Id, ex.ToString(), stoppingToken).ConfigureAwait(false);
+                        _logger.LogCritical(
+                            "Notification {NotificationType} (ID: {MessageId}) reached {Attempts} attempts and is marked as failed.",
+                            message.NotificationType, message.Id, recordedAttempts);
+                    }
+                }
+                catch (Exception storeEx) when (storeEx is not OperationCanceledException)
+                {
+                    _logger.LogError(storeEx,
+                        "Failed to record the outbox delivery attempt for message {MessageId}; it will be retried on a later poll.",
                         message.Id);
                 }
             }
         }
+    }
+
+    /// <summary>
+    ///     Computes the next eligibility time for a failed message using exponential back-off (2^attempt seconds),
+    ///     capped at five minutes.
+    /// </summary>
+    private static DateTime ComputeNextRetryAt(int attempt)
+    {
+        var seconds = Math.Min(Math.Pow(2, Math.Min(attempt, 20)), 300d);
+        return DateTime.UtcNow.AddSeconds(seconds);
     }
 }

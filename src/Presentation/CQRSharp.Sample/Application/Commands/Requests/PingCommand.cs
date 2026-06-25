@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Data.Attributes.Pipelines;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Attributes.Pipelines;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Application.Pipelines;
 

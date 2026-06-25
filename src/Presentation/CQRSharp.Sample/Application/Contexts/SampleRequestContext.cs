@@ -1,4 +1,4 @@
-using CQRSharp.Pipelines.Types.RateLimiting.Context;
+using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
 
 namespace CQRSharp.Sample.Application.Contexts;
 

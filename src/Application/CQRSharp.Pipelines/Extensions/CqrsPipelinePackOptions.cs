@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Pipelines.Options;
 
 namespace CQRSharp.Pipelines.Extensions;

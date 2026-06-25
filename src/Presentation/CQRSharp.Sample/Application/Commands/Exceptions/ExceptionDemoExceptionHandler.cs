@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Data.Interfaces.Exceptions;
-using CQRSharp.Abstractions.Data.Models.Commands;
-using CQRSharp.Abstractions.Data.Models.Exceptions;
+using CQRSharp.Abstractions.Interfaces.Exceptions;
+using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Abstractions.Models.Exceptions;
 using CQRSharp.Sample.Application.Commands.Requests;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 

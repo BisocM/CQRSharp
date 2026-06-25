@@ -1,7 +1,6 @@
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {

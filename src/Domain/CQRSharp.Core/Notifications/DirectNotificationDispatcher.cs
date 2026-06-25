@@ -1,4 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using System.Runtime.ExceptionServices;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications.Pipelines;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +12,7 @@ namespace CQRSharp.Core.Notifications;
 /// </summary>
 public class DirectNotificationDispatcher : IDirectNotificationDispatcher
 {
-    private const int DefaultBehaviorPriority = int.MaxValue / 2;
+    private const int DefaultBehaviorPriority = IPrioritizedPipelineBehavior.DefaultPriority;
 
     private readonly IServiceProvider _services;
 
@@ -74,12 +75,35 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
             foreach (var handler in handlers)
             {
                 tasks ??= [];
-                tasks.Add(handler.Handle(n, ct));
+
+                // Isolate a synchronous throw from a handler so it doesn't abandon sibling handlers that already
+                // started; capture it as a faulted task and surface it alongside the rest below.
+                try
+                {
+                    tasks.Add(handler.Handle(n, ct));
+                }
+                catch (Exception ex)
+                {
+                    tasks.Add(Task.FromException(ex));
+                }
             }
 
             if (tasks is null) return;
 
-            await Task.WhenAll(tasks).ConfigureAwait(false);
+            // Await all handlers. Task.WhenAll's await rethrows only the first fault, so when more than one handler
+            // fails we surface the full AggregateException instead of silently discarding the others.
+            var whenAll = Task.WhenAll(tasks);
+            try
+            {
+                await whenAll.ConfigureAwait(false);
+            }
+            catch
+            {
+                var failures = whenAll.Exception?.InnerExceptions;
+                if (failures is { Count: > 1 })
+                    ExceptionDispatchInfo.Capture(new AggregateException(failures)).Throw();
+                throw;
+            }
         }
     }
 

@@ -1,7 +1,7 @@
-﻿using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
-using CQRSharp.Abstractions.Data.Interfaces.Outbox;
-using CQRSharp.Abstractions.Data.Interfaces.Transactions;
+using System.Collections.Concurrent;
+using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;

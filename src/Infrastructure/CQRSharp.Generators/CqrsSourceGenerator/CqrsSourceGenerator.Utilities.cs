@@ -1,9 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -69,8 +69,8 @@ public sealed partial class CqrsSourceGenerator
 
         var notificationHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.INotificationHandler);
         var requestValidatorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestValidator1);
-        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IPipelineBehavior);
-        var streamPipelineBehaviorSymbol = compilation.GetTypeByMetadataName(TypeStrings.IStreamPipelineBehavior);
+        var pipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IPipelineBehavior);
+        var streamPipelineBehaviorSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IStreamPipelineBehavior);
         var requestExceptionHandlerSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionHandler3);
         var requestExceptionActionSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestExceptionAction2);
 

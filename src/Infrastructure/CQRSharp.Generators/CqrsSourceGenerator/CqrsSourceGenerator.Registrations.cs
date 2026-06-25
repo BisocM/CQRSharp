@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -69,8 +69,8 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System.Collections.Concurrent;");
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Notifications;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Models.Requests;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
+        sb.AppendLine("using CQRSharp.Abstractions.Models.Requests;");
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.Caching.Handlers;");
         sb.AppendLine("using CQRSharp.Core.Caching.Contexts;");
@@ -93,13 +93,23 @@ public sealed partial class CqrsSourceGenerator
         GenerateRequestExceptionHookRegistry(sb, compilation, candidateClasses);
 
         sb.AppendLine();
-        sb.AppendLine("            // Registering the generated dispatchers.");
+        sb.AppendLine("            // Registering the generated dispatchers. RemoveAll first so the generated implementations");
+        sb.AppendLine("            // are authoritative regardless of AddCqrs/AddGenerated ordering, and so re-invoking");
+        sb.AppendLine("            // AddGenerated is idempotent rather than stacking duplicate registrations.");
+        sb.AppendLine(
+            "            services.RemoveAll<global::CQRSharp.Core.Diagnostics.ICqrsDiagnostics>();");
         sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Diagnostics.ICqrsDiagnostics, global::CQRSharp.Core.Diagnostics.Generated.GeneratedCqrsDiagnostics>();");
         sb.AppendLine(
+            "            services.RemoveAll<global::CQRSharp.Core.Notifications.IDirectNotificationDispatcher>();");
+        sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Notifications.IDirectNotificationDispatcher, global::CQRSharp.Core.Notifications.Generated.GeneratedDirectNotificationDispatcher>();");
         sb.AppendLine(
+            "            services.RemoveAll<global::CQRSharp.Core.Pipelines.IRequestDispatcher>();");
+        sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Pipelines.IRequestDispatcher, global::CQRSharp.Core.Requests.Generated.GeneratedRequestDispatcher>();");
+        sb.AppendLine(
+            "            services.RemoveAll<global::CQRSharp.Core.Pipelines.IStreamRequestDispatcher>();");
         sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Pipelines.IStreamRequestDispatcher, global::CQRSharp.Core.Streams.Generated.GeneratedStreamRequestDispatcher>();");
 
@@ -108,9 +118,9 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine();
             sb.AppendLine("            // Register the generated outbox notification serializer.");
             sb.AppendLine(
-                "            services.TryAddSingleton<global::CQRSharp.Abstractions.Data.Interfaces.Notifications.INotificationSerializer, global::CQRSharp.Core.Serialization.Generated.GeneratedOutboxNotificationSerializer>();");
+                "            services.TryAddSingleton<global::CQRSharp.Abstractions.Interfaces.Notifications.INotificationSerializer, global::CQRSharp.Core.Serialization.Generated.GeneratedOutboxNotificationSerializer>();");
             sb.AppendLine(
-                "            services.TryAddSingleton<global::CQRSharp.Abstractions.Data.Interfaces.Notifications.IStableNotificationNameProvider, global::CQRSharp.Core.Serialization.Generated.GeneratedOutboxNotificationSerializer>();");
+                "            services.TryAddSingleton<global::CQRSharp.Abstractions.Interfaces.Notifications.IStableNotificationNameProvider, global::CQRSharp.Core.Serialization.Generated.GeneratedOutboxNotificationSerializer>();");
         }
 
         sb.AppendLine();
@@ -285,7 +295,7 @@ public sealed partial class CqrsSourceGenerator
                 if ((kind & ExceptionHookKind.Action) != 0)
                 {
                     sb.AppendLine(
-                        $"                        var actions = sp.GetServices<global::CQRSharp.Abstractions.Data.Interfaces.Exceptions.IRequestExceptionAction<{requestTypeName}, {exceptionTypeName}>>();");
+                        $"                        var actions = sp.GetServices<global::CQRSharp.Abstractions.Interfaces.Exceptions.IRequestExceptionAction<{requestTypeName}, {exceptionTypeName}>>();");
                     sb.AppendLine("                        foreach (var action in actions)");
                     sb.AppendLine("                            await action.Execute(typedRequest, typedException, ct).ConfigureAwait(false);");
                 }
@@ -293,9 +303,9 @@ public sealed partial class CqrsSourceGenerator
                 if ((kind & ExceptionHookKind.Handler) != 0)
                 {
                     sb.AppendLine(
-                        $"                        var handlers = sp.GetServices<global::CQRSharp.Abstractions.Data.Interfaces.Exceptions.IRequestExceptionHandler<{requestTypeName}, {resultTypeName}, {exceptionTypeName}>>();");
+                        $"                        var handlers = sp.GetServices<global::CQRSharp.Abstractions.Interfaces.Exceptions.IRequestExceptionHandler<{requestTypeName}, {resultTypeName}, {exceptionTypeName}>>();");
                     sb.AppendLine(
-                        $"                        var state = new global::CQRSharp.Abstractions.Data.Models.Exceptions.RequestExceptionHandlerState<{resultTypeName}>();");
+                        $"                        var state = new global::CQRSharp.Abstractions.Models.Exceptions.RequestExceptionHandlerState<{resultTypeName}>();");
                     sb.AppendLine("                        foreach (var handler in handlers)");
                     sb.AppendLine("                        {");
                     sb.AppendLine("                            await handler.Handle(typedRequest, typedException, state, ct).ConfigureAwait(false);");
@@ -313,6 +323,8 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine("            });");
         }
 
+        sb.AppendLine(
+            "            services.RemoveAll<global::CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry>();");
         sb.AppendLine(
             "            services.AddSingleton<global::CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry>(new global::CQRSharp.Core.Exceptions.RequestExceptionHookRegistry(exceptionHookMappings));");
     }
@@ -419,7 +431,9 @@ public sealed partial class CqrsSourceGenerator
     private static void GenerateHandlerServices(StringBuilder sb, Compilation compilation, ImmutableArray<INamedTypeSymbol> candidateClasses)
     {
         sb.AppendLine();
-        sb.AppendLine("            // Registering Handler Services by Interface Implementation");
+        sb.AppendLine("            // Registering Handler Services by Interface Implementation.");
+        sb.AppendLine("            // The concrete handler is what dispatch resolves (via the request registry); the interface");
+        sb.AppendLine("            // forwarders below are kept so consumers can also resolve a handler by its interface directly.");
 
         var allKnownHandlers = GetAllKnownHandlerSymbols(compilation)
             .Select(s => s!.OriginalDefinition)
@@ -572,7 +586,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            // Registering Context Factory Registry");
         sb.AppendLine("            var factoryMappings = new ConcurrentDictionary<Type, Func<System.IServiceProvider, object?>>();");
 
-        var factoryInterfaceSymbol = compilation.GetTypeByMetadataName(TypeStrings.IRequestContextFactory);
+        var factoryInterfaceSymbol = compilation.GetTypeByMetadataName(CoreTypeStrings.IRequestContextFactory);
         if (factoryInterfaceSymbol is null) return;
 
         var contextTypes = candidateClasses
@@ -601,7 +615,7 @@ public sealed partial class CqrsSourceGenerator
 	        var sb = new StringBuilder();
 	        sb.AppendLine("// <auto-generated />");
 	        sb.AppendLine("#nullable enable");
-	        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;");
+	        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Request;");
 	        sb.AppendLine("using CQRSharp.Core.Pipelines;");
 	        sb.AppendLine("using CQRSharp.Core.Requests;");
 	        sb.AppendLine("using System.Threading.Tasks;");
@@ -705,7 +719,7 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using System.Runtime.CompilerServices;");
             sb.AppendLine("using System.Threading;");
-            sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;");
+            sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Stream;");
             sb.AppendLine("using CQRSharp.Core.Pipelines;");
             sb.AppendLine();
             sb.AppendLine("namespace CQRSharp.Core.Streams.Generated");

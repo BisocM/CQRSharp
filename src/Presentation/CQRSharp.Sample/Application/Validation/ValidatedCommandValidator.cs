@@ -1,5 +1,5 @@
-using CQRSharp.Abstractions.Data.Interfaces.Validation;
-using CQRSharp.Abstractions.Data.Models.Validation;
+using CQRSharp.Abstractions.Interfaces.Validation;
+using CQRSharp.Abstractions.Models.Validation;
 using CQRSharp.Sample.Application.Commands.Requests;
 
 namespace CQRSharp.Sample.Application.Validation;

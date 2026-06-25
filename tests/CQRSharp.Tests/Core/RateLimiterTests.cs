@@ -1,9 +1,9 @@
-﻿using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using System.Collections.Concurrent;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Pipelines.Extensions;
 using CQRSharp.Pipelines.Options;
-using CQRSharp.Pipelines.Types.RateLimiting;
-using CQRSharp.Pipelines.Types.RateLimiting.Context;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
+using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

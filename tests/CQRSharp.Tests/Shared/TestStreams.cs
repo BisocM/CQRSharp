@@ -1,5 +1,5 @@
-using CQRSharp.Abstractions.Data.Interfaces.Handlers;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;
+using CQRSharp.Abstractions.Interfaces.Handlers;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 
 namespace CQRSharp.Tests.Shared;
 

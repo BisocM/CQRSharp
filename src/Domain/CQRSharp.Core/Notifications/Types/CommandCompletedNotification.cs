@@ -1,7 +1,7 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
-using CQRSharp.Abstractions.Data.Models.Commands;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Abstractions.Models.Commands;
 
 namespace CQRSharp.Core.Notifications.Types;
 

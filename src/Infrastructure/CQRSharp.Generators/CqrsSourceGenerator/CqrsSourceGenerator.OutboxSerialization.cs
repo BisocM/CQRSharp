@@ -2,11 +2,11 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -614,7 +614,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Buffers;");
         sb.AppendLine("using System.Text.Json;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Notifications;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Serialization.Generated");
         sb.AppendLine("{");

@@ -2,7 +2,7 @@ name: Release (NuGet)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ Release ]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -113,7 +113,7 @@ jobs:
           dotnet --info
 
       - name: Verify NuGet publishing secret
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
@@ -287,7 +287,7 @@ jobs:
           path: ${{ env.PACKAGE_OUTPUT }}
 
       - name: Publish to NuGet.org
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |

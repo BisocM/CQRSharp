@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications.Pipelines;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Sample.Infrastructure.SelfTest;

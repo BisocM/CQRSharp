@@ -1,7 +1,7 @@
 // CQRSharp.Tests/Core/TaskQueue/BackgroundTaskQueueTestHelpers.cs
 
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Data.Interfaces.Notifications;
+using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;

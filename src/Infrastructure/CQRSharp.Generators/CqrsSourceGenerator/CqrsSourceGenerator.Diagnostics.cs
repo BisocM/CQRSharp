@@ -1,11 +1,10 @@
-using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Abstractions.SourceGeneration;
+using CQRSharp.Generators.SourceGeneration;
 using Microsoft.CodeAnalysis;
 
-namespace CQRSharp.Generators.Cqrs;
+namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
@@ -17,14 +16,14 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Attributes.Pipelines;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Context;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Command;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Query;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Interfaces.Markers.Stream;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Models.Commands;");
-        sb.AppendLine("using CQRSharp.Abstractions.Data.Models.Requests;");
+        sb.AppendLine("using CQRSharp.Abstractions.Attributes.Pipelines;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Context;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Command;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Query;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Request;");
+        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Stream;");
+        sb.AppendLine("using CQRSharp.Abstractions.Models.Commands;");
+        sb.AppendLine("using CQRSharp.Abstractions.Models.Requests;");
         sb.AppendLine("using CQRSharp.Core.Caching.Contexts;");
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.Diagnostics;");
@@ -109,7 +108,7 @@ public sealed partial class CqrsSourceGenerator
                     sb.AppendLine($"            if (requestType == typeof({requestName}))");
                     sb.AppendLine("            {");
                     sb.AppendLine(
-                        $"                binding = Describe<{requestName}, global::CQRSharp.Abstractions.Data.Models.Commands.CommandResult>();");
+                        $"                binding = Describe<{requestName}, global::CQRSharp.Abstractions.Models.Commands.CommandResult>();");
                     sb.AppendLine("                return true;");
                     sb.AppendLine("            }");
                 }
@@ -173,7 +172,7 @@ public sealed partial class CqrsSourceGenerator
                 else
                 {
                     sb.AppendLine(
-                        $"            list.Add(Describe<{requestName}, global::CQRSharp.Abstractions.Data.Models.Commands.CommandResult>());");
+                        $"            list.Add(Describe<{requestName}, global::CQRSharp.Abstractions.Models.Commands.CommandResult>());");
                 }
             }
         }

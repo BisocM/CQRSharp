@@ -1,5 +1,5 @@
-using CQRSharp.Abstractions.Data.Interfaces.Validation;
-using CQRSharp.Abstractions.Data.Interfaces.Outbox;
+using CQRSharp.Abstractions.Interfaces.Validation;
+using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications.Pipelines;
@@ -7,7 +7,7 @@ using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Extensions;
-using CQRSharp.Pipelines.Types.RateLimiting;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Sample.Application.Commands.Requests;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Application.Pipelines;

@@ -1,5 +1,5 @@
-﻿using CQRSharp.Abstractions.Data.Interfaces.Context;
-using CQRSharp.Abstractions.Data.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Context;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Factories;
 
@@ -13,7 +13,6 @@ public class DefaultRequestContextFactory : IRequestContextFactory
     /// <inheritdoc />
     public RequestContextBase CreateContext(IRequest request)
     {
-        //Return a default instance of RequestContextBase
         return new RequestContextBase();
     }
 }
