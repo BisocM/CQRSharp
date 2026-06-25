@@ -15,7 +15,7 @@
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <PackageReadmeFile>README.md</PackageReadmeFile>
 
-        <!-- All packages land in the repo-root .nupkgs, matching the "Local Packages" source in nuget.config. -->
+        <!-- dotnet pack drops the packages in the git-ignored repo-root .nupkgs; the publish workflow packs here then pushes. -->
         <PackageOutputPath>$(MSBuildThisFileDirectory).nupkgs</PackageOutputPath>
 
         <!-- Deterministic, source-linked, symbol-bearing packages. -->
