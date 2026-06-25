@@ -168,7 +168,6 @@ jobs:
           dotnet pack src/Domain/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Domain/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Infrastructure/CQRSharp.Generators/CQRSharp.Generators.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
 
       - name: Validate package contents
@@ -237,12 +236,6 @@ jobs:
                   observed.append((package_id, version, path))
 
                   names = set(z.namelist())
-                  if package_id == "CQRSharp.Generators":
-                      if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
-                          raise SystemExit("CQRSharp.Generators package must include analyzers/dotnet/cs/CQRSharp.Generators.dll")
-                      if any(n.startswith("lib/") for n in names):
-                          raise SystemExit("CQRSharp.Generators package must NOT include lib/ outputs (analyzer-only).")
-
                   if package_id == "CQRSharp":
                       if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
                           raise SystemExit("CQRSharp meta-package must embed analyzers/dotnet/cs/CQRSharp.Generators.dll for plug-and-play.")
@@ -255,7 +248,6 @@ jobs:
               "CQRSharp.Abstractions",
               "CQRSharp.Core",
               "CQRSharp.Pipelines",
-              "CQRSharp.Generators",
               "CQRSharp",
           }
 
