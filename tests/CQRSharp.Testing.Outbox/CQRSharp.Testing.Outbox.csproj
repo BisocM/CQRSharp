@@ -21,6 +21,9 @@
         <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2"/>
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
+        <!-- Provides [SkippableFact] + Skip.IfNot for runtime-conditional skipping (e.g. a store whose backing service
+             is absent), which xUnit v2 does not support natively. -->
+        <PackageReference Include="Xunit.SkippableFact" Version="1.5.23"/>
     </ItemGroup>
 
     <ItemGroup>

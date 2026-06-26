@@ -37,7 +37,7 @@ public abstract class OutboxStoreContractTests
             AttemptCount: attempt,
             NextRetryAt: nextRetryAt);
 
-    [Fact]
+    [SkippableFact]
     public async Task GetPending_claims_a_stored_message_and_transitions_it_to_in_progress()
     {
         var store = await CreateStoreAsync();
@@ -51,7 +51,7 @@ public abstract class OutboxStoreContractTests
         claimed[0].Status.Should().Be(OutboxMessageStatus.InProgress);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetPending_returns_messages_in_FIFO_order_by_creation_time()
     {
         var store = await CreateStoreAsync();
@@ -65,7 +65,7 @@ public abstract class OutboxStoreContractTests
         claimed.Select(m => m.Id).Should().ContainInOrder(oldest.Id, middle.Id, newest.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetPending_never_claims_more_than_the_batch_size()
     {
         var store = await CreateStoreAsync();
@@ -77,7 +77,7 @@ public abstract class OutboxStoreContractTests
         claimed.Should().HaveCount(2);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task GetPending_skips_a_message_whose_back_off_has_not_elapsed()
     {
         var store = await CreateStoreAsync();
@@ -91,7 +91,7 @@ public abstract class OutboxStoreContractTests
         claimed.Should().ContainSingle().Which.Id.Should().Be(notYetDue.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_claimed_message_is_not_returned_again_before_its_visibility_timeout()
     {
         var store = await CreateStoreAsync();
@@ -104,7 +104,7 @@ public abstract class OutboxStoreContractTests
         (await store.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_message_stuck_in_progress_is_reclaimed_after_the_visibility_timeout()
     {
         var store = await CreateStoreAsync();
@@ -120,7 +120,7 @@ public abstract class OutboxStoreContractTests
         reclaimed.Should().ContainSingle().Which.Id.Should().Be(message.Id);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task MarkAsProcessed_makes_a_message_terminal_and_is_idempotent()
     {
         var store = await CreateStoreAsync();
@@ -136,7 +136,7 @@ public abstract class OutboxStoreContractTests
         (await store.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task IncrementAttempt_raises_the_count_reschedules_to_pending_and_returns_the_new_count()
     {
         var store = await CreateStoreAsync();
@@ -157,7 +157,7 @@ public abstract class OutboxStoreContractTests
         claimed[0].LastError.Should().Be("boom");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task IncrementAttempt_on_an_unknown_message_returns_zero()
     {
         var store = await CreateStoreAsync();
@@ -167,7 +167,7 @@ public abstract class OutboxStoreContractTests
         count.Should().Be(0);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task IncrementAttempt_on_a_processed_message_does_not_resurrect_it()
     {
         var store = await CreateStoreAsync();
@@ -183,7 +183,7 @@ public abstract class OutboxStoreContractTests
         (await store.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task MarkAsFailed_dead_letters_a_message_so_it_is_never_claimed_again()
     {
         var store = await CreateStoreAsync();
@@ -197,7 +197,7 @@ public abstract class OutboxStoreContractTests
         (await store.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Marking_processed_after_a_reclaim_does_not_let_a_stale_attempt_resurrect_it()
     {
         var store = await CreateStoreAsync();
@@ -216,7 +216,7 @@ public abstract class OutboxStoreContractTests
         (await store.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Concurrent_GetPending_calls_never_claim_the_same_message_twice()
     {
         var store = await CreateStoreAsync();

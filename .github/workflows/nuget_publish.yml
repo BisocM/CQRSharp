@@ -34,6 +34,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
+    # A Redis service so the CQRSharp.Redis outbox-store contract tests run for real in CI. The test fixture connects to
+    # localhost:6379 by default; without a reachable server those tests skip cleanly instead of failing.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -163,7 +176,7 @@ jobs:
             /p:ContinuousIntegrationBuild=true \
             /p:GeneratePackageOnBuild=false 2>&1 | tee "${publish_log}"
 
-          if grep -nE 'CQRSharp\.(Core|Pipelines|Abstractions)[^]]*: warning IL[0-9]{4}' "${publish_log}"; then
+          if grep -nE 'CQRSharp\.(Core|Pipelines|Abstractions|Redis)[^]]*: warning IL[0-9]{4}' "${publish_log}"; then
             echo "::error::Native AOT publish produced trim/AOT (IL) warnings in CQRSharp source (listed above)."
             exit 1
           fi
@@ -178,6 +191,8 @@ jobs:
           dotnet pack src/Domain/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Domain/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Integrations/CQRSharp.Redis/CQRSharp.Redis.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Integrations/CQRSharp.EntityFrameworkCore/CQRSharp.EntityFrameworkCore.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
 
       - name: Validate package contents
@@ -258,6 +273,8 @@ jobs:
               "CQRSharp.Abstractions",
               "CQRSharp.Core",
               "CQRSharp.Pipelines",
+              "CQRSharp.Redis",
+              "CQRSharp.EntityFrameworkCore",
               "CQRSharp",
           }
 

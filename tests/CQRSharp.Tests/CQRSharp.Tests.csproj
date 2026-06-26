@@ -30,7 +30,15 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0"/>
         <!-- FakeTimeProvider drives the clock seam deterministically in timing tests (no real Task.Delay). -->
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
+        <PackageReference Include="StackExchange.Redis" Version="2.8.16"/>
+        <!-- EF Core Sqlite pulls the SQLitePCLRaw e_sqlite3 native lib in transitively for the EF outbox-store tests;
+             pin the newest available bundle. The remaining advisory is a SQLite-native CVE with no patched release yet,
+             unreachable here (in-memory test databases, no untrusted SQL), and it ships in no package — only the EF
+             tests reference Sqlite. It is suppressed surgically by id below so the audit stays fully active otherwise. -->
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10"/>
+        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q"/>
         <PackageReference Include="Moq" Version="4.20.72"/>
         <PackageReference Include="xunit" Version="2.9.3"/>
         <PackageReference Include="xunit.runner.console" Version="2.9.3">
@@ -55,6 +63,8 @@
         <ProjectReference Include="..\..\src\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
         <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
         <ProjectReference Include="..\CQRSharp.Testing.Outbox\CQRSharp.Testing.Outbox.csproj"/>
+        <ProjectReference Include="..\..\src\Integrations\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
+        <ProjectReference Include="..\..\src\Integrations\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
     </ItemGroup>
 
     <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator
