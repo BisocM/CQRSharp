@@ -1,3 +1,4 @@
+using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Mediation;
@@ -161,5 +162,21 @@ public sealed class CqrsBuilderTests
 
         var commandResult = await cqrs.Send(new TestCommand());
         commandResult.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UseInMemoryIdempotency_registers_a_working_idempotency_store()
+    {
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b
+            .UseIdempotency()
+            .UseInMemoryIdempotency());
+
+        using var provider = services.BuildServiceProvider();
+        var store = provider.GetService<IIdempotencyStore>();
+
+        store.Should().NotBeNull("UseInMemoryIdempotency registers the in-memory idempotency store");
+        (await store!.TryClaimAsync("k", CancellationToken.None)).Should().BeTrue();
+        (await store.TryClaimAsync("k", CancellationToken.None)).Should().BeFalse("the key is already claimed");
     }
 }

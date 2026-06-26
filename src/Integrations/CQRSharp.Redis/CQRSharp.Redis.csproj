@@ -21,11 +21,11 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <PackageTags>CQRS;CQRSharp;Redis;Outbox;NativeAOT</PackageTags>
-        <Title>Redis integration for CQRSharp, providing a durable transactional-outbox store.</Title>
-        <Description>A 100% Native-AOT-clean Redis integration for CQRSharp. Its first feature is a durable IOutboxStore that persists outbox messages as discrete Redis hash fields (binary payloads stored verbatim) and runs all claim, lease, and finalize logic as atomic server-side Lua, so two processors never claim the same message and crashed claimants are reclaimed after a visibility timeout.</Description>
+        <PackageTags>CQRS;CQRSharp;Redis;Outbox;Idempotency;NativeAOT</PackageTags>
+        <Title>Redis integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
+        <Description>A 100% Native-AOT-clean Redis integration for CQRSharp. Its first feature is a durable IOutboxStore that persists outbox messages as discrete Redis hash fields (binary payloads stored verbatim) and runs all claim, lease, and finalize logic as atomic server-side Lua, so two processors never claim the same message and crashed claimants are reclaimed after a visibility timeout. It also provides a durable IIdempotencyStore that rejects duplicate requests via atomic set-if-not-exists claims with a server-side expiry window.</Description>
         <PackageReleaseNotes>
-            Version 3.1.0. Adds the CQRSharp.Redis durable outbox store.
+            Version 3.1.0. Adds durable Redis-backed outbox and idempotency stores.
         </PackageReleaseNotes>
     </PropertyGroup>
 

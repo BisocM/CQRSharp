@@ -39,6 +39,9 @@ public sealed class CqrsBuilder : ICqrsBuilder
     private bool _useInMemoryOutbox;
     private Action<InMemoryOutboxStoreOptions>? _configureInMemoryOutbox;
 
+    private bool _useInMemoryIdempotency;
+    private Action<InMemoryIdempotencyStoreOptions>? _configureInMemoryIdempotency;
+
     private bool _useIdempotency;
 
     /// <summary>
@@ -205,6 +208,14 @@ public sealed class CqrsBuilder : ICqrsBuilder
         return this;
     }
 
+    /// <inheritdoc />
+    public ICqrsBuilder UseInMemoryIdempotency(Action<InMemoryIdempotencyStoreOptions>? configure = null)
+    {
+        _useInMemoryIdempotency = true;
+        _configureInMemoryIdempotency = configure;
+        return this;
+    }
+
     /// <summary>
     ///     Applies the accumulated intent in one fixed canonical sequence, independent of the order the verbs were
     ///     called: core <c>AddCqrs</c> first, then the authoritative <see cref="TimeProvider" /> override, then the
@@ -233,9 +244,12 @@ public sealed class CqrsBuilder : ICqrsBuilder
             Services.AddSingleton(_timeProviderFactory);
         }
 
-        // 3) In-memory outbox store, if requested.
+        // 3) In-memory stores, if requested.
         if (_useInMemoryOutbox)
             Services.AddInMemoryOutboxStore(_configureInMemoryOutbox);
+
+        if (_useInMemoryIdempotency)
+            Services.AddInMemoryIdempotencyStore(_configureInMemoryIdempotency);
 
         // 4) Idempotency behavior, if requested (not part of the pack's option surface).
         if (_useIdempotency)

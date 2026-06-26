@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Core.Background.Outbox;
@@ -8,6 +9,7 @@ using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Factories;
+using CQRSharp.Core.Idempotency;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
@@ -157,6 +159,31 @@ public static class DependencyInjectionExtensions
 
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IOutboxStore, InMemoryOutboxStore>();
+
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the in-process in-memory idempotency store as the <see cref="IIdempotencyStore" />, so requests
+    ///     implementing <c>IIdempotentRequest</c> are deduplicated. The store is NOT durable — claims live in process
+    ///     memory and are lost on restart — so it deduplicates only within a single process lifetime; use a database-
+    ///     or Redis-backed store for cross-process at-most-once semantics.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">An optional action to configure the in-memory idempotency store options.</param>
+    /// <returns>The service collection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddInMemoryIdempotencyStore(
+        this IServiceCollection services,
+        Action<InMemoryIdempotencyStoreOptions>? configure = null)
+    {
+        services.AddOptions<InMemoryIdempotencyStoreOptions>()
+            .Configure(opts => configure?.Invoke(opts))
+            .Validate(o => o.Retention > TimeSpan.Zero,
+                "InMemoryIdempotencyStoreOptions.Retention must be greater than zero.")
+            .ValidateOnStart();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
         return services;
     }

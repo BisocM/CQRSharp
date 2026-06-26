@@ -132,4 +132,11 @@ public interface ICqrsBuilder
     ///     single-node demos only.
     /// </summary>
     ICqrsBuilder UseInMemoryOutbox(Action<InMemoryOutboxStoreOptions>? configure = null);
+
+    /// <summary>
+    ///     Registers the in-process in-memory idempotency store. Order-insensitive: it records the intent (and any
+    ///     options) so the store is registered during the build. The store is not durable — for development, tests, and
+    ///     single-node demos only; pair it with <see cref="UseIdempotency" /> to enable duplicate rejection.
+    /// </summary>
+    ICqrsBuilder UseInMemoryIdempotency(Action<InMemoryIdempotencyStoreOptions>? configure = null);
 }
