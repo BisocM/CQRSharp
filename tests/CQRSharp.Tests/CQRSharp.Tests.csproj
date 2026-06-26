@@ -54,6 +54,7 @@
                           ReferenceOutputAssembly="false"/>
         <ProjectReference Include="..\..\src\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
         <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Testing.Outbox\CQRSharp.Testing.Outbox.csproj"/>
     </ItemGroup>
 
     <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator

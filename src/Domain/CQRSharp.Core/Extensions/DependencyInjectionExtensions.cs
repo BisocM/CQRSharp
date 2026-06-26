@@ -119,6 +119,32 @@ public static class DependencyInjectionExtensions
         return services;
     }
 
+    /// <summary>
+    ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />. The store is NOT
+    ///     durable — messages live in process memory and are lost on restart — so it is intended for development,
+    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). The outbox
+    ///     still needs the source-generated notification serializer and an outbox-enabled <c>AddCqrs</c> for the
+    ///     processor to actually run.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">An optional action to configure the in-memory store options.</param>
+    /// <returns>The service collection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddInMemoryOutboxStore(
+        this IServiceCollection services,
+        Action<InMemoryOutboxStoreOptions>? configure = null)
+    {
+        services.AddOptions<InMemoryOutboxStoreOptions>()
+            .Configure(opts => configure?.Invoke(opts))
+            .Validate(o => o.VisibilityTimeout > TimeSpan.Zero,
+                "InMemoryOutboxStoreOptions.VisibilityTimeout must be greater than zero.")
+            .ValidateOnStart();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IOutboxStore, InMemoryOutboxStore>();
+
+        return services;
+    }
+
 	/// <summary>
 	///     Registers a custom implementation of INotificationSerializer as a singleton.
 	///     This method is compatible with trimming and Native AOT.
