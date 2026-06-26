@@ -18,6 +18,11 @@ namespace CQRSharp.Tests.Core.TaskQueue;
 public class ControllableDispatcher : IDirectNotificationDispatcher
 {
     private readonly int _failCount;
+    private readonly List<INotification> _published = new();
+
+    // Completed once a notification is published successfully (past any configured failures), so tests can await the
+    // actual asynchronous dispatch instead of sleeping a fixed interval and racing the background pump under load.
+    private readonly TaskCompletionSource _publishedSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _currentCallCount;
 
     public ControllableDispatcher(int failCount = 0)
@@ -25,8 +30,19 @@ public class ControllableDispatcher : IDirectNotificationDispatcher
         _failCount = failCount;
     }
 
-    public List<INotification> PublishedNotifications { get; } = new();
     public int CallCount => _currentCallCount;
+
+    /// <summary>Completes once a notification has been published successfully (past any configured failures).</summary>
+    public Task Published => _publishedSignal.Task;
+
+    /// <summary>A thread-safe snapshot of the notifications published so far.</summary>
+    public IReadOnlyList<INotification> Snapshot()
+    {
+        lock (_published)
+        {
+            return new List<INotification>(_published);
+        }
+    }
 
     public Task Publish(INotification notification, CancellationToken token = default) =>
         Publish<INotification>(notification, token);
@@ -37,11 +53,12 @@ public class ControllableDispatcher : IDirectNotificationDispatcher
 
         if (_currentCallCount <= _failCount) throw new InvalidOperationException("Dispatcher configured to fail.");
 
-        lock (PublishedNotifications)
+        lock (_published)
         {
-            PublishedNotifications.Add(notification);
+            _published.Add(notification);
         }
 
+        _publishedSignal.TrySetResult();
         return CompletedTask;
     }
 }

@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Threading.Channels;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Types;
@@ -299,10 +298,10 @@ public class BackgroundTaskManagerTests
 
         // Act
         await queue.QueueBackgroundWorkItemAsync(_ => CompletedTask, CancellationToken.None);
-        await Delay(100); // Allow time for notification to be processed
+        await dispatcher.Published.WaitAsync(TimeSpan.FromSeconds(5)); // gate on the actual async dispatch, not a fixed sleep
 
         // Assert
-        var notification = Assert.Single((IEnumerable)dispatcher.PublishedNotifications);
+        var notification = Assert.Single(dispatcher.Snapshot());
         Assert.IsType<TaskEnqueuedNotification>(notification);
     }
 
@@ -323,11 +322,11 @@ public class BackgroundTaskManagerTests
 
         // Act
         await queue.QueueBackgroundWorkItemAsync(_ => CompletedTask, CancellationToken.None);
-        await Delay(100); // Wait for retries
+        await dispatcher.Published.WaitAsync(TimeSpan.FromSeconds(5)); // wait for the retry loop to reach the successful publish
 
         // Assert
         Assert.Equal(3, dispatcher.CallCount); // 2 failures + 1 success
-        Assert.Single((IEnumerable)dispatcher.PublishedNotifications);
+        Assert.Single(dispatcher.Snapshot());
         queue.Dispose();
     }
 

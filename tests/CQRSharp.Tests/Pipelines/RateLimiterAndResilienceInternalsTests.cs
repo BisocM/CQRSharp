@@ -2,6 +2,7 @@ using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Options;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Pipelines;
 
@@ -58,17 +59,19 @@ public class RateLimiterAndResilienceInternalsTests
     }
 
     [Fact(DisplayName = "Fractional refill below 1.0 keeps the bucket empty (tokens < 1 branch)")]
-    public async Task FractionalRefill_BelowOneToken_StaysBlocked()
+    public void FractionalRefill_BelowOneToken_StaysBlocked()
     {
-        // 2 tokens/s == one token per 500ms. After draining the single token and waiting only ~50ms, well under
-        // 0.1 of a token has accrued, so _tokens stays < 1 and the request is denied. This exercises the
-        // "refilled but still below the 1-token threshold" branch of TryConsume.
-        using var limiter = NewLimiter(BaseOptions(1, 2));
+        // 2 tokens/s == one token per 500ms. After draining the single token and advancing the clock only 50ms, well
+        // under 0.1 of a token has accrued, so _tokens stays < 1 and the request is denied. Driving the bucket through a
+        // FakeTimeProvider keeps this deterministic — a real-clock wait could let a whole token accrue under CI load and
+        // flip the assertion. This exercises the "refilled but still below the 1-token threshold" branch of TryConsume.
+        var time = new FakeTimeProvider();
+        using var limiter = new RateLimiter(Options.Create(BaseOptions(1, 2)), time);
 
         limiter.AllowRequest("frac", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeTrue();
         limiter.AllowRequest("frac", typeof(RateLimiterAndResilienceInternalsTests)).Should().BeFalse();
 
-        await Task.Delay(50);
+        time.Advance(TimeSpan.FromMilliseconds(50));
 
         limiter.AllowRequest("frac", typeof(RateLimiterAndResilienceInternalsTests))
             .Should().BeFalse("a sub-threshold partial refill must not grant a whole token");
