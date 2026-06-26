@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using CQRSharp.Core.Diagnostics;
 using FluentAssertions;
@@ -13,7 +14,9 @@ public class CqrsActivitySourceTests
     [Fact(DisplayName = "StartRequest emits a named span when a listener is subscribed")]
     public void StartRequest_EmitsNamedSpan_WhenListening()
     {
-        var started = new List<Activity>();
+        // The listener is registered process-globally, so its ActivityStarted callback fires concurrently for spans
+        // emitted by dispatch tests running in parallel; a thread-safe collection avoids racing on the captured list.
+        var started = new ConcurrentBag<Activity>();
         using var listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == CqrsActivitySource.Name,
