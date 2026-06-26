@@ -8,7 +8,7 @@
         <TargetFrameworks>net8.0</TargetFrameworks>
         <!-- The analyzer/generator diagnostics are exercised by unit tests; suppress them on this project's own code.
              CQRGEN006 fires on the intentionally-private test handler fixtures (which are registered manually). -->
-        <NoWarn>$(NoWarn);CQRA001;CQRA003;CQRA004;CQRA005;CQRA006;CQRGEN006</NoWarn>
+        <NoWarn>$(NoWarn);CQRA001;CQRA003;CQRA004;CQRA005;CQRA006;CQRA007;CQRGEN006</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">

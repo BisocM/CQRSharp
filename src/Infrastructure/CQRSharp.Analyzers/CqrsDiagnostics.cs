@@ -58,4 +58,14 @@ internal static class CqrsDiagnostics
         true,
         "Publishing a notification with no subscriber is legal but is often unintended.",
         customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor RateLimitingContextMissing = new(
+        "CQRA007",
+        "Request context does not opt into rate limiting",
+        "Rate limiting is configured, but request '{0}' declares context type '{1}', which does not implement CQRSharp.Pipelines.IRateLimitedContext, so the request is never rate limited",
+        Category,
+        DiagnosticSeverity.Warning,
+        true,
+        "The rate-limiting behavior only throttles a request whose context implements IRateLimitedContext (it supplies the user/request identifiers the limiter keys on); a request whose context does not implement it silently passes through unthrottled. Implement IRateLimitedContext on the context to opt in.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
 }

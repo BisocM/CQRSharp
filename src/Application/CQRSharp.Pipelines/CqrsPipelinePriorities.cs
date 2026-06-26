@@ -8,6 +8,14 @@ namespace CQRSharp.Pipelines;
 public static class CqrsPipelinePriorities
 {
     /// <summary>
+    ///     Rate-limiting behavior. Pinned to the minimum so it runs outermost — before any other behavior — so a
+    ///     throttled request is rejected before logging, resilience, transactions, or the handler do any work.
+    ///     The value is <c>int.MinValue + 1</c> (one above the absolute floor) to leave room for a future behavior
+    ///     that must order itself ahead of rate limiting.
+    /// </summary>
+    public const int RateLimiting = int.MinValue + 1;
+
+    /// <summary>
     ///     Logging behavior. Runs outermost so it measures and reports the full pipeline (including retries).
     /// </summary>
     public const int Logging = -100;

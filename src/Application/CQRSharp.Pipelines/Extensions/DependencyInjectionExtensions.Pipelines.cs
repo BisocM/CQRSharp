@@ -177,11 +177,22 @@ public static class DependencyInjectionExtensions
         return services;
     }
 
+    /// <summary>
+    ///     Registers the optional CQRSharp pipeline behaviors selected by <paramref name="configure" /> in one call.
+    ///     Idempotent: a second call with the same service collection is a no-op (guarded by a registered marker), so
+    ///     the pack cannot stack duplicate behaviors.
+    /// </summary>
     public static IServiceCollection AddCqrsPipelinePack(
         this IServiceCollection services,
         Action<CqrsPipelinePackOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // Idempotency guard: if the marker is already registered the pack ran before, so bail out before adding any
+        // behavior a second time (which would stack duplicate registrations). Otherwise register the marker and proceed.
+        if (services.Any(d => d.ServiceType == typeof(CqrsPipelinePackMarker)))
+            return services;
+        services.TryAddSingleton<CqrsPipelinePackMarker>();
 
         // Ensure the clock seam is available even if the pipeline pack is wired without the core AddCqrs call.
         services.TryAddSingleton(TimeProvider.System);

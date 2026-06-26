@@ -80,7 +80,7 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            var declaredContext = GetDeclaredContext(requestType, requestBase);
+            var declaredContext = CqrsContextResolution.GetDeclaredContext(requestType, requestBase);
             if (declaredContext is null) continue; // request does not declare a context via RequestBase<TContext>
             if (SymbolEqualityComparer.Default.Equals(handlerContext, declaredContext)) continue;
 
@@ -93,14 +93,5 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
                 requestType.Name,
                 declaredContext.Name));
         }
-    }
-
-    private static ITypeSymbol? GetDeclaredContext(ITypeSymbol requestType, INamedTypeSymbol requestBase)
-    {
-        for (var current = requestType as INamedTypeSymbol; current is not null; current = current.BaseType)
-            if (current.IsGenericType && SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, requestBase))
-                return current.TypeArguments[0];
-
-        return null;
     }
 }
