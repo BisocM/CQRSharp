@@ -1,21 +1,11 @@
-using CQRSharp.Abstractions.Interfaces.Context;
+using System;
 
 namespace CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
 
 /// <summary>
-///     A mandatory interface to be implemented on all contexts where you intend to use the built-in rate limiting
-///     behaviour.
+///     Backwards-compatibility shim. <c>IRateLimitedContext</c> moved to the top-level <c>CQRSharp.Pipelines</c>
+///     namespace in 3.1.0; this alias keeps existing implementations compiling and is removed in 4.0. Update your
+///     <c>using</c> to <c>CQRSharp.Pipelines</c>.
 /// </summary>
-public interface IRateLimitedContext : IRequestContext
-{
-    /// <summary>
-    ///     The ID of the request. May be custom-defined by the user in their respective context factory.
-    /// </summary>
-    public string RequestId { get; set; }
-
-    /// <summary>
-    ///     The ID of the user to whom the request belongs to. May be custom-defined by the user in their respective context
-    ///     factory.
-    /// </summary>
-    public string UserId { get; set; }
-}
+[Obsolete("IRateLimitedContext moved to the CQRSharp.Pipelines namespace. Change the using to 'CQRSharp.Pipelines'; this alias is removed in 4.0.")]
+public interface IRateLimitedContext : CQRSharp.Pipelines.IRateLimitedContext;

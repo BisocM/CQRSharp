@@ -34,6 +34,10 @@ dotnet add package CQRSharp
 ```
 
 The `CQRSharp` meta-package pulls in the abstractions, core runtime, and the source generator for a plug-and-play setup.
+On projects with `ImplicitUsings` enabled (the .NET 8+ default) it also ships **global usings** for the authoring
+surface, so the snippets below need no `using` directives — `CommandBase`, `ICommandHandler<>`, `CommandResult`,
+`ICqrsDispatcher`, `AddCqrsGenerated`, and friends are already in scope. (Opt out with
+`<CQRSharpImplicitUsings>false</CQRSharpImplicitUsings>`.)
 
 ## Quick Start
 
@@ -41,18 +45,12 @@ Register CQRSharp on your host. `AddCqrsGenerated` is emitted by the source gene
 handler:
 
 ```csharp
-using CQRSharp.Core.Extensions;
-
 services.AddCqrsGenerated();
 ```
 
 Define a command and its handler:
 
 ```csharp
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
-
 public sealed class CreateUser : CommandBase
 {
     public required string Name { get; init; }

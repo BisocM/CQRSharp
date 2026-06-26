@@ -48,4 +48,10 @@
               Visible="false"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Ship convenience global usings (buildTransitive) so a consumer can author handlers without importing
+             five separate namespaces. See build/CQRSharp.props. -->
+        <None Include="build/CQRSharp.props" Pack="true" PackagePath="buildTransitive/CQRSharp.props" Visible="false"/>
+    </ItemGroup>
+
 </Project>

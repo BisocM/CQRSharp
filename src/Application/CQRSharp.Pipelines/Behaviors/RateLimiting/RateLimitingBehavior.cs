@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 

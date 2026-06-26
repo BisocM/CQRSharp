@@ -1,5 +1,5 @@
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Tests.Shared.CollisionsA;
 

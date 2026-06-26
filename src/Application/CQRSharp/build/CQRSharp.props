@@ -1,0 +1,26 @@
+<Project>
+
+  <!--
+    Convenience global usings for the CQRSharp authoring surface, so a consumer can write a handler without importing
+    five separate namespaces. Active only when the consuming project has ImplicitUsings enabled (the default for .NET 8+
+    projects). Opt out — without turning off all implicit usings — by setting:
+        <PropertyGroup><CQRSharpImplicitUsings>false</CQRSharpImplicitUsings></PropertyGroup>
+  -->
+  <ItemGroup Condition="('$(ImplicitUsings)' == 'enable' Or '$(ImplicitUsings)' == 'true') And '$(CQRSharpImplicitUsings)' != 'false'">
+    <Using Include="CQRSharp.Abstractions.Interfaces.Markers.Request" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Markers.Command" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Markers.Query" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Markers.Stream" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Handlers" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Context" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Notifications" />
+    <Using Include="CQRSharp.Abstractions.Interfaces.Validation" />
+    <Using Include="CQRSharp.Abstractions.Models.Commands" />
+    <Using Include="CQRSharp.Abstractions.Models.Requests" />
+    <Using Include="CQRSharp.Core.Mediation" />
+    <Using Include="CQRSharp.Core.Extensions" />
+    <Using Include="CQRSharp.Pipelines" />
+    <Using Include="CQRSharp.Pipelines.Extensions" />
+  </ItemGroup>
+
+</Project>

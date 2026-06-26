@@ -3,7 +3,7 @@ using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Models.Requests;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Pipelines.Behaviors.Timeout;
 using CQRSharp.Pipelines.Options;
