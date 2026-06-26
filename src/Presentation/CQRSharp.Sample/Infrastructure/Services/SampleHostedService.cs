@@ -120,8 +120,20 @@ public sealed class SampleHostedService(
             .ConfigureAwait(false);
         Require(userCreated.UserId == userId, "UserCreatedNotification handler observed the wrong userId.");
 
+        // CommandInitiated/CommandCompleted are published synchronously during Send above, so their pipeline counts are
+        // already recorded here.
         RequireNotificationPipelineExecuted(diagnostics, typeof(CommandInitiatedNotification));
         RequireNotificationPipelineExecuted(diagnostics, typeof(CommandCompletedNotification));
+
+        // UserCreatedNotification is dispatched asynchronously by the outbox processor, so its pipeline's "after" stage
+        // completes on the processor thread a moment after the handler signals WaitForUserCreatedAsync above. Wait for the
+        // pipeline to finish before asserting it, rather than racing the processor thread.
+        await WaitUntilAsync(
+            () => diagnostics.GetNotificationPipelineBeforeCount(typeof(UserCreatedNotification)) > 0
+                  && diagnostics.GetNotificationPipelineAfterCount(typeof(UserCreatedNotification)) > 0,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(25),
+            cancellationToken).ConfigureAwait(false);
         RequireNotificationPipelineExecuted(diagnostics, typeof(UserCreatedNotification));
     }
 
