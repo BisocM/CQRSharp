@@ -20,4 +20,12 @@ public interface ICqrsDiagnostics
     ///     Describes all request bindings known to the diagnostics system in the current scope.
     /// </summary>
     IReadOnlyList<CqrsRequestBinding> DescribeAllRequests();
+
+    /// <summary>
+    ///     Inspects the resolved CQRSharp services and options for global, non-per-request misconfigurations —
+    ///     an unbacked outbox mode, a transactional outbox that cannot detect a transaction, notifications that
+    ///     bypass the outbox, or a missing generated registry — returning one issue per problem (empty when clean).
+    ///     The only implementer is the source-generated diagnostics class, re-emitted in lockstep with this method.
+    /// </summary>
+    IReadOnlyList<CqrsBindingIssue> DescribeConfiguration();
 }

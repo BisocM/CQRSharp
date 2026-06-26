@@ -83,6 +83,11 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 var diagnosticsSourceCode = GenerateDiagnostics(compilation, candidateClasses!);
                 spc.AddSource("GeneratedCqrsDiagnostics.g.cs", SourceText.From(diagnosticsSourceCode, Encoding.UTF8));
 
+                // Generate the compile-time notification registry (handled notifications + stable-name lookup)
+                // consumed by configuration inspection. Always emitted, even with zero notifications.
+                var notificationRegistrySourceCode = GenerateNotificationRegistry(compilation, candidateClasses!, stableNotifications);
+                spc.AddSource("GeneratedCqrsNotificationRegistry.g.cs", SourceText.From(notificationRegistrySourceCode, Encoding.UTF8));
+
                 // Emit assembly markers (one per handled request/notification) so analyzers can discover handlers
                 // across referenced assemblies.
                 var markersSourceCode = GenerateAssemblyMarkers(compilation, candidateClasses!);

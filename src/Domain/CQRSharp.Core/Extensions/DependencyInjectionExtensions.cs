@@ -5,6 +5,7 @@ using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Background.Outbox.Types;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Factories;
 using CQRSharp.Core.Mediation;
@@ -14,6 +15,7 @@ using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace CQRSharp.Core.Extensions;
 
@@ -33,11 +35,17 @@ public static class DependencyInjectionExtensions
 	///     An optional action to configure dispatcher options such as <see cref="DispatcherOptions.RunMode" /> and
 	///     <see cref="DispatcherOptions.ScopeMode" />.
 	/// </param>
+	/// <param name="configureValidation">
+	///     An optional action to configure the fail-fast startup validator (its <see cref="CqrsValidationPolicy" />).
+	///     Defaults to <see cref="CqrsValidationPolicy.ThrowOnError" />, aborting host start when a configuration error
+	///     is found.
+	/// </param>
 	/// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
 	public static IServiceCollection AddCqrs(this IServiceCollection services,
         Action<BackgroundTaskQueueOptions>? configureQueue = null,
         Action<OutboxOptions>? configureOutbox = null,
-        Action<DispatcherOptions>? configureDispatcher = null)
+        Action<DispatcherOptions>? configureDispatcher = null,
+        Action<CqrsStartupValidationOptions>? configureValidation = null)
     {
         services.AddOptions<BackgroundTaskQueueOptions>()
             .Configure(opts => configureQueue?.Invoke(opts))
@@ -87,6 +95,14 @@ public static class DependencyInjectionExtensions
         services.AddHostedService<BackgroundTaskQueueConsumer>();
 
         services.AddLogging();
+
+        // Fail-fast startup validation: surfaces silent fallbacks (an unbacked outbox, a transactional outbox that
+        // cannot detect a transaction, outbox-bypassing notifications, a missing generated registry) as loud, early
+        // failures at host start. TryAddEnumerable keeps the hosted service single even if AddCqrs runs twice.
+        services.AddOptions<CqrsStartupValidationOptions>()
+            .Configure(o => configureValidation?.Invoke(o))
+            .ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CqrsStartupValidator>());
 
         if (outboxProbe is not null)
             if (outboxProbe.Mode != OutboxMode.Disabled)

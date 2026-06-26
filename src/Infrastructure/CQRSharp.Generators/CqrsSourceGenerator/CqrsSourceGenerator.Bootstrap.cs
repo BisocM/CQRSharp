@@ -18,11 +18,11 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("    public static class CqrsGeneratedBootstrap");
         sb.AppendLine("    {");
         sb.AppendLine(
-            "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null)");
+            "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null, Action<CqrsStartupValidationOptions>? configureValidation = null)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
         sb.AppendLine();
-        sb.AppendLine("            services.AddCqrs(configureQueue, configureOutbox, configureDispatcher);");
+        sb.AppendLine("            services.AddCqrs(configureQueue, configureOutbox, configureDispatcher, configureValidation);");
         sb.AppendLine("            services.AddGenerated();");
         sb.AppendLine("            return services;");
         sb.AppendLine("        }");
