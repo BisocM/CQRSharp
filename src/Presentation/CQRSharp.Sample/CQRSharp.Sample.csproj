@@ -28,6 +28,10 @@
     <ItemGroup>
         <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <ProjectReference Include="..\..\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <!-- The Redis integration is referenced only so the NativeAOT Sample publish exercises its IL (the publish
+             workflow greps the published output for Redis types). It is registered guarded and never connected — the
+             in-memory store stays the one used at runtime — see Program.cs. -->
+        <ProjectReference Include="..\..\Integrations\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
         <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"/>

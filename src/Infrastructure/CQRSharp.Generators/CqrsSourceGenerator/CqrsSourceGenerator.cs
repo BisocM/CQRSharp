@@ -56,7 +56,7 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
 
                 // Generate the one-call DI bootstrap (AddCqrs + AddGenerated)
-                var bootstrapSourceCode = GenerateBootstrap();
+                var bootstrapSourceCode = GenerateBootstrap(compilation);
                 spc.AddSource("CqrsGeneratedBootstrap.g.cs", SourceText.From(bootstrapSourceCode, Encoding.UTF8));
 
                 // Generate AOT-safe outbox notification JSON serialization (only for stable-name notifications).

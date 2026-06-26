@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Validation;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Factories;
@@ -29,9 +28,36 @@ public class Program
         var host = Host.CreateDefaultBuilder(args)
             .ConfigureServices((_, services) =>
             {
-                services.AddCqrsGenerated(
-                    opts => { opts.EnableMetrics = true; },
-                    opts => { opts.Mode = OutboxMode.Transactional; });
+                // The fluent builder wires CQRSharp in one call. Verb order is irrelevant — the same registrations
+                // and the same resolved pipeline result whatever order these are written in. UseInMemoryOutbox()
+                // registers the production in-process store shipped in CQRSharp.Core (replacing a hand-rolled demo
+                // store); ValidateOnStart() keeps the fail-fast startup validator active.
+                services.AddCqrsGenerated(b => b
+                    .ConfigureQueue(opts => opts.EnableMetrics = true)
+                    .ConfigureOutbox(opts => opts.Mode = OutboxMode.Transactional)
+                    .UseInMemoryOutbox()
+                    .UseUnitOfWork(provider => new InMemoryUnitOfWork(
+                        provider.GetRequiredService<ILogger<InMemoryUnitOfWork>>(),
+                        provider))
+                    .UseRateLimiting(options =>
+                    {
+                        options.MaxTokens = 2;
+                        options.ReplenishRatePerSecond = 1;
+                        options.Scope = RateLimitScope.PerCommand;
+                    })
+                    .UseTimeout(options => options.Timeout = TimeSpan.FromSeconds(2))
+                    .UseResilience(options =>
+                    {
+                        options.MaxRetries = 2;
+                        options.BaseDelay = TimeSpan.Zero;
+                    })
+                    .ValidateOnStart());
+
+                // Backstop for the NativeAOT publish workflow: referencing and registering the Redis integration pulls
+                // its IL into the AOT-published output (the workflow greps for it). It is never actually used —
+                // UseInMemoryOutbox() above already won the IOutboxStore slot (both register via TryAdd), and
+                // abortConnect=false with a lazy multiplexer factory means nothing connects at startup or runtime.
+                services.AddRedisOutboxStore("127.0.0.1:6379,abortConnect=false");
 
                 services.AddSingleton<SampleUserContext>();
                 services.AddSingleton<SampleDiagnostics>();
@@ -39,36 +65,12 @@ public class Program
 
                 services.AddSingleton<CustomInMemoryUserStore>();
 
-                services.AddSingleton<InMemoryOutboxStore>();
-                services.AddSingleton<IOutboxStore>(sp => sp.GetRequiredService<InMemoryOutboxStore>());
-
-                services.Configure<OutboxProcessorOptions>(opts => { opts.PollingInterval = TimeSpan.FromMilliseconds(100); });
+                services.Configure<OutboxProcessorOptions>(opts => opts.PollingInterval = TimeSpan.FromMilliseconds(100));
 
                 services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingPipelineBehavior<,>));
                 services.AddTransient(typeof(INotificationPipelineBehavior<>), typeof(NotificationLoggingBehavior<>));
 
                 services.AddTransient<IRequestValidator<ValidatedCommand>, ValidatedCommandValidator>();
-
-                services.AddCqrsPipelinePack(pack =>
-                {
-                    pack.UnitOfWorkFactory = provider => new InMemoryUnitOfWork(
-                        provider.GetRequiredService<ILogger<InMemoryUnitOfWork>>(),
-                        provider);
-
-                    pack.ConfigureRateLimiting = options =>
-                    {
-                        options.MaxTokens = 2;
-                        options.ReplenishRatePerSecond = 1;
-                        options.Scope = RateLimitScope.PerCommand;
-                    };
-
-                    pack.ConfigureTimeout = options => { options.Timeout = TimeSpan.FromSeconds(2); };
-                    pack.ConfigureResilience = options =>
-                    {
-                        options.MaxRetries = 2;
-                        options.BaseDelay = TimeSpan.Zero;
-                    };
-                });
 
                 services.AddTransient<IRequestContextFactory<SampleRequestContext>, CustomRequestContextFactory>();
                 services.AddHostedService<SampleHostedService>();

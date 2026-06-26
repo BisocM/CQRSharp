@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Abstractions.Models.Outbox;
 using CQRSharp.Abstractions.Models.Validation;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Diagnostics;
@@ -15,7 +14,6 @@ using CQRSharp.Sample.Application.Queries.Requests;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Domain.Events;
 using CQRSharp.Sample.Infrastructure.Interceptors;
-using CQRSharp.Sample.Infrastructure.Persistence;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +23,6 @@ namespace CQRSharp.Sample.Infrastructure.Services;
 
 public sealed class SampleHostedService(
     IServiceScopeFactory scopeFactory,
-    InMemoryOutboxStore outboxStore,
     SampleUserContext userContext,
     SampleDiagnostics diagnostics,
     IBackgroundTaskManager backgroundTaskManager,
@@ -53,7 +50,7 @@ public sealed class SampleHostedService(
             await RunScopeSemanticsTestAsync(cqrs, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
 
             var userId = Guid.NewGuid();
-            await RunOutboxAndRequestTestAsync(cqrs, outboxStore, diagnostics, userContext.UserId, userId, stoppingToken)
+            await RunOutboxAndRequestTestAsync(cqrs, diagnostics, userContext.UserId, userId, stoppingToken)
                 .ConfigureAwait(false);
 
             await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
@@ -101,7 +98,6 @@ public sealed class SampleHostedService(
 
     private static async Task RunOutboxAndRequestTestAsync(
         ICqrsDispatcher cqrs,
-        InMemoryOutboxStore outboxStore,
         SampleDiagnostics diagnostics,
         string expectedUserId,
         Guid userId,
@@ -117,22 +113,9 @@ public sealed class SampleHostedService(
         Require(context.UserId == expectedUserId,
             $"CreateUserCommand context userId '{context.UserId}' did not match expected '{expectedUserId}'.");
 
-        await WaitUntilAsync(
-            () => outboxStore.Snapshot().Any(m => m.NotificationType == SampleNotificationNames.UserCreated),
-            TimeSpan.FromSeconds(5),
-            TimeSpan.FromMilliseconds(25),
-            cancellationToken).ConfigureAwait(false);
-
-        await WaitUntilAsync(
-            () =>
-            {
-                var msg = GetUserCreatedOutboxMessage(outboxStore);
-                return msg is { Status: OutboxMessageStatus.Processed };
-            },
-            TimeSpan.FromSeconds(5),
-            TimeSpan.FromMilliseconds(25),
-            cancellationToken).ConfigureAwait(false);
-
+        // The notification only reaches its handler after the transactional outbox stored the message, the processor
+        // claimed it, dispatched it, and marked it processed. Waiting for it is therefore the end-to-end proof that the
+        // (now Core-shipped, in-process) outbox store works — no need to peek at the store's private state.
         var userCreated = await diagnostics.WaitForUserCreatedAsync(userId, TimeSpan.FromSeconds(5), cancellationToken)
             .ConfigureAwait(false);
         Require(userCreated.UserId == userId, "UserCreatedNotification handler observed the wrong userId.");
@@ -415,9 +398,6 @@ public sealed class SampleHostedService(
         RequireSorted(streamBinding.Pipeline, "StreamProbeRequest pipeline");
         RequireSorted(streamBinding.ExemptedPipeline, "StreamProbeRequest exempted pipeline");
     }
-
-    private static OutboxMessage? GetUserCreatedOutboxMessage(InMemoryOutboxStore outboxStore)
-        => outboxStore.Snapshot().FirstOrDefault(m => m.NotificationType == SampleNotificationNames.UserCreated);
 
     private static void RequireNotificationPipelineExecuted(SampleDiagnostics diagnostics, Type notificationType)
     {
