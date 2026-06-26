@@ -34,6 +34,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
+    # A Redis service so the CQRSharp.Redis outbox-store contract tests run for real in CI. The test fixture connects to
+    # localhost:6379 by default; without a reachable server those tests skip cleanly instead of failing.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -136,6 +149,7 @@ jobs:
 
       - name: NativeAOT publish Sample + run
         run: |
+          set -eo pipefail
           rm -rf "${{ env.AOT_OUTPUT }}"
           mkdir -p "${{ env.AOT_OUTPUT }}"
 
@@ -150,13 +164,22 @@ jobs:
           esac
           echo "NativeAOT RID: ${rid}"
 
+          # The per-library trim/AOT analyzers (IsAotCompatible) already gate AOT-hostile code at build under
+          # -warnaserror. This is the whole-graph backstop: capture the ILComp output and fail loud on any trim/AOT
+          # (IL) warning attributed to CQRSharp library source (the path filter ignores dependency warnings).
+          publish_log="$(mktemp)"
           dotnet publish src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj \
             -c "${{ env.CONFIGURATION }}" \
             -f net8.0 \
             -r "${rid}" \
             -o "${{ env.AOT_OUTPUT }}" \
             /p:ContinuousIntegrationBuild=true \
-            /p:GeneratePackageOnBuild=false
+            /p:GeneratePackageOnBuild=false 2>&1 | tee "${publish_log}"
+
+          if grep -nE 'CQRSharp\.(Core|Pipelines|Abstractions|Redis)[^]]*: warning IL[0-9]{4}' "${publish_log}"; then
+            echo "::error::Native AOT publish produced trim/AOT (IL) warnings in CQRSharp source (listed above)."
+            exit 1
+          fi
 
           "${{ env.AOT_OUTPUT }}/CQRSharp.Sample"
 
@@ -168,7 +191,8 @@ jobs:
           dotnet pack src/Domain/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Domain/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Infrastructure/CQRSharp.Generators/CQRSharp.Generators.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Integrations/CQRSharp.Redis/CQRSharp.Redis.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/Integrations/CQRSharp.EntityFrameworkCore/CQRSharp.EntityFrameworkCore.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
           dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
 
       - name: Validate package contents
@@ -237,12 +261,6 @@ jobs:
                   observed.append((package_id, version, path))
 
                   names = set(z.namelist())
-                  if package_id == "CQRSharp.Generators":
-                      if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
-                          raise SystemExit("CQRSharp.Generators package must include analyzers/dotnet/cs/CQRSharp.Generators.dll")
-                      if any(n.startswith("lib/") for n in names):
-                          raise SystemExit("CQRSharp.Generators package must NOT include lib/ outputs (analyzer-only).")
-
                   if package_id == "CQRSharp":
                       if "analyzers/dotnet/cs/CQRSharp.Generators.dll" not in names:
                           raise SystemExit("CQRSharp meta-package must embed analyzers/dotnet/cs/CQRSharp.Generators.dll for plug-and-play.")
@@ -255,7 +273,8 @@ jobs:
               "CQRSharp.Abstractions",
               "CQRSharp.Core",
               "CQRSharp.Pipelines",
-              "CQRSharp.Generators",
+              "CQRSharp.Redis",
+              "CQRSharp.EntityFrameworkCore",
               "CQRSharp",
           }
 

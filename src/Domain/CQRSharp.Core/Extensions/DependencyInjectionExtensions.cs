@@ -1,12 +1,15 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Background.Outbox.Types;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Factories;
+using CQRSharp.Core.Idempotency;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
@@ -14,6 +17,7 @@ using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace CQRSharp.Core.Extensions;
 
@@ -33,11 +37,17 @@ public static class DependencyInjectionExtensions
 	///     An optional action to configure dispatcher options such as <see cref="DispatcherOptions.RunMode" /> and
 	///     <see cref="DispatcherOptions.ScopeMode" />.
 	/// </param>
+	/// <param name="configureValidation">
+	///     An optional action to configure the fail-fast startup validator (its <see cref="CqrsValidationPolicy" />).
+	///     Defaults to <see cref="CqrsValidationPolicy.ThrowOnError" />, aborting host start when a configuration error
+	///     is found.
+	/// </param>
 	/// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
 	public static IServiceCollection AddCqrs(this IServiceCollection services,
         Action<BackgroundTaskQueueOptions>? configureQueue = null,
         Action<OutboxOptions>? configureOutbox = null,
-        Action<DispatcherOptions>? configureDispatcher = null)
+        Action<DispatcherOptions>? configureDispatcher = null,
+        Action<CqrsStartupValidationOptions>? configureValidation = null)
     {
         services.AddOptions<BackgroundTaskQueueOptions>()
             .Configure(opts => configureQueue?.Invoke(opts))
@@ -62,6 +72,11 @@ public static class DependencyInjectionExtensions
             services.Configure<OutboxOptions>(_ => { });
         }
 
+        // The single clock seam: every time-dependent component reads "now" through TimeProvider, so behavior is
+        // deterministic under test (via FakeTimeProvider) and overridable by consumers. Defaults to the system clock;
+        // a consumer that registers their own TimeProvider before/after AddCqrs wins.
+        services.TryAddSingleton(TimeProvider.System);
+
         services.TryAddScoped<IOutbox, Outbox>();
 
         services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
@@ -82,6 +97,14 @@ public static class DependencyInjectionExtensions
         services.AddHostedService<BackgroundTaskQueueConsumer>();
 
         services.AddLogging();
+
+        // Fail-fast startup validation: surfaces silent fallbacks (an unbacked outbox, a transactional outbox that
+        // cannot detect a transaction, outbox-bypassing notifications, a missing generated registry) as loud, early
+        // failures at host start. TryAddEnumerable keeps the hosted service single even if AddCqrs runs twice.
+        services.AddOptions<CqrsStartupValidationOptions>()
+            .Configure(o => configureValidation?.Invoke(o))
+            .ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CqrsStartupValidator>());
 
         if (outboxProbe is not null)
             if (outboxProbe.Mode != OutboxMode.Disabled)
@@ -111,6 +134,57 @@ public static class DependencyInjectionExtensions
             .ValidateOnStart();
 
         services.AddHostedService<OutboxProcessor>();
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />. The store is NOT
+    ///     durable — messages live in process memory and are lost on restart — so it is intended for development,
+    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). The outbox
+    ///     still needs the source-generated notification serializer and an outbox-enabled <c>AddCqrs</c> for the
+    ///     processor to actually run.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">An optional action to configure the in-memory store options.</param>
+    /// <returns>The service collection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddInMemoryOutboxStore(
+        this IServiceCollection services,
+        Action<InMemoryOutboxStoreOptions>? configure = null)
+    {
+        services.AddOptions<InMemoryOutboxStoreOptions>()
+            .Configure(opts => configure?.Invoke(opts))
+            .Validate(o => o.VisibilityTimeout > TimeSpan.Zero,
+                "InMemoryOutboxStoreOptions.VisibilityTimeout must be greater than zero.")
+            .ValidateOnStart();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IOutboxStore, InMemoryOutboxStore>();
+
+        return services;
+    }
+
+    /// <summary>
+    ///     Registers the in-process in-memory idempotency store as the <see cref="IIdempotencyStore" />, so requests
+    ///     implementing <c>IIdempotentRequest</c> are deduplicated. The store is NOT durable — claims live in process
+    ///     memory and are lost on restart — so it deduplicates only within a single process lifetime; use a database-
+    ///     or Redis-backed store for cross-process at-most-once semantics.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">An optional action to configure the in-memory idempotency store options.</param>
+    /// <returns>The service collection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddInMemoryIdempotencyStore(
+        this IServiceCollection services,
+        Action<InMemoryIdempotencyStoreOptions>? configure = null)
+    {
+        services.AddOptions<InMemoryIdempotencyStoreOptions>()
+            .Configure(opts => configure?.Invoke(opts))
+            .Validate(o => o.Retention > TimeSpan.Zero,
+                "InMemoryIdempotencyStoreOptions.Retention must be greater than zero.")
+            .ValidateOnStart();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+
         return services;
     }
 

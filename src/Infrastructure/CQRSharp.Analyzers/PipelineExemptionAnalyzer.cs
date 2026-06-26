@@ -49,7 +49,11 @@ public sealed class PipelineExemptionAnalyzer : DiagnosticAnalyzer
         {
             if (argument.Expression is not TypeOfExpressionSyntax typeOf) continue;
             if (ctx.SemanticModel.GetTypeInfo(typeOf.Type, ctx.CancellationToken).Type is not INamedTypeSymbol exempted) continue;
-            if (ImplementsBehavior(exempted, behavior, streamBehavior)) continue;
+
+            // typeof(Behavior<,>) yields an UNBOUND generic whose AllInterfaces is empty; check its definition so an
+            // open-generic behavior exemption (the idiomatic way to exempt a generic behavior) is recognized.
+            var exemptedDefinition = exempted.IsUnboundGenericType ? exempted.OriginalDefinition : exempted;
+            if (ImplementsBehavior(exemptedDefinition, behavior, streamBehavior)) continue;
 
             ctx.ReportDiagnostic(Diagnostic.Create(CqrsDiagnostics.PipelineExemptionNotBehavior, typeOf.GetLocation(), exempted.Name));
         }

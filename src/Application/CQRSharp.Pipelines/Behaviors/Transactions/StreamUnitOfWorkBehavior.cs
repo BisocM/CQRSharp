@@ -23,10 +23,13 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
     IOutbox outbox,
     IOptions<UnitOfWorkOptions> options,
     IOutboxStore? outboxStore = null,
-    INotificationSerializer? serializer = null)
+    INotificationSerializer? serializer = null,
+    TimeProvider? timeProvider = null)
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
     public IAsyncEnumerable<TItem> Handle(
@@ -241,7 +244,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
             Guid.NewGuid(),
             serializer.GetNotificationName(n.GetType()),
             serializer.Serialize(n),
-            DateTime.UtcNow,
+            _timeProvider.GetUtcNow().UtcDateTime,
             OutboxMessageStatus.Pending,
             null,
             null,

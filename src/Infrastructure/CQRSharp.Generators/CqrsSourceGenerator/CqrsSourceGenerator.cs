@@ -56,7 +56,7 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 spc.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
 
                 // Generate the one-call DI bootstrap (AddCqrs + AddGenerated)
-                var bootstrapSourceCode = GenerateBootstrap();
+                var bootstrapSourceCode = GenerateBootstrap(compilation);
                 spc.AddSource("CqrsGeneratedBootstrap.g.cs", SourceText.From(bootstrapSourceCode, Encoding.UTF8));
 
                 // Generate AOT-safe outbox notification JSON serialization (only for stable-name notifications).
@@ -82,6 +82,11 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                 // Generate the diagnostics/introspection API (request bindings)
                 var diagnosticsSourceCode = GenerateDiagnostics(compilation, candidateClasses!);
                 spc.AddSource("GeneratedCqrsDiagnostics.g.cs", SourceText.From(diagnosticsSourceCode, Encoding.UTF8));
+
+                // Generate the compile-time notification registry (handled notifications + stable-name lookup)
+                // consumed by configuration inspection. Always emitted, even with zero notifications.
+                var notificationRegistrySourceCode = GenerateNotificationRegistry(compilation, candidateClasses!, stableNotifications);
+                spc.AddSource("GeneratedCqrsNotificationRegistry.g.cs", SourceText.From(notificationRegistrySourceCode, Encoding.UTF8));
 
                 // Emit assembly markers (one per handled request/notification) so analyzers can discover handlers
                 // across referenced assemblies.

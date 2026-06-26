@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Behaviors.RateLimiting.Context;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 
@@ -88,5 +88,5 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
         return await next(cancellationToken).ConfigureAwait(false);
     }
 
-    public int PipelineExecutionPriority => int.MinValue + 1;
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.RateLimiting;
 }

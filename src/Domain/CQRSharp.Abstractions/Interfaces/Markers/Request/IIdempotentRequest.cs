@@ -15,7 +15,10 @@ namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
 public interface IIdempotentRequest : IRequest
 {
     /// <summary>
-    ///     A stable, unique key identifying this logical request for duplicate detection.
+    ///     A stable, unique key identifying this logical request for duplicate detection. Keep it within a bounded
+    ///     length (at most 512 characters) so it stays portable across idempotency-store backends — relational stores
+    ///     cap the key column, so an over-long key that works in-memory or in Redis can throw there; hash longer
+    ///     natural keys down first. The key is matched with ordinal, case-sensitive equality.
     /// </summary>
     string IdempotencyKey { get; }
 }

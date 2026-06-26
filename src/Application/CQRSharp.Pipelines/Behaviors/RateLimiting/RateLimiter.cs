@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.Options;
 
@@ -26,9 +25,10 @@ namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
 public sealed class RateLimiter : IDisposable
 {
     private readonly ShardedLruCache<object, TokenBucket> _cache;
-    private readonly long _cleanupCadenceTicks;
-    private readonly Timer? _cleanupTimer;
+    private readonly TimeSpan _cleanupCadence;
+    private readonly ITimer? _cleanupTimer;
     private readonly RateLimiterOptions _config;
+    private readonly TimeProvider _timeProvider;
     private readonly bool _usesTimer;
     private long _lastCleanupCheckpoint;
 
@@ -36,9 +36,10 @@ public sealed class RateLimiter : IDisposable
     ///     Initializes a new instance of the <see cref="RateLimiter" /> class.
     /// </summary>
     /// <param name="config">Options for rate limiting behavior.</param>
-    public RateLimiter(IOptions<RateLimiterOptions> config)
+    public RateLimiter(IOptions<RateLimiterOptions> config, TimeProvider? timeProvider = null)
     {
         _config = config.Value ?? throw new ArgumentNullException(nameof(config));
+        _timeProvider = timeProvider ?? TimeProvider.System;
         ValidateConfiguration(_config);
 
         //Initialize sharded LRU cache for concurrency
@@ -48,14 +49,13 @@ public sealed class RateLimiter : IDisposable
 
         if (!_usesTimer && _config.MaxIdleTime > TimeSpan.Zero)
         {
-            var cadence = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(1).Ticks, _config.MaxIdleTime.Ticks / 2));
-            _cleanupCadenceTicks = ToStopwatchTicks(cadence);
-            _lastCleanupCheckpoint = Stopwatch.GetTimestamp();
+            _cleanupCadence = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(1).Ticks, _config.MaxIdleTime.Ticks / 2));
+            _lastCleanupCheckpoint = _timeProvider.GetTimestamp();
         }
 
         //Schedule periodic cleanup if configured
         if (_usesTimer)
-            _cleanupTimer = new Timer(
+            _cleanupTimer = _timeProvider.CreateTimer(
                 _ => CleanupStaleBuckets(),
                 null,
                 _config.CleanupInterval,
@@ -93,7 +93,8 @@ public sealed class RateLimiter : IDisposable
 
         var bucket = _cache.GetOrAdd(key, _ => new TokenBucket(
             _config.MaxTokens,
-            _config.ReplenishRatePerSecond));
+            _config.ReplenishRatePerSecond,
+            _timeProvider));
 
         return bucket.TryConsume();
     }
@@ -120,7 +121,8 @@ public sealed class RateLimiter : IDisposable
 
         var bucket = _cache.GetOrAdd(key, _ => new TokenBucket(
             _config.MaxTokens,
-            _config.ReplenishRatePerSecond));
+            _config.ReplenishRatePerSecond,
+            _timeProvider));
 
         return bucket.TryConsume();
     }
@@ -131,7 +133,7 @@ public sealed class RateLimiter : IDisposable
     private void CleanupStaleBuckets()
     {
         if (_config.MaxIdleTime <= TimeSpan.Zero) return;
-        var threshold = DateTime.UtcNow - _config.MaxIdleTime;
+        var threshold = _timeProvider.GetUtcNow().UtcDateTime - _config.MaxIdleTime;
         CleanupStaleBuckets(threshold);
     }
 
@@ -149,25 +151,18 @@ public sealed class RateLimiter : IDisposable
     {
         if (_usesTimer || _config.MaxIdleTime <= TimeSpan.Zero) return;
 
-        var now = Stopwatch.GetTimestamp();
+        var now = _timeProvider.GetTimestamp();
         var last = Volatile.Read(ref _lastCleanupCheckpoint);
-        if (now - last < _cleanupCadenceTicks) return;
+        if (_timeProvider.GetElapsedTime(last, now) < _cleanupCadence) return;
         if (Interlocked.CompareExchange(ref _lastCleanupCheckpoint, now, last) != last) return;
 
-        var threshold = DateTime.UtcNow - _config.MaxIdleTime;
+        var threshold = _timeProvider.GetUtcNow().UtcDateTime - _config.MaxIdleTime;
         CleanupStaleBuckets(threshold);
     }
 
     private void CleanupStaleBuckets(DateTime threshold)
     {
         _cache.RemoveWhere(pair => pair.Value.LastAccessed < threshold);
-    }
-
-    private static long ToStopwatchTicks(TimeSpan span)
-    {
-        if (span <= TimeSpan.Zero) return 0;
-        var ticks = span.TotalSeconds * Stopwatch.Frequency;
-        return ticks <= 1 ? 1 : (long)ticks;
     }
 
     /// <summary>
@@ -279,15 +274,14 @@ internal class LruCache<TKey, TValue>(int capacity)
 /// <summary>
 ///     A token bucket with high-precision refill using Stopwatch timestamps.
 /// </summary>
-internal class TokenBucket(int maxTokens, double replenishRatePerSecond)
+internal class TokenBucket(int maxTokens, double replenishRatePerSecond, TimeProvider timeProvider)
 {
-    private static readonly double TickToSeconds = 1.0 / Stopwatch.Frequency;
     private readonly object _sync = new();
 
     // Backed by a 64-bit field accessed atomically: the cleanup sweep reads LastAccessed WITHOUT holding _sync, so a
     // plain DateTime field could tear on 32-bit runtimes.
-    private long _lastAccessedTicks = DateTime.UtcNow.Ticks;
-    private long _lastRefillTs = Stopwatch.GetTimestamp();
+    private long _lastAccessedTicks = timeProvider.GetUtcNow().UtcDateTime.Ticks;
+    private long _lastRefillTs = timeProvider.GetTimestamp();
     private double _tokens = maxTokens;
 
     public DateTime LastAccessed => new(Interlocked.Read(ref _lastAccessedTicks), DateTimeKind.Utc);
@@ -296,8 +290,8 @@ internal class TokenBucket(int maxTokens, double replenishRatePerSecond)
     {
         lock (_sync)
         {
-            var nowTs = Stopwatch.GetTimestamp();
-            var elapsed = (nowTs - _lastRefillTs) * TickToSeconds;
+            var nowTs = timeProvider.GetTimestamp();
+            var elapsed = timeProvider.GetElapsedTime(_lastRefillTs, nowTs).TotalSeconds;
             if (elapsed > 0)
             {
                 // Refill continuously rather than only in whole-second chunks, so tokens accrue smoothly.
@@ -305,7 +299,7 @@ internal class TokenBucket(int maxTokens, double replenishRatePerSecond)
                 _lastRefillTs = nowTs;
             }
 
-            Interlocked.Exchange(ref _lastAccessedTicks, DateTime.UtcNow.Ticks);
+            Interlocked.Exchange(ref _lastAccessedTicks, timeProvider.GetUtcNow().UtcDateTime.Ticks);
             if (_tokens < 1)
                 return false;
 

@@ -33,6 +33,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
     private readonly Guid _queueId = Guid.NewGuid();
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly CancellationToken _shutdownToken;
+    private readonly TimeProvider _timeProvider;
     private int _count;
     private int _disposed;
     private int _head;
@@ -49,13 +50,15 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         IServiceScopeFactory scopeFactory,
         IQueueMetricsReporter metrics,
         ILogger<BackgroundTaskQueue> logger,
-        IHostApplicationLifetime? lifetime = null)
+        IHostApplicationLifetime? lifetime = null,
+        TimeProvider? timeProvider = null)
     {
         _options = options.Value ?? throw new ArgumentNullException(nameof(options));
         _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _shutdownToken = lifetime?.ApplicationStopping ?? _completion.Token;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _metricsEnabled = _options.EnableMetrics;
 
         if (_options.Capacity <= 0)
@@ -156,7 +159,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
         ArgumentNullException.ThrowIfNull(workItem);
 
         var sequence = Interlocked.Increment(ref _sequenceCounter);
-        var queuedTask = new QueuedTask(_queueId, sequence, workItem, DateTime.UtcNow);
+        var queuedTask = new QueuedTask(_queueId, sequence, workItem, _timeProvider.GetUtcNow().UtcDateTime);
         var entry = new QueueEntry(queuedTask, setException, setCanceled);
 
         if (Volatile.Read(ref _disposed) != 0)
@@ -439,7 +442,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             if (_metricsEnabled)
             {
                 _metrics.ItemDequeued();
-                _metrics.RecordLatency(DateTime.UtcNow - dequeued.Task.EnqueueTime);
+                _metrics.RecordLatency(_timeProvider.GetUtcNow().UtcDateTime - dequeued.Task.EnqueueTime);
             }
 
             return dequeued.Task;
@@ -641,7 +644,7 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
                         _logger.LogWarning(ex,
                             "Publish attempt {Attempt} for {NotificationType} failed; retrying in {Delay}ms.",
                             attempt, notif.GetType().Name, _options.NotificationRetryDelay.TotalMilliseconds);
-                        await Task.Delay(_options.NotificationRetryDelay, token).ConfigureAwait(false);
+                        await Task.Delay(_options.NotificationRetryDelay, _timeProvider, token).ConfigureAwait(false);
                     }
             }
             catch (OperationCanceledException)

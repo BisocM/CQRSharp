@@ -13,10 +13,13 @@ namespace CQRSharp.Pipelines.Behaviors.Timeout;
 /// </summary>
 public sealed class StreamTimeoutBehavior<TRequest, TItem>(
     ILogger<StreamTimeoutBehavior<TRequest, TItem>> logger,
-    IOptions<TimeoutOptions> options)
+    IOptions<TimeoutOptions> options,
+    TimeProvider? timeProvider = null)
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+
     public int PipelineExecutionPriority => 300;
 
     public IAsyncEnumerable<TItem> Handle(
@@ -36,7 +39,7 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
 
             activity?.SetTag("cqrsharp.timeout_ms", timeout.TotalMilliseconds);
 
-            using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout);
+            using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout, _timeProvider);
             using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 timeoutCancellationTokenSource.Token);

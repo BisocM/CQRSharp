@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.Metrics;
+using System.Diagnostics.Metrics;
 
 namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 
@@ -6,18 +6,22 @@ namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 ///     An implementation of <see cref="IQueueMetricsReporter" /> that uses the .NET
 ///     OpenTelemetry library to expose queue metrics.
 /// </summary>
+/// <remarks>
+///     Each instance owns its own <see cref="Meter" /> and instruments, so disposing one reporter — e.g. when a host is
+///     torn down and rebuilt in the same process, as integration tests and host-reload scenarios do — does not stop
+///     metrics for any other instance. The meter name is shared, which the OpenTelemetry pipeline aggregates as usual.
+/// </remarks>
 public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
 {
     private const string MeterName = "CQRSharp.Core.BackgroundTasks";
     private const string MeterVersion = "1.0.0";
 
-    private static readonly Meter Meter = new(MeterName, MeterVersion);
     private readonly ObservableGauge<long> _currentGauge;
     private readonly Counter<long> _droppedNewestCounter;
     private readonly Counter<long> _droppedOldestCounter;
-
     private readonly Counter<long> _enqueuedCounter;
     private readonly Histogram<double> _latencyHistogram;
+    private readonly Meter _meter;
 
     private long _currentCount;
 
@@ -26,24 +30,26 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     /// </summary>
     public OpenTelemetryQueueMetricsReporter()
     {
-        _enqueuedCounter = Meter.CreateCounter<long>(
+        _meter = new Meter(MeterName, MeterVersion);
+
+        _enqueuedCounter = _meter.CreateCounter<long>(
             "cqrsharp.queue.items.enqueued.total",
             description: "Total number of work items ever enqueued");
 
-        _droppedNewestCounter = Meter.CreateCounter<long>(
+        _droppedNewestCounter = _meter.CreateCounter<long>(
             "cqrsharp.queue.items.dropped.newest.total",
             description: "Total number of work items dropped because the queue was full");
 
-        _droppedOldestCounter = Meter.CreateCounter<long>(
+        _droppedOldestCounter = _meter.CreateCounter<long>(
             "cqrsharp.queue.items.dropped.oldest.total",
             description: "Total number of work items dropped via DropOldest policy to make space");
 
-        _currentGauge = Meter.CreateObservableGauge(
+        _currentGauge = _meter.CreateObservableGauge(
             "cqrsharp.queue.items.current",
             () => Interlocked.Read(ref _currentCount),
             description: "Current number of work items in the queue");
 
-        _latencyHistogram = Meter.CreateHistogram<double>(
+        _latencyHistogram = _meter.CreateHistogram<double>(
             "cqrsharp.queue.item.latency.seconds",
             "s",
             "Time items spend in queue before being processed");
@@ -87,6 +93,6 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     /// <inheritdoc />
     public void Dispose()
     {
-        Meter.Dispose();
+        _meter.Dispose();
     }
 }

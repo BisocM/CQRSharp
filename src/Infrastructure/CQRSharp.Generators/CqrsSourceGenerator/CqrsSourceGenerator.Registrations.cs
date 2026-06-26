@@ -78,6 +78,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Diagnostics.ICqrsDiagnostics, global::CQRSharp.Core.Diagnostics.Generated.GeneratedCqrsDiagnostics>();");
         sb.AppendLine(
+            "            // The compile-time notification surface DI hands to the diagnostics ctor. Always present.");
+        sb.AppendLine(
+            "            services.TryAddSingleton<global::CQRSharp.Core.Diagnostics.ICqrsNotificationRegistry, global::CQRSharp.Core.Diagnostics.Generated.GeneratedCqrsNotificationRegistry>();");
+        sb.AppendLine(
             "            services.RemoveAll<global::CQRSharp.Core.Notifications.IDirectNotificationDispatcher>();");
         sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Notifications.IDirectNotificationDispatcher, global::CQRSharp.Core.Notifications.Generated.GeneratedDirectNotificationDispatcher>();");

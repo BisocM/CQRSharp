@@ -22,6 +22,7 @@ internal sealed class OutboxProcessor : BackgroundService
     private readonly ILogger<OutboxProcessor> _logger;
     private readonly OutboxProcessorOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="OutboxProcessor" /> class.
@@ -29,11 +30,13 @@ internal sealed class OutboxProcessor : BackgroundService
     public OutboxProcessor(
         ILogger<OutboxProcessor> logger,
         IServiceScopeFactory scopeFactory,
-        IOptions<OutboxProcessorOptions> options)
+        IOptions<OutboxProcessorOptions> options,
+        TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -52,7 +55,7 @@ internal sealed class OutboxProcessor : BackgroundService
                 _logger.LogError(ex, "An unhandled exception occurred in the Outbox Processor.");
             }
 
-            await Task.Delay(_options.PollingInterval, stoppingToken);
+            await Task.Delay(_options.PollingInterval, _timeProvider, stoppingToken);
         }
 
         _logger.LogInformation("Outbox Processor is stopping.");
@@ -71,7 +74,7 @@ internal sealed class OutboxProcessor : BackgroundService
         {
             _logger.LogWarning("Outbox services (IOutboxStore, INotificationSerializer, IDirectNotificationDispatcher) are not registered. The OutboxProcessor will not run.");
             // Prevent fast spinning by waiting indefinitely. The service will stop on shutdown.
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, _timeProvider, stoppingToken);
             return;
         }
 
@@ -164,10 +167,10 @@ internal sealed class OutboxProcessor : BackgroundService
     ///     Computes the next eligibility time for a failed message using exponential back-off (2^attempt seconds),
     ///     capped at five minutes.
     /// </summary>
-    private static DateTime ComputeNextRetryAt(int attempt)
+    private DateTime ComputeNextRetryAt(int attempt)
     {
         var seconds = Math.Min(Math.Pow(2, Math.Min(attempt, 20)), 300d);
-        return DateTime.UtcNow.AddSeconds(seconds);
+        return _timeProvider.GetUtcNow().UtcDateTime.AddSeconds(seconds);
     }
 
     private static Activity? StartOutboxActivity(OutboxMessage message)

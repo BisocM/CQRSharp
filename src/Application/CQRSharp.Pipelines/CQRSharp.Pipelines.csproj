@@ -6,6 +6,11 @@
         <Nullable>enable</Nullable>
         <LangVersion>default</LangVersion>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <!-- Trim + AOT + single-file analyzers so any AOT-hostile pattern (reflection, dynamic codegen) is a build
+             warning here, which the solution's -warnaserror gate promotes to an error. -->
+        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
@@ -21,7 +26,7 @@
         <Title>Optional Pipeline Behaviors for CQRSharp</Title>
         <Description>Optional, opt-in pipeline behaviors for CQRSharp — validation, unit of work, resilience/retries, timeouts, rate limiting, idempotency, and logging — plus a one-call pipeline-pack registration for sensible defaults.</Description>
         <PackageReleaseNotes>
-            Version 3.0.0. Adds pipeline-pack registration and hardens built-in behaviors.
+            Version 3.1.0. Adds an order-insensitive fluent builder, idempotent pipeline-pack registration, and a rate-limiting context analyzer.
         </PackageReleaseNotes>
     </PropertyGroup>
 

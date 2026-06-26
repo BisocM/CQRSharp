@@ -7,7 +7,9 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <EnableAotAnalyzer>true</EnableAotAnalyzer>
+        <!-- Full trim + AOT analyzer set on the net8.0+ TFMs (netstandard2.0 has no AOT concept). -->
+        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('netstandard'))">
@@ -27,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 3.0.0. Breaking changes: removed SensitiveData attribute and updated request metadata.
+            Version 3.1.0. Documentation refinements across the contracts; no breaking API changes.
         </PackageReleaseNotes>
     </PropertyGroup>
 

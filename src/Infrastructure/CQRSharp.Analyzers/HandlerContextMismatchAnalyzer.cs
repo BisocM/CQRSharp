@@ -6,9 +6,11 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace CQRSharp.Analyzers;
 
 /// <summary>
-///     CQRA001: flags a handler whose context type argument does not match the context type its request declares via
-///     <c>RequestBase&lt;TContext&gt;</c>. The mismatch is silent at runtime (the request carries its own context), so
-///     it is usually an oversight.
+///     CQRA001: flags a handler that <em>explicitly</em> declares a context type argument which does not match the
+///     context type its request declares via <c>RequestBase&lt;TContext&gt;</c>. The mismatch is silent at runtime
+///     (the request carries its own context), so it is usually an oversight. Handlers written with the convenience
+///     overloads (e.g. <c>ICommandHandler&lt;TCommand&gt;</c>), which implicitly default the context to
+///     <c>RequestContextBase</c>, are not flagged.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
@@ -46,7 +48,11 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
         var type = (INamedTypeSymbol)context.Symbol;
         if (type.TypeKind != TypeKind.Class || type.IsAbstract) return;
 
-        foreach (var iface in type.AllInterfaces)
+        // Only DIRECTLY-declared interfaces, not AllInterfaces: a handler written with the convenience overload
+        // (e.g. ICommandHandler<TCommand>) implicitly inherits ICommandHandler<TCommand, RequestContextBase>, and
+        // flagging that inherited default against a custom-context request is a false positive. A genuine mismatch
+        // requires the developer to spell out a context type argument, which puts the full-arity interface here.
+        foreach (var iface in type.Interfaces)
         {
             if (!iface.IsGenericType) continue;
             var def = iface.OriginalDefinition;
@@ -74,7 +80,7 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            var declaredContext = GetDeclaredContext(requestType, requestBase);
+            var declaredContext = CqrsContextResolution.GetDeclaredContext(requestType, requestBase);
             if (declaredContext is null) continue; // request does not declare a context via RequestBase<TContext>
             if (SymbolEqualityComparer.Default.Equals(handlerContext, declaredContext)) continue;
 
@@ -87,14 +93,5 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
                 requestType.Name,
                 declaredContext.Name));
         }
-    }
-
-    private static ITypeSymbol? GetDeclaredContext(ITypeSymbol requestType, INamedTypeSymbol requestBase)
-    {
-        for (var current = requestType as INamedTypeSymbol; current is not null; current = current.BaseType)
-            if (current.IsGenericType && SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, requestBase))
-                return current.TypeArguments[0];
-
-        return null;
     }
 }

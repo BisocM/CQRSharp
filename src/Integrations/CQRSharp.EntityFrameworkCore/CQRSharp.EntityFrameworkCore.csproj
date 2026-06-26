@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!--
+            Deliberately NO IsAotCompatible / EnableAotAnalyzer here: EF Core relies on runtime query
+            compilation (expression trees, reflection) and cannot be Native AOT'd or fully trimmed. The
+            public surface is instead annotated with [RequiresDynamicCode]/[RequiresUnreferencedCode] so
+            callers building AOT/trimmed apps get a clear analyzer warning at the call site.
+        -->
+    </PropertyGroup>
+
+    <!-- Multi-TFM gating copied from Core.csproj: widen only when the building SDK supports the newer TFM. -->
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;EntityFrameworkCore;Outbox;Idempotency</PackageTags>
+        <Title>EF Core integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
+        <Description>An Entity Framework Core integration for CQRSharp. Its first feature is a durable IOutboxStore backed by a DbContext: atomic claim with an optimistic-concurrency visibility lease, persisted retry/back-off and dead-lettering. It also provides a durable IIdempotencyStore backed by a keyed table with an optimistic-concurrency claim and a retention window. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
+        <PackageReleaseNotes>
+            Version 3.1.0. Adds durable EF Core (relational) outbox and idempotency stores.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10"/>
+        <!-- ToTable/IsRowVersion and the other fluent relational mapping APIs live in the Relational package; the
+             base EF Core metapackage does not include it. The outbox is a relational table, so this is required. -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10"/>
+        <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+</Project>

@@ -24,6 +24,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 
     private readonly TimeSpan _shutdownTimeout;
     private readonly IBackgroundTaskQueue _taskQueue;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="BackgroundTaskQueueConsumer" /> class.
@@ -31,13 +32,16 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     /// <param name="taskQueue">The background task queue to consume from.</param>
     /// <param name="logger">The logger for this consumer.</param>
     /// <param name="options">The configuration options for the queue.</param>
+    /// <param name="timeProvider">The time source for shutdown timing; defaults to <see cref="TimeProvider.System" />.</param>
     public BackgroundTaskQueueConsumer(
         IBackgroundTaskQueue taskQueue,
         ILogger<BackgroundTaskQueueConsumer> logger,
-        IOptions<BackgroundTaskQueueOptions> options)
+        IOptions<BackgroundTaskQueueOptions> options,
+        TimeProvider? timeProvider = null)
     {
         _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         var opts = options.Value ?? throw new ArgumentNullException(nameof(options));
 
@@ -115,7 +119,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
             try
             {
                 // Wait for all tasks to complete, with a final shutdown timeout.
-                using var cts = new CancellationTokenSource(_shutdownTimeout);
+                using var cts = new CancellationTokenSource(_shutdownTimeout, _timeProvider);
                 var allTasks = Task.WhenAll(tasksToWaitFor);
                 await allTasks.WaitAsync(cts.Token);
             }

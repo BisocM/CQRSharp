@@ -2,37 +2,40 @@ using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Options;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Pipelines;
 
 /// <summary>
-///     Regression test for the token bucket's continuous (sub-second) refill. Previously tokens only replenished in
-///     whole-second chunks, so a fast replenish rate could not recover within a sub-second window.
+///     Regression test for the token bucket's continuous (sub-second) refill: tokens accrue smoothly rather than only in
+///     whole-second chunks. Driven by a <see cref="FakeTimeProvider" /> so virtual time advances deterministically — no
+///     real waiting and no wall-clock flakiness.
 /// </summary>
 public class RateLimiterRefillTests
 {
-    [Fact(DisplayName = "Tokens replenish within a sub-second window")]
-    public async Task SubSecondRefill_ReplenishesTokens()
+    [Fact(DisplayName = "Tokens replenish continuously within a sub-second window")]
+    public void SubSecondRefill_ReplenishesTokens()
     {
-        // 2 tokens/s == one token per 500ms. The margin is deliberately wide so the test is robust on a loaded CI
-        // runner: the two back-to-back synchronous calls below would have to be separated by a full 500ms scheduling
-        // stall to spuriously refill (effectively impossible), yet a sub-second wait still accrues a whole token.
-        // Before the fix tokens only replenished in whole-second chunks, so nothing recovered inside a sub-second window.
+        var time = new FakeTimeProvider();
+
+        // 2 tokens/s == one token per 500ms.
         var limiter = new RateLimiter(Options.Create(new RateLimiterOptions
         {
             MaxTokens = 1,
             ReplenishRatePerSecond = 2,
             Scope = RateLimitScope.Global,
             MaxEntries = 16
-        }));
+        }), time);
 
         limiter.AllowRequest("user", typeof(RateLimiterRefillTests)).Should().BeTrue("the bucket starts full");
         limiter.AllowRequest("user", typeof(RateLimiterRefillTests)).Should().BeFalse("the only token was just consumed");
 
-        // 700ms at 2 tokens/s is more than one token's worth (capped at 1) and still comfortably under a second;
-        // before the fix nothing refilled sub-second regardless of rate.
-        await Task.Delay(700);
+        // 400ms == 0.8 of a token: not yet enough, proving refill is continuous but not instantaneous.
+        time.Advance(TimeSpan.FromMilliseconds(400));
+        limiter.AllowRequest("user", typeof(RateLimiterRefillTests)).Should().BeFalse("only 0.8 tokens have accrued at 400ms");
 
-        limiter.AllowRequest("user", typeof(RateLimiterRefillTests)).Should().BeTrue("tokens replenish continuously");
+        // A further 200ms (600ms total, still sub-second) crosses one whole token: the request is allowed again.
+        time.Advance(TimeSpan.FromMilliseconds(200));
+        limiter.AllowRequest("user", typeof(RateLimiterRefillTests)).Should().BeTrue("a full token replenished within a sub-second window");
     }
 }

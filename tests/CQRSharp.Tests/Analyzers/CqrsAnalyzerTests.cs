@@ -218,4 +218,137 @@ public class CqrsAnalyzerTests
         var diagnostics = await AnalyzeAsync(source, new HandlerContextMismatchAnalyzer());
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA001");
     }
+
+    [Fact(DisplayName = "CQRA001: convenience handler for a custom-context request is not flagged")]
+    public async Task CQRA001_DoesNotFlagConvenienceHandlerWithCustomContext()
+    {
+        // The documented convenience overload ICommandHandler<TCommand> inherits ICommandHandler<TCommand,
+        // RequestContextBase>. That implicit default context must NOT be reported as a mismatch against a request
+        // that declares a custom context — the developer never spelled out a context type argument.
+        const string source = """
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Handlers;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Models.Commands;
+
+                              public sealed class CustomCtx : RequestContextBase { }
+
+                              public sealed class CustomContextCommand : CommandBase<CustomCtx> { }
+
+                              public sealed class ConvenienceHandler : ICommandHandler<CustomContextCommand>
+                              {
+                                  public Task<CommandResult> Handle(CustomContextCommand command, CancellationToken cancellationToken)
+                                      => Task.FromResult(CommandResult.FromSuccess());
+                              }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new HandlerContextMismatchAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA001");
+    }
+
+    // The snippets below declare a local CQRSharp.Pipelines.IRateLimitedContext interface (in its own namespace block,
+    // with all usings at file scope) so the analyzer resolves it by metadata name from the snippet's own compilation —
+    // the in-memory harness does not reference CQRSharp.Pipelines. A call named AddRateLimiting is what the analyzer
+    // treats as "rate limiting configured".
+    private const string RateLimitedContextDecl = """
+                                                  using CQRSharp.Abstractions.Interfaces.Context;
+                                                  using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                                                  using CQRSharp.Pipelines;
+
+                                                  namespace CQRSharp.Pipelines
+                                                  {
+                                                      public interface IRateLimitedContext : IRequestContext
+                                                      {
+                                                          string RequestId { get; set; }
+                                                          string UserId { get; set; }
+                                                      }
+                                                  }
+                                                  """;
+
+    [Fact(DisplayName = "CQRA007: request whose context lacks IRateLimitedContext is flagged when rate limiting is configured")]
+    public async Task CQRA007_FlagsRequestWithoutRateLimitedContext()
+    {
+        var source = RateLimitedContextDecl + """
+
+                                              public sealed class PlainCtx : RequestContextBase { }
+
+                                              public sealed class PlainCommand : CommandBase<PlainCtx> { }
+
+                                              public static class Reg
+                                              {
+                                                  public static void AddRateLimiting() { }
+                                                  public static void Configure() => AddRateLimiting();
+                                              }
+                                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new RateLimitingContextAnalyzer());
+        diagnostics.Should().ContainSingle(d => d.Id == "CQRA007" && d.Severity == DiagnosticSeverity.Warning);
+    }
+
+    [Fact(DisplayName = "CQRA007: request whose context implements IRateLimitedContext is not flagged")]
+    public async Task CQRA007_DoesNotFlagRequestWithRateLimitedContext()
+    {
+        var source = RateLimitedContextDecl + """
+
+                                              public sealed class LimitedCtx : RequestContextBase, IRateLimitedContext
+                                              {
+                                                  public string RequestId { get; set; } = "";
+                                                  public string UserId { get; set; } = "";
+                                              }
+
+                                              public sealed class LimitedCommand : CommandBase<LimitedCtx> { }
+
+                                              public static class Reg
+                                              {
+                                                  public static void AddRateLimiting() { }
+                                                  public static void Configure() => AddRateLimiting();
+                                              }
+                                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new RateLimitingContextAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA007");
+    }
+
+    [Fact(DisplayName = "CQRA007: not flagged when rate limiting is not configured")]
+    public async Task CQRA007_DoesNotFlagWhenRateLimitingNotConfigured()
+    {
+        var source = RateLimitedContextDecl + """
+
+                                              public sealed class PlainCtx : RequestContextBase { }
+
+                                              public sealed class PlainCommand : CommandBase<PlainCtx> { }
+                                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new RateLimitingContextAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA007");
+    }
+
+    [Fact(DisplayName = "CQRA005: open-generic behavior exemption is not flagged")]
+    public async Task CQRA005_DoesNotFlagOpenGenericBehaviorExemption()
+    {
+        // typeof(MyBehavior<,>) is an unbound generic; the analyzer must still recognize it as a pipeline behavior.
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp.Core.Pipelines;
+
+                              public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
+                                  where TRequest : IRequest
+                              {
+                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                      => next(cancellationToken);
+                              }
+
+                              [PipelineExemption(typeof(MyBehavior<,>))]
+                              public sealed class SomeRequest { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA005");
+    }
 }
