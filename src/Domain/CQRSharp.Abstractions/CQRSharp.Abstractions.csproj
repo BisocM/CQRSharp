@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 3.0.0. Breaking changes: removed SensitiveData attribute and updated request metadata.
+            Version 3.1.0. Documentation refinements across the contracts; no breaking API changes.
         </PackageReleaseNotes>
     </PropertyGroup>
 
