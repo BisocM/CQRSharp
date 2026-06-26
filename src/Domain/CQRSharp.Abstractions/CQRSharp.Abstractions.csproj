@@ -7,7 +7,9 @@
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <EnableAotAnalyzer>true</EnableAotAnalyzer>
+        <!-- Full trim + AOT analyzer set on the net8.0+ TFMs (netstandard2.0 has no AOT concept). -->
+        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('netstandard'))">

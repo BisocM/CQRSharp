@@ -136,6 +136,7 @@ jobs:
 
       - name: NativeAOT publish Sample + run
         run: |
+          set -eo pipefail
           rm -rf "${{ env.AOT_OUTPUT }}"
           mkdir -p "${{ env.AOT_OUTPUT }}"
 
@@ -150,13 +151,22 @@ jobs:
           esac
           echo "NativeAOT RID: ${rid}"
 
+          # The per-library trim/AOT analyzers (IsAotCompatible) already gate AOT-hostile code at build under
+          # -warnaserror. This is the whole-graph backstop: capture the ILComp output and fail loud on any trim/AOT
+          # (IL) warning attributed to CQRSharp library source (the path filter ignores dependency warnings).
+          publish_log="$(mktemp)"
           dotnet publish src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj \
             -c "${{ env.CONFIGURATION }}" \
             -f net8.0 \
             -r "${rid}" \
             -o "${{ env.AOT_OUTPUT }}" \
             /p:ContinuousIntegrationBuild=true \
-            /p:GeneratePackageOnBuild=false
+            /p:GeneratePackageOnBuild=false 2>&1 | tee "${publish_log}"
+
+          if grep -nE 'CQRSharp\.(Core|Pipelines|Abstractions)[^]]*: warning IL[0-9]{4}' "${publish_log}"; then
+            echo "::error::Native AOT publish produced trim/AOT (IL) warnings in CQRSharp source (listed above)."
+            exit 1
+          fi
 
           "${{ env.AOT_OUTPUT }}/CQRSharp.Sample"
 
