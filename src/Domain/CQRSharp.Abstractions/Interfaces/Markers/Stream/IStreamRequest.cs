@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Abstractions.Interfaces.Markers.Stream;
@@ -14,4 +13,3 @@ public interface IStreamRequest : IRequest;
 /// </summary>
 /// <typeparam name="TItem">The type of the items produced by the asynchronous stream.</typeparam>
 public interface IStreamRequest<out TItem> : IStreamRequest, IRequest<IAsyncEnumerable<TItem>>;
-#endif

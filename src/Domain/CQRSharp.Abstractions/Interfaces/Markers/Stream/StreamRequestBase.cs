@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
@@ -20,4 +19,3 @@ public abstract class StreamRequestBase<TItem> : StreamRequestBase<TItem, Reques
 {
     // Pinned to RequestContextBase by default.
 }
-#endif
