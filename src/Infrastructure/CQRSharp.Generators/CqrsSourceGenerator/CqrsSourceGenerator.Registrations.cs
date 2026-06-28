@@ -50,8 +50,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated dependency-injection registrations for the CQRSharp handlers, request bindings, context factories, and exception hooks discovered at compile time.");
         sb.AppendLine("    public static class CqrsGeneratedRegistrations");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Registers every compile-time-discovered handler, request binding, context factory, and exception hook, together with the generated AOT-safe dispatchers. Call this after <c>AddCqrs</c> (or use <c>AddCqrsGenerated</c>, which does both).");
+        sb.AppendLine("        /// <param name=\"services\">The service collection to register the generated CQRSharp services into.</param>");
+        sb.AppendLine("        /// <returns>The same service collection, to allow chaining.</returns>");
         sb.AppendLine("        public static IServiceCollection AddGenerated(this IServiceCollection services)");
         sb.AppendLine("        {");
 
@@ -361,8 +365,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Requests.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe dispatcher that routes a request to its handler pipeline without reflection.");
         sb.AppendLine("    public sealed class GeneratedRequestDispatcher(IPipelineExecutor pipelineExecutor) : IRequestDispatcher");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Dispatches the request to its source-generated handler pipeline and returns the typed response.");
         sb.AppendLine("        public Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            return request switch");
@@ -383,6 +389,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Dispatches the request to its source-generated handler pipeline and returns the response as an object.");
         sb.AppendLine("        public async Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            return request switch");
@@ -427,8 +434,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Streams.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe dispatcher that routes a streaming request to its handler pipeline without reflection.");
         sb.AppendLine("    public sealed class GeneratedStreamRequestDispatcher(IPipelineExecutor pipelineExecutor) : IStreamRequestDispatcher");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Dispatches the streaming request to its source-generated handler pipeline and returns the produced asynchronous stream.");
         sb.AppendLine(
             "        public IAsyncEnumerable<TItem> ExecuteAsync<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
@@ -445,6 +454,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Dispatches the streaming request to its source-generated handler pipeline and returns the produced items as objects.");
         sb.AppendLine("        public IAsyncEnumerable<object?> ExecuteAsync(IStreamRequest request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(request);");

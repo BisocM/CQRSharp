@@ -38,6 +38,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Diagnostics.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe <c>ICqrsDiagnostics</c> that describes the registered request bindings and overall configuration.");
         sb.AppendLine("    public sealed class GeneratedCqrsDiagnostics(");
         sb.AppendLine("        IServiceProvider services,");
         sb.AppendLine("        IRequestRegistry requestRegistry,");
@@ -50,6 +51,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        private readonly IContextFactoryRegistry _contextFactoryRegistry = contextFactoryRegistry;");
         sb.AppendLine("        private readonly ICqrsNotificationRegistry _notificationRegistry = notificationRegistry;");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Inspects the resolved CQRSharp configuration and returns any binding issues that were detected.");
         sb.AppendLine("        public IReadOnlyList<CqrsBindingIssue> DescribeConfiguration()");
         sb.AppendLine("        {");
         sb.AppendLine("            var outbox = _services.GetService<IOptions<CQRSharp.Core.Options.OutboxOptions>>()?.Value ?? new();");
@@ -59,6 +61,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        }");
         sb.AppendLine();
 
+        EmitSummary(sb, "        ", "Attempts to describe the binding (handler, context, and pipeline) for the given request type.");
         sb.AppendLine("        public bool TryDescribeRequest(Type requestType, out CqrsRequestBinding binding)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(requestType);");
@@ -88,6 +91,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        }");
         sb.AppendLine();
 
+        EmitSummary(sb, "        ", "Describes the binding for the given request type, throwing if it is not registered.");
         sb.AppendLine("        public CqrsRequestBinding DescribeRequest(Type requestType)");
         sb.AppendLine("        {");
         sb.AppendLine("            if (TryDescribeRequest(requestType, out var binding))");
@@ -98,6 +102,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        }");
         sb.AppendLine();
 
+        EmitSummary(sb, "        ", "Describes the bindings for every source-generated request type.");
         sb.AppendLine("        public IReadOnlyList<CqrsRequestBinding> DescribeAllRequests()");
         sb.AppendLine("        {");
         sb.AppendLine("            var list = new List<CqrsRequestBinding>();");

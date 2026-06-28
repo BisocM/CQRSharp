@@ -52,8 +52,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Serialization.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe (reflection-free) serializer for outbox notifications that carry a stable <c>[NotificationName]</c>.");
         sb.AppendLine("    internal sealed class GeneratedOutboxNotificationSerializer : INotificationSerializer, IStableNotificationNameProvider");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Serializes the notification to its stable JSON byte representation.");
         sb.AppendLine("        public byte[] Serialize(INotification notification)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notification);");
@@ -67,6 +69,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Deserializes a payload back into its notification type, identified by stable name; returns null when the name is unknown.");
         sb.AppendLine("        public INotification? Deserialize(string notificationName, byte[] payload)");
         sb.AppendLine("        {");
         sb.AppendLine("            // A null result means the notification name is unknown. A corrupt payload for a KNOWN");
@@ -87,12 +90,14 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Gets the stable name for the notification type, falling back to its full type name.");
         sb.AppendLine("        public string GetNotificationName(Type notificationType)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notificationType);");
         sb.AppendLine("            return GetStableName(notificationType) ?? notificationType.FullName ?? notificationType.Name;");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Attempts to get the stable <c>[NotificationName]</c> for the notification type.");
         sb.AppendLine("        public bool TryGetStableName(Type notificationType, out string stableName)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notificationType);");

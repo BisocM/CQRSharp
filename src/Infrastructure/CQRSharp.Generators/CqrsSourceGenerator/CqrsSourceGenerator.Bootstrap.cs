@@ -15,8 +15,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "One-call source-generated bootstrap that registers CQRSharp and its generated handlers and dispatchers together.");
         sb.AppendLine("    public static class CqrsGeneratedBootstrap");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Registers CQRSharp (<c>AddCqrs</c>) and the source-generated handlers and dispatchers (<c>AddGenerated</c>) in a single call, optionally configuring the background queue, outbox, dispatcher, and startup validation.");
         sb.AppendLine(
             "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null, Action<CqrsStartupValidationOptions>? configureValidation = null)");
         sb.AppendLine("        {");
@@ -34,6 +36,7 @@ public sealed partial class CqrsSourceGenerator
         if (known.HasPipelinesBuilder)
         {
             sb.AppendLine();
+            EmitSummary(sb, "        ", "Registers CQRSharp and the source-generated handlers and dispatchers, configuring the pipeline through the fluent <c>ICqrsBuilder</c> (verb order does not matter).");
             sb.AppendLine(
                 "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, System.Action<global::CQRSharp.Pipelines.Extensions.ICqrsBuilder> configure)");
             sb.AppendLine("        {");

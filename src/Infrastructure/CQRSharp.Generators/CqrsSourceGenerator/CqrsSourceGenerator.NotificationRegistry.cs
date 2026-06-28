@@ -32,6 +32,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Diagnostics.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated registry of the notification types discovered at compile time.");
         sb.AppendLine("    public sealed class GeneratedCqrsNotificationRegistry : ICqrsNotificationRegistry");
         sb.AppendLine("    {");
         sb.AppendLine("        private static readonly Type[] _handled = new Type[]");
@@ -40,8 +41,10 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine($"            typeof({typeName}),");
         sb.AppendLine("        };");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Gets every concrete notification type discovered at compile time.");
         sb.AppendLine("        public IReadOnlyList<Type> HandledNotificationTypes => _handled;");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Returns whether the given notification type carries a stable <c>[NotificationName]</c> used for outbox serialization.");
         sb.AppendLine("        public bool HasStableName(Type notificationType)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notificationType);");

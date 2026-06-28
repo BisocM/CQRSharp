@@ -19,8 +19,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Notifications.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe notification dispatcher that publishes a notification to its handlers without reflection.");
         sb.AppendLine("    public sealed class GeneratedDirectNotificationDispatcher(IServiceProvider services) : DirectNotificationDispatcher(services)");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Publishes the notification to every handler registered for its concrete type.");
         sb.AppendLine("        public override Task Publish(INotification notification, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notification);");

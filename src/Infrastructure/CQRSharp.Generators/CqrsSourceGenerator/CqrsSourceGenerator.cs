@@ -181,4 +181,12 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(HandlerNotAccessibleDiagnostic, location, candidate.TypeName));
         }
     }
+
+    // Emits an XML <summary> doc comment for a member of the generated code, at the given indentation.
+    private static void EmitSummary(StringBuilder sb, string indent, string text)
+    {
+        sb.AppendLine($"{indent}/// <summary>");
+        sb.AppendLine($"{indent}///     {text}");
+        sb.AppendLine($"{indent}/// </summary>");
+    }
 }
