@@ -6,7 +6,8 @@ namespace CQRSharp.Core.Options.Enums;
 public enum OutboxMode
 {
     /// <summary>
-    ///     Notifications are dispatched directly in-process and do not use the outbox.
+    ///     Notifications are dispatched directly in-process and do not use the outbox. This is the default; enable the
+    ///     outbox explicitly (e.g. via the builder's <c>UseOutbox(...)</c> verb).
     /// </summary>
     Disabled,
 
@@ -19,7 +20,7 @@ public enum OutboxMode
 
     /// <summary>
     ///     Notifications are sent to the outbox only if they are published within an active database transaction
-    ///     managed by a Unit of Work. Otherwise, they are dispatched directly. This is the default behavior.
+    ///     managed by a Unit of Work. Otherwise, they are dispatched directly.
     /// </summary>
     Transactional
 }

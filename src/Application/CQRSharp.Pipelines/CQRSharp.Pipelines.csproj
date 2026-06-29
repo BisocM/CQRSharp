@@ -26,7 +26,7 @@
         <Title>Optional Pipeline Behaviors for CQRSharp</Title>
         <Description>Optional, opt-in pipeline behaviors for CQRSharp — validation, unit of work, resilience/retries, timeouts, rate limiting, idempotency, and logging — plus a one-call pipeline-pack registration for sensible defaults.</Description>
         <PackageReleaseNotes>
-            Version 3.1.0. Adds an order-insensitive fluent builder, idempotent pipeline-pack registration, and a rate-limiting context analyzer.
+            Version 4.0.0. Pipeline behaviors are now enabled exclusively through the fluent AddCqrsGenerated(b => ...) builder verbs (the direct Add*Behavior and AddCqrsPipelinePack extensions are internal); rate-limiting options validate on start.
         </PackageReleaseNotes>
     </PropertyGroup>
 
@@ -36,6 +36,12 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The optional-behavior registration extensions are internal (the fluent builder is the public lane); the
+             test project exercises them directly as white-box coverage. -->
+        <InternalsVisibleTo Include="CQRSharp.Tests"/>
     </ItemGroup>
 
 </Project>

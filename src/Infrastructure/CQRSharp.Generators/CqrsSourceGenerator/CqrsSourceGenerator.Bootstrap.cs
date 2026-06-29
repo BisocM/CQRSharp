@@ -43,9 +43,9 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(configure);");
             sb.AppendLine();
-            sb.AppendLine("            // useGenerated forced on: this entry point owns the generated registrations.");
+            sb.AppendLine("            // This entry point owns the generated registrations (applied after Build()).");
             sb.AppendLine(
-                "            var builder = new global::CQRSharp.Pipelines.Extensions.CqrsBuilder(services, useGenerated: true);");
+                "            var builder = new global::CQRSharp.Pipelines.Extensions.CqrsBuilder(services);");
             sb.AppendLine("            configure(builder);");
             sb.AppendLine();
             sb.AppendLine("            // Build() runs the canonical AddCqrs(...)/pack sequence (order-insensitive). Apply the");

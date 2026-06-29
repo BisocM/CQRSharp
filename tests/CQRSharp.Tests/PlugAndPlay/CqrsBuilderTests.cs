@@ -1,5 +1,9 @@
 using CQRSharp.Abstractions.Interfaces.Idempotency;
+using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Core.Diagnostics;
+using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
+using Microsoft.Extensions.Options;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Mediation;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
@@ -147,36 +151,65 @@ public sealed class CqrsBuilderTests
     }
 
     [Fact]
-    public async Task Plain_AddCqrs_delegate_overload_binds_to_the_builder()
+    public async Task UseIdempotency_with_in_memory_store_registers_a_working_store()
     {
-        // Overload disambiguation: AddCqrs(b => ...) must bind to the ICqrsBuilder overload (the lambda parameter is
-        // ICqrsBuilder, proving the binding at compile time), not the AddCqrs(Action<BackgroundTaskQueueOptions>?,...)
-        // overload. UseGenerated() is a documented no-op here, so the generated registrations are applied separately.
+        // One cohesive verb selects the behavior and the store together.
         var services = new ServiceCollection();
-        services.AddCqrs(b => b.UseGenerated().UseLogging());
-        services.AddGenerated();
-
-        using var provider = services.BuildServiceProvider();
-        using var scope = provider.CreateScope();
-        var cqrs = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
-
-        var commandResult = await cqrs.Send(new TestCommand());
-        commandResult.IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task UseInMemoryIdempotency_registers_a_working_idempotency_store()
-    {
-        var services = new ServiceCollection();
-        services.AddCqrsGenerated(b => b
-            .UseIdempotency()
-            .UseInMemoryIdempotency());
+        services.AddCqrsGenerated(b => b.UseIdempotency(i => i.UseInMemoryStore()));
 
         using var provider = services.BuildServiceProvider();
         var store = provider.GetService<IIdempotencyStore>();
 
-        store.Should().NotBeNull("UseInMemoryIdempotency registers the in-memory idempotency store");
+        store.Should().NotBeNull("UseIdempotency(i => i.UseInMemoryStore()) registers the in-memory idempotency store");
         (await store!.TryClaimAsync("k", CancellationToken.None)).Should().BeTrue();
         (await store.TryClaimAsync("k", CancellationToken.None)).Should().BeFalse("the key is already claimed");
+    }
+
+    [Fact]
+    public async Task UseIdempotency_defaults_to_the_in_memory_store()
+    {
+        // A bare UseIdempotency() pulls its own store (the in-memory default) — the verb is no longer half a feature.
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b.UseIdempotency());
+
+        using var provider = services.BuildServiceProvider();
+        var store = provider.GetService<IIdempotencyStore>();
+
+        store.Should().NotBeNull("a bare UseIdempotency() falls back to the in-memory store");
+        (await store!.TryClaimAsync("k", CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void UseOutbox_enables_the_mode_and_registers_a_store()
+    {
+        // One cohesive verb sets the mode and the store together.
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b.UseOutbox(o => o.Transactional().UseInMemoryStore()));
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IOptions<OutboxOptions>>().Value.Mode.Should().Be(OutboxMode.Transactional);
+        provider.GetService<IOutboxStore>().Should().NotBeNull("UseOutbox registers the selected store");
+    }
+
+    [Fact]
+    public void UseOutbox_defaults_to_the_in_memory_store()
+    {
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b.UseOutbox(o => o.Transactional()));
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetService<IOutboxStore>().Should().NotBeNull("a UseOutbox without a chosen store falls back to in-memory");
+    }
+
+    [Fact]
+    public void Without_UseOutbox_the_outbox_is_off_by_default()
+    {
+        // The honest default (#2): no outbox configuration ⇒ Mode is Disabled and no store is registered.
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated();
+
+        using var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<IOptions<OutboxOptions>>().Value.Mode.Should().Be(OutboxMode.Disabled);
+        provider.GetService<IOutboxStore>().Should().BeNull("the outbox is off unless explicitly enabled");
     }
 }

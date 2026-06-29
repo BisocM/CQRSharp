@@ -23,16 +23,16 @@ public class TestQuery : QueryBase<TestQueryResult>;
 public record TestQueryResult(string Value);
 
 /// <summary>
-///     A command implementing <see cref="ITransactionalRequest" /> for testing unit of work behavior.
+///     A command implementing <see cref="ITransactionalCommand" /> for testing unit of work behavior.
 /// </summary>
-public class TransactionalCommand : CommandBase, ITransactionalRequest
+public class TransactionalCommand : CommandBase, ITransactionalCommand
 {
     /// <inheritdoc />
     public IsolationLevel IsolationLevel { get; set; }
 }
 
 /// <summary>
-///     A command that does not implement <see cref="ITransactionalRequest" /> for testing unit of work bypass logic.
+///     A command that does not implement <see cref="ITransactionalCommand" /> for testing unit of work bypass logic.
 /// </summary>
 public class NonTransactionalCommand : CommandBase;
 

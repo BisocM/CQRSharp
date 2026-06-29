@@ -67,7 +67,7 @@ public class PipelineExecutorTests
         _mockContextFactoryRegistry.Setup(r => r.TryGetFactory(It.IsAny<Type>(), It.IsAny<IServiceProvider>())).Returns(mockContextFactory.Object);
 
         _mockBackgroundTaskManager = new Mock<IBackgroundTaskManager>();
-        var dispatcherOptions = Options.Create(new DispatcherOptions { RunMode = RunMode.Sync });
+        var dispatcherOptions = Options.Create(new DispatcherOptions { RunMode = RunMode.Inline });
 
         _executor = new PipelineExecutor(
             _mockRootProvider.Object,
@@ -161,7 +161,7 @@ public class PipelineExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteCommandAsync_WhenRunModeIsAsync_EnqueuesAndDefersExecution()
+    public async Task ExecuteCommandAsync_WhenRunModeIsQueued_EnqueuesAndDefersExecution()
     {
         // Arrange
         var executor = new PipelineExecutor(
@@ -169,7 +169,7 @@ public class PipelineExecutorTests
             _mockRequestRegistry.Object,
             _mockHandlerRegistry.Object,
             _mockContextFactoryRegistry.Object,
-            Options.Create(new DispatcherOptions { RunMode = RunMode.Async }),
+            Options.Create(new DispatcherOptions { RunMode = RunMode.Queued }),
             _mockBackgroundTaskManager.Object);
 
         var command = new TestCommand();

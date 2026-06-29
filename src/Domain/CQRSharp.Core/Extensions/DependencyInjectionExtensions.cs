@@ -58,19 +58,8 @@ public static class DependencyInjectionExtensions
 
         services.Configure<DispatcherOptions>(opts => configureDispatcher?.Invoke(opts));
 
-        OutboxOptions? outboxProbe = null;
-        if (configureOutbox is not null)
-        {
-            outboxProbe = new OutboxOptions();
-            configureOutbox(outboxProbe);
-
-            var outboxMode = outboxProbe.Mode;
-            services.Configure<OutboxOptions>(opts => { opts.Mode = outboxMode; });
-        }
-        else
-        {
-            services.Configure<OutboxOptions>(_ => { });
-        }
+        // Register the outbox configuration faithfully (every property, not just Mode).
+        services.Configure<OutboxOptions>(opts => configureOutbox?.Invoke(opts));
 
         // The single clock seam: every time-dependent component reads "now" through TimeProvider, so behavior is
         // deterministic under test (via FakeTimeProvider) and overridable by consumers. Defaults to the system clock;
@@ -106,9 +95,13 @@ public static class DependencyInjectionExtensions
             .ValidateOnStart();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CqrsStartupValidator>());
 
-        if (outboxProbe is not null)
-            if (outboxProbe.Mode != OutboxMode.Disabled)
-                services.AddOutboxProcessor();
+        // Register the outbox processor only when the outbox is actually enabled. The mode is read from a throwaway
+        // copy so the decision can be made at registration time; the real options were configured above. With the
+        // honest default (OutboxMode.Disabled) this means no configuration ⇒ no processor, matching the stated default.
+        var effectiveOutbox = new OutboxOptions();
+        configureOutbox?.Invoke(effectiveOutbox);
+        if (effectiveOutbox.Mode != OutboxMode.Disabled)
+            services.AddOutboxProcessor();
 
         return services;
     }

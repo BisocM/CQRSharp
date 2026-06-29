@@ -40,7 +40,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(next);
 
-        var isTransactional = request is ITransactionalRequest or ITransactionalQuery;
+        var isTransactional = request is ITransactionalCommand or ITransactionalQuery;
         if (!isTransactional) return next(cancellationToken);
 
         using var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
@@ -207,7 +207,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 
             if (!completed) yield break;
 
-            if (request is ITransactionalRequest)
+            if (request is ITransactionalCommand)
             {
                 await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
 
@@ -224,7 +224,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
     {
         return request switch
         {
-            ITransactionalRequest treq when treq.IsolationLevel != IsolationLevel.Unspecified => treq.IsolationLevel,
+            ITransactionalCommand treq when treq.IsolationLevel != IsolationLevel.Unspecified => treq.IsolationLevel,
             ITransactionalQuery tquery when tquery.IsolationLevel != IsolationLevel.Unspecified => tquery.IsolationLevel,
             _ => options.Value.DefaultIsolationLevel
         };

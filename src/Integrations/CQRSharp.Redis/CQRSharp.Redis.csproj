@@ -25,12 +25,15 @@
         <Title>Redis integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
         <Description>A 100% Native-AOT-clean Redis integration for CQRSharp. Its first feature is a durable IOutboxStore that persists outbox messages as discrete Redis hash fields (binary payloads stored verbatim) and runs all claim, lease, and finalize logic as atomic server-side Lua, so two processors never claim the same message and crashed claimants are reclaimed after a visibility timeout. It also provides a durable IIdempotencyStore that rejects duplicate requests via atomic set-if-not-exists claims with a server-side expiry window.</Description>
         <PackageReleaseNotes>
-            Version 3.1.0. Adds durable Redis-backed outbox and idempotency stores.
+            Version 4.0.0. Adds store-builder verbs (o.UseRedis(...)) for the cohesive UseOutbox / UseIdempotency configuration.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <!-- Referenced for the OutboxStoreBuilder/IdempotencyStoreBuilder the UseRedis(...) fluent verbs extend; the
+             store impls themselves still target only the Abstractions contracts. -->
+        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

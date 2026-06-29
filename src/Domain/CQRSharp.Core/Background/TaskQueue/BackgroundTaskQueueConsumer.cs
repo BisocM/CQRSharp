@@ -67,7 +67,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
             {
                 // Acquire a concurrency slot BEFORE dequeuing. If we dequeued first and cancellation then interrupted
                 // the slot wait, the dequeued task would be dropped without its work item ever running, and the caller
-                // awaiting its Task (e.g. Send under RunMode.Async) would hang forever — its completion source is only
+                // awaiting its Task (e.g. Send under RunMode.Queued) would hang forever — its completion source is only
                 // driven by executing the work item.
                 await _concurrencyLimiter.WaitAsync(stoppingToken).ConfigureAwait(false);
 

@@ -1,40 +1,28 @@
-﻿using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Core.Notifications.Types;
 
 namespace CQRSharp.Core.Options.Enums;
 
 /// <summary>
-///     Represents the mode in which operations are executed.
+///     Controls where a dispatched command or query actually executes: inline on the calling flow, or funneled through
+///     the shared background task queue. In both modes the dispatch is awaitable and the handler's result flows back to
+///     the caller — the difference is scheduling, not whether you get a result.
 /// </summary>
-/// <remarks>
-///     This enumeration determines the behavior of command and query execution,
-///     affecting whether execution is synchronous or asynchronous.
-///     Asynchronous execution has a distinctly different way of handling results. Advise documentation.
-/// </remarks>
 public enum RunMode
 {
     /// <summary>
-    ///     Represents synchronous execution of operations.
-    ///     The executing call will directly return the command results.
+    ///     Execute the handler inline on the caller's asynchronous flow (the default). The dispatch awaits the handler
+    ///     directly; nothing is queued. Best for ordinary in-process request handling where the result is wanted with no
+    ///     extra scheduling hop.
     /// </summary>
-    /// <remarks>
-    ///     In this mode, operations are executed synchronously, meaning the thread initiating the operation
-    ///     will wait for its completion before proceeding to the next instruction. This is useful when
-    ///     sequential processing is required and the order of execution must be preserved, on simple,
-    ///     CLI-client-side applications.
-    /// </remarks>
-    Sync,
+    Inline,
 
     /// <summary>
-    ///     Represents asynchronous execution of operations.
-    ///     The executing call schedules work onto the configured background task queue
-    ///     and returns a task that completes when the queued operation finishes.
-    ///     Notifications such as <see cref="CommandCompletedNotification" /> and <see cref="QueryCompletedNotification{TResult}" />
-    ///     are still published as part of normal pipeline execution.
+    ///     Funnel the dispatch through the configured background task queue instead of running it inline. The call still
+    ///     returns an awaitable task that completes with the handler's result once the queued work runs — this is
+    ///     <b>not</b> fire-and-forget — but execution is centrally throttled and scheduled by the queue consumer, giving
+    ///     back-pressure under load. Lifecycle notifications such as <see cref="CommandCompletedNotification" /> and
+    ///     <see cref="QueryCompletedNotification{TResult}" /> are still published as normal. Not supported for streaming
+    ///     requests.
     /// </summary>
-    /// <remarks>
-    ///     In this mode, operations are executed asynchronously on the background queue, meaning the initiating
-    ///     thread does not perform handler execution inline. This allows for centralized throttling/back-pressure
-    ///     and consistent scheduling via the queue consumer.
-    /// </remarks>
-    Async
+    Queued
 }
