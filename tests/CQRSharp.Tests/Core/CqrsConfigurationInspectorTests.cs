@@ -1,8 +1,12 @@
 using System.Data;
+using CQRSharp.Abstractions.Interfaces.Markers.Command;
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines.Behaviors.Idempotency;
+using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Extensions;
@@ -44,6 +48,22 @@ public sealed class CqrsConfigurationInspectorTests
             Array.Empty<CqrsInterceptorBinding>(),
             Array.Empty<CqrsPipelineBehaviorBinding>(),
             Array.Empty<CqrsPipelineBehaviorBinding>(),
+            Array.Empty<CqrsBindingIssue>());
+
+    private static CqrsRequestBinding BindingFor(
+        Type requestType,
+        CqrsPipelineBehaviorBinding? pipeline = null,
+        CqrsPipelineBehaviorBinding? exempted = null)
+        => new(
+            requestType,
+            typeof(object),
+            null,
+            null,
+            Array.Empty<Type>(),
+            Array.Empty<CqrsInterceptorBinding>(),
+            Array.Empty<CqrsInterceptorBinding>(),
+            pipeline is null ? Array.Empty<CqrsPipelineBehaviorBinding>() : new[] { pipeline },
+            exempted is null ? Array.Empty<CqrsPipelineBehaviorBinding>() : new[] { exempted },
             Array.Empty<CqrsBindingIssue>());
 
     [Fact]
@@ -201,6 +221,83 @@ public sealed class CqrsConfigurationInspectorTests
     }
 
     [Fact]
+    public void CQRCONF005_warns_when_idempotent_request_has_no_idempotency_behavior()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var issue = Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { BindingFor(typeof(IdempotentRequest)) })
+            .Should().ContainSingle(i => i.Code == "CQRCONF005").Subject;
+
+        issue.Severity.Should().Be(CqrsBindingIssueSeverity.Warning);
+        issue.Message.Should().Contain(typeof(IdempotentRequest).FullName!);
+        issue.Message.Should().Contain("UseIdempotency");
+    }
+
+    [Fact]
+    public void CQRCONF005_cleared_when_idempotency_behavior_is_wired()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var binding = BindingFor(
+            typeof(IdempotentRequest),
+            new CqrsPipelineBehaviorBinding(typeof(IdempotencyBehavior<IdempotentRequest, object>), 0, false));
+
+        Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { binding })
+            .Should().NotContain(i => i.Code == "CQRCONF005");
+    }
+
+    [Fact]
+    public void CQRCONF005_cleared_when_idempotency_behavior_is_registered_but_exempted()
+    {
+        // The behavior is registered but the request opts out via [PipelineExemption] — an explicit choice, not an
+        // oversight, so the inspector must not nag.
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var binding = BindingFor(
+            typeof(IdempotentRequest),
+            exempted: new CqrsPipelineBehaviorBinding(typeof(IdempotencyBehavior<IdempotentRequest, object>), 0, true));
+
+        Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { binding })
+            .Should().NotContain(i => i.Code == "CQRCONF005");
+    }
+
+    [Fact]
+    public void CQRCONF006_warns_when_retryable_request_has_no_resilience_behavior()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var issue = Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { BindingFor(typeof(RetryableRequest)) })
+            .Should().ContainSingle(i => i.Code == "CQRCONF006").Subject;
+
+        issue.Severity.Should().Be(CqrsBindingIssueSeverity.Warning);
+        issue.Message.Should().Contain(typeof(RetryableRequest).FullName!);
+        issue.Message.Should().Contain("UseResilience");
+    }
+
+    [Fact]
+    public void CQRCONF006_cleared_when_resilience_behavior_is_wired()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var binding = BindingFor(
+            typeof(RetryableRequest),
+            new CqrsPipelineBehaviorBinding(typeof(ResilienceBehavior<RetryableRequest, object>), 0, false));
+
+        Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { binding })
+            .Should().NotContain(i => i.Code == "CQRCONF006");
+    }
+
+    [Fact]
+    public void CQRCONF005_and_006_not_reported_for_a_request_without_the_markers()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var issues = Inspect(provider, OutboxMode.Disabled, requestBindings: new[] { Binding() });
+
+        issues.Should().NotContain(i => i.Code == "CQRCONF005" || i.Code == "CQRCONF006");
+    }
+
+    [Fact]
     public void Generated_notification_registry_is_resolvable_and_reports_stable_names()
     {
         var services = new ServiceCollection();
@@ -250,6 +347,13 @@ public sealed class CqrsConfigurationInspectorTests
     private sealed class StableNamed;
 
     private sealed class UnstableNamed;
+
+    private sealed class IdempotentRequest : CommandBase, IIdempotentRequest
+    {
+        public string IdempotencyKey => "key";
+    }
+
+    private sealed class RetryableRequest : CommandBase, IRetryableRequest;
 
     private sealed class NonExplicitUnitOfWork : IUnitOfWork
     {
