@@ -2,6 +2,46 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.0]
+
+### Breaking changes
+
+- **`RunMode` members renamed.** `RunMode.Sync` → `RunMode.Inline` and `RunMode.Async` → `RunMode.Queued`. The names now
+  describe *where* a dispatch runs (inline on the caller's flow vs. funneled through the background queue); both modes
+  still return the handler's result to the caller — `Queued` is not fire-and-forget.
+- **`ITransactionalRequest` renamed to `ITransactionalCommand`** for symmetry with `ITransactionalQuery` (it has always
+  been command-only, `: ICommand`).
+- **Notification publish strategy moved.** `PublishStrategy` moved off `DispatcherOptions` onto a new `NotificationOptions`
+  (set it with the `ConfigureNotifications(...)` builder verb). Its default is now `Sequential` (was
+  `ParallelWhenAllAggregate`): a notification's handlers share the dispatching DI scope, so the safe default runs them
+  one at a time. Opt into a parallel strategy only when the handlers are independent.
+- **One lane for pipeline behaviors.** The direct `AddExceptionHandling`/`AddIdempotency`/`AddLoggingBehavior`/
+  `AddResilienceBehavior`/`AddTimeoutBehavior`/`AddValidationBehavior`/`AddRateLimiting`/`AddUnitOfWorkBehavior`
+  extensions and `AddCqrsPipelinePack` are now internal. Enable behaviors through the fluent builder verbs
+  (`UseValidation()`, `UseResilience(...)`, `UseIdempotency(...)`, …) on `AddCqrsGenerated(b => ...)`.
+- **Outbox is off by default.** `OutboxOptions.Mode` defaults to `Disabled`; enable it with `UseOutbox(...)`. The
+  `UseInMemoryOutbox()`/`UseInMemoryIdempotency()` builder verbs and the ambiguous `AddCqrs(Action<ICqrsBuilder>)`
+  overload were removed in favor of the cohesive `UseOutbox(o => o.UseInMemoryStore())` / `UseIdempotency(i => ...)`.
+- **Rate-limiting validation** now fails through the options system (`Validate` + `ValidateOnStart`, surfacing an
+  `OptionsValidationException`) instead of throwing inside the `Configure` delegate.
+
+### Added
+
+- **`CQRCONF005` / `CQRCONF006` startup checks** — the configuration validator now reports an `IIdempotentRequest` or
+  `IRetryableRequest` marker whose idempotency/resilience behavior was never registered (an otherwise silent no-op).
+- **`CQRA008` analyzer + code fix** — suggests the open-generic `[PipelineExemption(typeof(Behavior<,>))]` shorthand over
+  the verbose closed-generic form (which the runtime already accepts).
+- **Streaming on `netstandard2.0`** — `IStreamRequest`/`IStreamRequestHandler`/`StreamRequestBase` now compile on the
+  `netstandard2.0` target.
+- **Richer AOT outbox serialization** — the generated, reflection-free notification serializer now handles nested
+  objects and collections, not just scalar properties.
+- **XML documentation on the generated public API.**
+
+### Changed
+
+- The CQRSharp source generators were reworked onto an equatable-records incremental pipeline (improved incrementality
+  and no latent symbol retention) while emitting byte-identical generated output.
+
 ## [3.0.0]
 
 ### Breaking changes

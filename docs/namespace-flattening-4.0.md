@@ -26,8 +26,8 @@ Collapse the authoring surface to **two** consumer-facing namespaces. Folders ca
   `CommandBase`/`QueryBase`/`StreamRequestBase`, `RequestBase<>`, the handler interfaces, `CommandResult`,
   `INotification`/`INotificationHandler`, `IRequestContext`/`RequestContextBase`, `RequestMetadata`, `ICqrsDispatcher`,
   `AddCqrs`/`AddCqrsGenerated`, validators, and the idempotency/retry markers.
-- **`CQRSharp.Pipelines`** — opt-in behavior wiring: `AddCqrsPipelinePack`, the behavior option types,
-  `IRateLimitedContext`, `IUnitOfWork`, `IIdempotencyStore`, etc.
+- **`CQRSharp.Pipelines`** — opt-in behavior wiring: the fluent builder verbs (`UseValidation()`/`UseResilience(...)`/…),
+  the behavior option types, `IRateLimitedContext`, `IUnitOfWork`, `IIdempotencyStore`, etc.
 
 Genuinely internal/advanced types (diagnostics, telemetry, the generator/analyzer internals) stay in deeper
 namespaces — they are not part of the first-run surface.
