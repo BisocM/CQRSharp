@@ -8,6 +8,7 @@ façade, the request context, and `CommandResult`.
 - [Handlers](#handlers)
 - [The dispatcher](#the-dispatcher)
 - [CommandResult](#commandresult)
+- [Value-returning commands](#value-returning-commands)
 - [Request context](#request-context)
 - [Custom contexts](#custom-contexts)
 - [RequestMetadata](#requestmetadata)
@@ -15,13 +16,14 @@ façade, the request context, and `CommandResult`.
 
 ## The request taxonomy
 
-Everything dispatchable derives from `IRequest`. The framework distinguishes three kinds:
+Everything dispatchable derives from `IRequest`. The framework distinguishes these kinds:
 
 | Marker | Returns | Dispatched with | Purpose |
 | --- | --- | --- | --- |
 | `ICommand` | `CommandResult` | `Send` | Intent to change state. |
 | `IQuery<TResult>` | `TResult` | `Send` | Read data; change nothing. |
 | `IStreamRequest<TItem>` | `IAsyncEnumerable<TItem>` | `Stream` | Asynchronous sequence of items. |
+| `ICommand<TResult>` | `CommandResult<TResult>` | `Send` | Change state **and** return a value no query can reproduce. See [value-returning commands](#value-returning-commands). |
 
 The response type is encoded in the type system. `IRequest<out TResponse> : IRequest` carries the
 response type, and:
@@ -52,6 +54,8 @@ You rarely implement these markers directly — you derive from the base classes
 | --- | --- | --- |
 | `CommandBase` | `ICommand` | A command using the default context. |
 | `CommandBase<TContext>` | `ICommand` | A command needing a custom context. |
+| `ResultCommandBase<TResult>` | `ICommand<TResult>` | A value-returning command using the default context. |
+| `ResultCommandBase<TResult, TContext>` | `ICommand<TResult>` | A value-returning command needing a custom context. |
 | `QueryBase<TResult>` | `IQuery<TResult>` | A query using the default context. |
 | `QueryBase<TResult, TContext>` | `IQuery<TResult>` | A query needing a custom context. |
 | `StreamRequestBase<TItem>` | `IStreamRequest<TItem>` | A streaming request using the default context. |
@@ -87,6 +91,7 @@ context type and a convenience form that defaults it to `RequestContextBase`:
 | --- | --- | --- |
 | `ICommandHandler<TCommand>` / `ICommandHandler<TCommand, TContext>` | `Handle(command, ct)` | `Task<CommandResult>` |
 | `IQueryHandler<TQuery, TResult>` / `IQueryHandler<TQuery, TResult, TContext>` | `Handle(query, ct)` | `Task<TResult>` |
+| `IResultCommandHandler<TCommand, TResult>` / `IResultCommandHandler<TCommand, TResult, TContext>` | `Handle(command, ct)` | `Task<CommandResult<TResult>>` |
 | `IStreamRequestHandler<TRequest, TItem>` / `IStreamRequestHandler<TRequest, TItem, TContext>` | `Handle(request, ct)` | `IAsyncEnumerable<TItem>` |
 
 ```csharp

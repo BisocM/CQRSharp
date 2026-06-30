@@ -23,6 +23,7 @@ These run in the editor and on build, in the `CQRSharp.Usage` category. Several 
 | `CQRA006` | Info | A published notification has no discoverable subscriber (legal, but often unintended). |
 | `CQRA007` | Warning | Rate limiting is configured, but a request's context doesn't implement `IRateLimitedContext`, so it's never throttled. |
 | `CQRA008` | Info | A `[PipelineExemption]` names a closed generic; the open-generic `typeof(Behavior<,>)` form is simpler. **Code fix:** convert it. |
+| `CQRA009` | Info | A value-returning command (`ICommand<TResult>`) — a reminder to use it only for a value no query can reproduce; model a queryable read as `IQuery<TResult>` instead. |
 
 The handler/subscriber checks (`CQRA003`, `CQRA006`) work across assemblies because the generator emits
 assembly-level marker attributes for every handled request and notification.
