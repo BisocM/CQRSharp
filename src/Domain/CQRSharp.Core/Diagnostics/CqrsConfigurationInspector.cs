@@ -57,8 +57,9 @@ public static class CqrsConfigurationInspector
                     CqrsBindingIssueSeverity.Error,
                     "CQRCONF001",
                     $"Outbox mode is '{outbox.Mode}' but the following required outbox service(s) are not registered: " +
-                    $"{string.Join(", ", missing)}. The outbox processor will never deliver notifications. Register them, " +
-                    "or call AddInMemoryOutboxStore() for development, or set the outbox mode to Disabled."));
+                    $"{string.Join(", ", missing)}. The outbox processor will never deliver notifications. Enable the " +
+                    "outbox through the builder — UseOutbox(o => o.UseInMemoryStore()) for development, or a durable store " +
+                    "such as o.UseRedis(...) / o.UseEntityFrameworkCore<TContext>() — or leave it off (outbox mode Disabled)."));
         }
 
         // CQRCONF002: Transactional mode only routes a notification through the outbox while a unit-of-work

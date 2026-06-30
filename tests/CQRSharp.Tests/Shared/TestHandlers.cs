@@ -42,3 +42,23 @@ public class NonTransactionalCommandHandler : ICommandHandler<NonTransactionalCo
     public virtual Task<CommandResult> Handle(NonTransactionalCommand command, CancellationToken cancellationToken)
         => Task.FromResult(CommandResult.FromSuccess());
 }
+
+/// <summary>
+///     A test implementation of a command handler for <see cref="IdempotentTestCommand" />.
+/// </summary>
+public class IdempotentTestCommandHandler : ICommandHandler<IdempotentTestCommand>
+{
+    /// <inheritdoc />
+    public virtual Task<CommandResult> Handle(IdempotentTestCommand command, CancellationToken cancellationToken)
+        => Task.FromResult(CommandResult.FromSuccess());
+}
+
+/// <summary>
+///     A test implementation of a command handler for <see cref="RetryableTestCommand" />.
+/// </summary>
+public class RetryableTestCommandHandler : ICommandHandler<RetryableTestCommand>
+{
+    /// <inheritdoc />
+    public virtual Task<CommandResult> Handle(RetryableTestCommand command, CancellationToken cancellationToken)
+        => Task.FromResult(CommandResult.FromSuccess());
+}

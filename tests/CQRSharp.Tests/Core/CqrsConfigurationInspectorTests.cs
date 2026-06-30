@@ -78,7 +78,7 @@ public sealed class CqrsConfigurationInspectorTests
         issue.Message.Should().Contain(nameof(IOutboxStore));
         issue.Message.Should().Contain(nameof(INotificationSerializer));
         issue.Message.Should().Contain(nameof(IDirectNotificationDispatcher));
-        issue.Message.Should().Contain("AddInMemoryOutboxStore");
+        issue.Message.Should().Contain("UseOutbox");
     }
 
     [Fact]
@@ -314,8 +314,12 @@ public sealed class CqrsConfigurationInspectorTests
     [Fact]
     public void DescribeConfiguration_is_clean_for_a_fully_wired_disabled_outbox()
     {
+        // The test assembly has discovered idempotent/retryable requests, so a "fully wired" clean setup must also
+        // enable those behaviors (otherwise CQRCONF005/006 would fire); the outbox stays off (Disabled).
         var services = new ServiceCollection();
-        services.AddCqrsGenerated(configureOutbox: o => o.Mode = OutboxMode.Disabled);
+        services.AddCqrsGenerated(b => b
+            .UseIdempotency(i => i.UseInMemoryStore())
+            .UseResilience(o => { }));
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 

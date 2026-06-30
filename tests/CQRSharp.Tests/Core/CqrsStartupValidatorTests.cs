@@ -183,6 +183,49 @@ public sealed class CqrsStartupValidatorTests
         await host.StopAsync();
     }
 
+    [Fact]
+    public async Task CQRCONF005_and_006_surface_through_the_validator_for_unwired_markers()
+    {
+        // IdempotentTestCommand / RetryableTestCommand are discovered globally, but no idempotency/resilience behavior
+        // is wired here, so each marker is a silent no-op the validator must flag — end-to-end through the generated
+        // diagnostics, the inspector, and the validator.
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated();
+        RegisterTestRequestFactories(services);
+        await using var provider = services.BuildServiceProvider();
+
+        using (var scope = provider.CreateScope())
+        {
+            var config = scope.ServiceProvider.GetRequiredService<ICqrsDiagnostics>().DescribeConfiguration();
+            config.Should().Contain(i => i.Code == "CQRCONF005");
+            config.Should().Contain(i => i.Code == "CQRCONF006");
+        }
+
+        // Under ThrowOnWarning the validator aborts host start on these warnings.
+        var validator = CreateValidator(provider, CqrsValidationPolicy.ThrowOnWarning);
+        var act = () => validator.StartAsync(CancellationToken.None);
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("CQRCONF005").And.Contain("CQRCONF006");
+    }
+
+    [Fact]
+    public async Task CQRCONF005_and_006_cleared_when_the_behaviors_are_wired()
+    {
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b
+            .UseIdempotency(i => i.UseInMemoryStore())
+            .UseResilience(o => { }));
+        RegisterTestRequestFactories(services);
+        await using var provider = services.BuildServiceProvider();
+
+        using var scope = provider.CreateScope();
+        var config = scope.ServiceProvider.GetRequiredService<ICqrsDiagnostics>().DescribeConfiguration();
+        config.Should().NotContain(i => i.Code == "CQRCONF005" || i.Code == "CQRCONF006");
+
+        // And host start proceeds (no warnings to abort on under ThrowOnWarning).
+        await CreateValidator(provider, CqrsValidationPolicy.ThrowOnWarning).StartAsync(CancellationToken.None);
+    }
+
     // The shared diagnostics test fixtures include a request with a custom context whose factory is otherwise
     // registered only per-test; register it here so DescribeAllRequests() yields no per-request CQRDIAG errors and
     // the assertions isolate the configuration-level codes under test.

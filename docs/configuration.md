@@ -162,6 +162,7 @@ The behavior is governed by `CqrsValidationPolicy`:
 | Policy | Effect |
 | --- | --- |
 | `Off` | The validator does not run. (`ValidateOnStart(false)` maps here.) |
+| `WarnOnly` | Log all issues, but never abort host start — even on errors. |
 | `ThrowOnError` | Log all issues; abort host start if any **error** is present. (`ValidateOnStart()` maps here.) |
 | `ThrowOnWarning` | Abort host start if any error **or warning** is present. |
 

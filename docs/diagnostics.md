@@ -58,7 +58,8 @@ The hosted **`CqrsStartupValidator`** inspects the wired-up configuration and ev
 | `CQRCONF006` | Warning | A request implements `IRetryableRequest`, but no resilience behavior is wired — the marker has no effect. Call `UseResilience(...)`. |
 
 The validator logs every issue with its code, then — per the `CqrsValidationPolicy` — aborts host start
-by throwing when errors (`ThrowOnError`) or errors-and-warnings (`ThrowOnWarning`) are present.
+by throwing when errors (`ThrowOnError`) or errors-and-warnings (`ThrowOnWarning`) are present. `WarnOnly`
+logs everything but never aborts; `Off` skips validation entirely.
 
 The global checks (`CQRCONF001`–`004`) are produced by the public `CqrsConfigurationInspector`, which
 the source-generated diagnostics class calls; the marker checks (`CQRCONF005`/`006`) detect a request

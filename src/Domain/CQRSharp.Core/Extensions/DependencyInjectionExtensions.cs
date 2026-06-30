@@ -133,9 +133,10 @@ public static class DependencyInjectionExtensions
     /// <summary>
     ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />. The store is NOT
     ///     durable — messages live in process memory and are lost on restart — so it is intended for development,
-    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). The outbox
-    ///     still needs the source-generated notification serializer and an outbox-enabled <c>AddCqrs</c> for the
-    ///     processor to actually run.
+    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). Prefer enabling
+    ///     the outbox through the fluent builder (<c>UseOutbox</c> with <c>o.UseInMemoryStore()</c>), which selects the
+    ///     mode, registers this store, and runs the processor in one step; call this primitive directly only to wire a
+    ///     store outside the builder.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory store options.</param>
@@ -160,7 +161,9 @@ public static class DependencyInjectionExtensions
     ///     Registers the in-process in-memory idempotency store as the <see cref="IIdempotencyStore" />, so requests
     ///     implementing <c>IIdempotentRequest</c> are deduplicated. The store is NOT durable — claims live in process
     ///     memory and are lost on restart — so it deduplicates only within a single process lifetime; use a database-
-    ///     or Redis-backed store for cross-process at-most-once semantics.
+    ///     or Redis-backed store for cross-process at-most-once semantics. Prefer enabling idempotency through the fluent
+    ///     builder (<c>UseIdempotency</c> with <c>i.UseInMemoryStore()</c>), which turns on the behavior and registers
+    ///     this store together; call this primitive directly only to wire a store outside the builder.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory idempotency store options.</param>

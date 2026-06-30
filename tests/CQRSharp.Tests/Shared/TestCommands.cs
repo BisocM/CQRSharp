@@ -37,6 +37,22 @@ public class TransactionalCommand : CommandBase, ITransactionalCommand
 public class NonTransactionalCommand : CommandBase;
 
 /// <summary>
+///     A command implementing <see cref="IIdempotentRequest" />, used to exercise idempotency wiring (and the
+///     CQRCONF005 startup check when no idempotency behavior is registered).
+/// </summary>
+public class IdempotentTestCommand : CommandBase, IIdempotentRequest
+{
+    /// <inheritdoc />
+    public string IdempotencyKey => "idempotent-test-command";
+}
+
+/// <summary>
+///     A command implementing <see cref="IRetryableRequest" />, used to exercise resilience wiring (and the
+///     CQRCONF006 startup check when no resilience behavior is registered).
+/// </summary>
+public class RetryableTestCommand : CommandBase, IRetryableRequest;
+
+/// <summary>
 ///     A command that requires a rate-limited context, used for testing rate-limiting behavior.
 /// </summary>
 public class TestRateLimitedCommand : RequestBase<IRateLimitedContext>;
