@@ -1,4 +1,5 @@
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
@@ -76,6 +77,18 @@ public static class CqrsConfigurationInspector
                     "does not implement IExplicitUnitOfWork, so no active transaction can be detected. Notifications will " +
                     "always dispatch directly in-process and never enter the outbox. Implement IExplicitUnitOfWork, or use a " +
                     "non-transactional outbox mode."));
+
+            // CQRCONF007: Transactional mode gates the outbox on an active transaction, which only an IUnitOfWork can
+            // provide. With none registered at all, there is never a transaction to gate on, so every publish silently
+            // degrades to direct in-process dispatch — the same failure as CQRCONF002 but from a total absence.
+            else if (unitOfWork is null)
+                issues.Add(new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Warning,
+                    "CQRCONF007",
+                    "Outbox mode is 'Transactional' but no IUnitOfWork is registered, so there is never an active " +
+                    "transaction to gate on. Every notification dispatches directly in-process and never enters the outbox. " +
+                    "Register an IExplicitUnitOfWork (e.g. via the builder's UseUnitOfWork(...)), or use a non-transactional " +
+                    "outbox mode (Enabled)."));
         }
 
         // CQRCONF003: a handled notification without a stable [NotificationName] cannot be durably stored, so it
@@ -102,6 +115,19 @@ public static class CqrsConfigurationInspector
                 "No IRequestRegistry is registered although CQRSharp request bindings exist. The source-generated " +
                 "registrations were not applied: call AddCqrsGenerated(...) instead of AddCqrs(...), and ensure it runs " +
                 "before requests are dispatched."));
+
+        // CQRCONF008: RunMode.Queued drains dispatch through the background task queue, which has no streaming path —
+        // any Stream(...) of a request throws at the first dispatch, far from the configuration site and with no other
+        // startup catch. Flag every stream binding so the conflict surfaces at host start instead.
+        if (dispatcher.RunMode == RunMode.Queued)
+            foreach (var binding in requestBindings)
+                if (typeof(IStreamRequest).IsAssignableFrom(binding.RequestType))
+                    issues.Add(new CqrsBindingIssue(
+                        CqrsBindingIssueSeverity.Error,
+                        "CQRCONF008",
+                        $"RunMode is 'Queued' but request '{binding.RequestType.FullName}' is a stream request. Streaming is " +
+                        "not supported under queued dispatch and throws at the first Stream(...) call. Use RunMode.Inline, or " +
+                        "do not dispatch stream requests while queued dispatch is enabled."));
 
         // CQRCONF005 / CQRCONF006: a request opts into idempotency/retries via a marker interface, but the behavior
         // that honors it is not wired into the request's pipeline, so the marker silently has no effect.

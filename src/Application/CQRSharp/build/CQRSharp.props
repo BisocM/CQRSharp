@@ -19,6 +19,8 @@
     <Using Include="CQRSharp.Abstractions.Models.Requests" />
     <Using Include="CQRSharp.Core.Mediation" />
     <Using Include="CQRSharp.Core.Extensions" />
+    <Using Include="CQRSharp.Core.Pipelines" />
+    <Using Include="CQRSharp.Core.Notifications.Pipelines" />
     <Using Include="CQRSharp.Pipelines" />
     <Using Include="CQRSharp.Pipelines.Extensions" />
   </ItemGroup>

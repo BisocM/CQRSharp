@@ -136,6 +136,13 @@ public sealed partial class CqrsSourceGenerator
             : Array.Empty<ExceptionHookModel>();
         var aotBehavior = BuildAotOpenGenericBehavior(type, compilation, isAccessible);
 
+        // CQRGEN010: dispatch-handler type arguments that are too inaccessible for generated registration. The handler
+        // itself is accessible (so CQRGEN006 does not fire), but the binding is silently dropped in BuildHandlerImpls —
+        // surfacing only as a runtime "no handler". Carry the offending type names so they can be flagged at the handler.
+        var inaccessibleBoundTypes = isConcrete && isAccessible
+            ? CollectInaccessibleBoundTypes(type, compilation)
+            : Array.Empty<string>();
+
         // An open-generic dispatch handler (e.g. `class H<T> : ICommandHandler<C<T>>`) is silently unregistered — the
         // generator wires only closed, non-generic handlers — so it would fail only as a runtime "no handler". Carry it
         // through so CQRGEN009 can flag it at the declaration. (Open-generic pipeline behaviors ARE supported and handled
@@ -170,7 +177,41 @@ public sealed partial class CqrsSourceGenerator
             new EquatableArray<string>(contextFactories),
             new EquatableArray<ExceptionHookModel>(exceptionHooks),
             aotBehavior,
-            isOpenGenericHandler);
+            isOpenGenericHandler,
+            new EquatableArray<string>(inaccessibleBoundTypes));
+    }
+
+    // CQRGEN010 helper: returns the type arguments of this handler's dispatch-handler interfaces (request/result/context/
+    // notification) that fail the generated-code accessibility test — exactly the args whose presence makes
+    // BuildHandlerImpls skip the binding. Mirrors that drop condition so the diagnostic and the drop stay in lock-step.
+    private static string[] CollectInaccessibleBoundTypes(INamedTypeSymbol type, Compilation compilation)
+    {
+        var known = CqrsKnownSymbols.For(compilation);
+        var dispatchHandlerDefs = new[]
+        {
+            known.ICommandHandler1, known.ICommandHandler2,
+            known.IResultCommandHandler2, known.IResultCommandHandler3,
+            known.IQueryHandler2, known.IQueryHandler3,
+            known.IStreamRequestHandler2, known.IStreamRequestHandler3,
+            known.INotificationHandler
+        };
+
+        List<string>? inaccessible = null;
+        foreach (var iface in GetInterfacesAndBaseInterfaces(type))
+        {
+            if (!iface.IsGenericType) continue;
+            if (!dispatchHandlerDefs.Any(def => def is not null &&
+                    SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, def)))
+                continue;
+
+            foreach (var typeArg in iface.TypeArguments)
+                if (!IsAccessibleFromGeneratedCode(typeArg))
+                    (inaccessible ??= new List<string>()).Add(typeArg.ToDisplayString(Fq));
+        }
+
+        return inaccessible is null
+            ? Array.Empty<string>()
+            : inaccessible.Distinct(StringComparer.Ordinal).ToArray();
     }
 
     // True when the type implements one of the core dispatch-handler interfaces (command/query/result-command/stream/

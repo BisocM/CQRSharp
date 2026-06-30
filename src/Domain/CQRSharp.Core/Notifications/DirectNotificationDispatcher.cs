@@ -39,7 +39,7 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
 
         throw new NotSupportedException(
             "Untyped notification dispatch requires the CQRSharp source generator. " +
-            "Ensure you call services.AddGenerated() during startup so an AOT-safe dispatcher is registered.");
+            "Ensure you call AddCqrsGenerated(...) during startup so the generated AOT-safe dispatcher is registered.");
     }
 
     /// <inheritdoc />

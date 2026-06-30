@@ -16,7 +16,7 @@ public sealed class ValidationBehavior<TRequest, TResult>(
 {
     public async Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

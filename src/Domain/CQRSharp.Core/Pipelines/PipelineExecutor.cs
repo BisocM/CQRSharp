@@ -202,7 +202,7 @@ public sealed class PipelineExecutor(
         using var activity = CqrsActivitySource.StartRequest("CQRS Query", typeof(TRequest));
         try
         {
-            InitializeRequestContext(query, provider);
+            await InitializeRequestContextAsync(query, provider, ct).ConfigureAwait(false);
             var handler = GetHandler(typeof(TRequest), provider);
             var result = await ExecutePipelineAsync<TRequest, TResult>(query, handler, provider, ct).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
@@ -255,26 +255,25 @@ public sealed class PipelineExecutor(
         }
     }
 
-    private IAsyncEnumerable<TItem> ExecuteStreamInProviderCore<TRequest, TItem>(
+    private async IAsyncEnumerable<TItem> ExecuteStreamInProviderCore<TRequest, TItem>(
         TRequest request,
         IServiceProvider provider,
         CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TItem>
     {
-        InitializeRequestContext(request, provider);
+        using var activity = CqrsActivitySource.StartRequest("CQRS Stream", typeof(TRequest));
+
+        // Context init is awaited (the factory may hydrate asynchronously) before the handler is resolved and the
+        // stream pipeline is built, so the context is fully populated by the time the first item is produced.
+        await InitializeRequestContextAsync(request, provider, cancellationToken).ConfigureAwait(false);
 
         var handler = GetHandler(typeof(TRequest), provider);
-
         var pipeline = ExecuteStreamPipeline<TRequest, TItem>(request, handler, provider, cancellationToken);
-        return WithActivity(pipeline);
 
-        async IAsyncEnumerable<TItem> WithActivity(IAsyncEnumerable<TItem> source)
-        {
-            using var activity = CqrsActivitySource.StartRequest("CQRS Stream", typeof(TRequest));
-            await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
-                yield return item;
-            activity?.SetStatus(ActivityStatusCode.Ok);
-        }
+        await foreach (var item in pipeline.WithCancellation(cancellationToken).ConfigureAwait(false))
+            yield return item;
+
+        activity?.SetStatus(ActivityStatusCode.Ok);
     }
 
     private Task<CommandResult> ExecuteCommandImmediateAsync<TRequest>(
@@ -304,7 +303,7 @@ public sealed class PipelineExecutor(
         using var activity = CqrsActivitySource.StartRequest("CQRS Command", typeof(TRequest));
         try
         {
-            InitializeRequestContext(command, provider);
+            await InitializeRequestContextAsync(command, provider, ct).ConfigureAwait(false);
             var handler = GetHandler(typeof(TRequest), provider);
             var result = await ExecutePipelineAsync<TRequest, CommandResult>(command, handler, provider, ct).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
@@ -492,11 +491,22 @@ public sealed class PipelineExecutor(
                     break;
             }
 
+            // Outcome-aware post-handlers also observe a thrown failure; isolate them so an audit/post-handler error
+            // never masks the original exception.
+            try
+            {
+                await InvokePostHandleAttributes(request, RequestOutcome.FromException(ex), services, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Swallow: the original failure must surface, not a post-handler's.
+            }
+
             throw;
         }
 
-        // Execute any post-handler logic defined via attributes.
-        await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+        // Execute any post-handler logic defined via attributes, handing them the successful result as the outcome.
+        await InvokePostHandleAttributes(request, RequestOutcome.FromResult(result), services, cancellationToken).ConfigureAwait(false);
 
         switch (request)
         {
@@ -562,7 +572,7 @@ public sealed class PipelineExecutor(
 
             if (completed)
             {
-                await InvokePostHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+                await InvokePostHandleAttributes(request, RequestOutcome.FromResult(null), services, cancellationToken).ConfigureAwait(false);
                 await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -650,13 +660,22 @@ public sealed class PipelineExecutor(
     /// <param name="request">The request being processed.</param>
     /// <param name="sp">The scoped service provider.</param>
     /// <param name="ct">The cancellation token.</param>
-    private static async Task InvokePostHandleAttributes(IRequest request, IServiceProvider sp, CancellationToken ct)
+    private static async Task InvokePostHandleAttributes(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
     {
         if (request.Metadata is null) return;
 
         var postHandlers = GetPostHandlers(request);
         for (var i = 0; i < postHandlers.Length; i++)
-            await postHandlers[i].OnAfterHandle(request, sp, ct).ConfigureAwait(false);
+        {
+            var postHandler = postHandlers[i];
+
+            // An outcome-aware post-handler is handed the returned value (or the thrown exception) and runs on both the
+            // success and the exception paths. A plain post-handler keeps its existing success-only behavior.
+            if (postHandler is IPostHandlerOutcomeAware outcomeAware)
+                await outcomeAware.OnAfterHandle(request, outcome, sp, ct).ConfigureAwait(false);
+            else if (!outcome.Threw)
+                await postHandler.OnAfterHandle(request, sp, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -684,7 +703,7 @@ public sealed class PipelineExecutor(
     /// <param name="requestBase">The request object.</param>
     /// <param name="services">The scoped service provider used to resolve the context factory.</param>
     /// <exception cref="InvalidOperationException">Thrown if metadata or a required context factory is not found.</exception>
-    private void InitializeRequestContext(IRequest requestBase, IServiceProvider services)
+    private async ValueTask InitializeRequestContextAsync(IRequest requestBase, IServiceProvider services, CancellationToken cancellationToken)
     {
         // Retrieve and assign source-generated metadata to the request object.
         if (!requestRegistry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata == null)
@@ -702,10 +721,13 @@ public sealed class PipelineExecutor(
         var factoryObj = contextFactoryRegistry.TryGetFactory(contextType, services);
 
         if (factoryObj is not IInternalRequestContextFactory contextFactory)
-            throw new InvalidOperationException($"No factory for context type '{contextType.FullName}' registered.");
+            throw new InvalidOperationException(
+                $"No IRequestContextFactory<{contextType.Name}> is registered for context type '{contextType.FullName}'. " +
+                "Register one in DI, or use the default context (CommandBase/QueryBase without a custom context type).");
 
-        // Create and assign the context to the request.
-        requestBase.Context = contextFactory.CreateContext(requestBase);
+        // Create and assign the context to the request. The factory may load request-scoped data asynchronously
+        // (the default implementation wraps a synchronous CreateContext, so existing factories complete inline).
+        requestBase.Context = await contextFactory.CreateContextAsync(requestBase, cancellationToken).ConfigureAwait(false);
     }
 
     private static IPreHandlerAttribute[] GetPreHandlers(IRequest request)

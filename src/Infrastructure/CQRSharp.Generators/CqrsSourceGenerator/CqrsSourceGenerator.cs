@@ -44,6 +44,14 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
         DiagnosticSeverity.Warning,
         true);
 
+    private static readonly DiagnosticDescriptor InaccessibleBoundTypeDiagnostic = new(
+        "CQRGEN010",
+        "Handler binding skipped: a bound type is inaccessible",
+        "'{0}' is registered by the generator, but its binding to '{1}' is skipped because '{1}' is less accessible than internal, so dispatching that request throws \"no handler\" at runtime. Make '{1}' public or internal.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Warning,
+        true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Project each candidate type into a small, value-equatable model in the transform. Because no symbols or
@@ -119,6 +127,7 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 
             ReportInaccessibleHandlers(candidates, context);
             ReportOpenGenericHandlers(candidates, context);
+            ReportInaccessibleBoundTypes(candidates, context);
         }
         catch (Exception ex)
         {
@@ -201,6 +210,19 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
         {
             var location = candidate.Location?.ToLocation() ?? Location.None;
             context.ReportDiagnostic(Diagnostic.Create(OpenGenericHandlerDiagnostic, location, candidate.TypeName));
+        }
+    }
+
+    // CQRGEN010: a handler is registered, but a binding to a less-accessible request/result/context/notification type is
+    // silently dropped (BuildHandlerImpls skips it). Flag each offending type at the handler so the gap is caught at build.
+    private static void ReportInaccessibleBoundTypes(ImmutableArray<CandidateModel> candidates, SourceProductionContext context)
+    {
+        foreach (var candidate in candidates.Where(c => c.InaccessibleBoundTypeNames.Count > 0))
+        {
+            var location = candidate.Location?.ToLocation() ?? Location.None;
+            foreach (var typeName in candidate.InaccessibleBoundTypeNames)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    InaccessibleBoundTypeDiagnostic, location, candidate.TypeName, typeName));
         }
     }
 

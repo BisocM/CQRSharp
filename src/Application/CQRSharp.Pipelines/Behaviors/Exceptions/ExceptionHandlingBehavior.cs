@@ -17,7 +17,7 @@ public sealed class ExceptionHandlingBehavior<TRequest, TResult>(
 {
     public async Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

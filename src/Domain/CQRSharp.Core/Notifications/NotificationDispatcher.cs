@@ -88,7 +88,8 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         if (outbox is null)
             throw new InvalidOperationException(
                 "Outbox mode is active, but the IOutbox service is not registered. " +
-                "Ensure you have called services.AddCqrs() (or otherwise registered a scoped IOutbox).");
+                "Ensure AddCqrsGenerated(...) ran during startup, and resolve ICqrsDispatcher from a DI scope " +
+                "(not the root provider) so the scoped IOutbox is available.");
         outbox.Add(notification);
         return Task.CompletedTask;
     }

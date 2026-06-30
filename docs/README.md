@@ -23,8 +23,11 @@ interfaces and handlers, and dispatch everything through a single façade — `I
 - **Fail-fast configuration.** A startup validator turns silent mis-wiring (an enabled outbox with no
   store, an idempotency marker with no behavior, …) into loud errors at host start.
 - **Batteries included, opt-in.** Validation, logging, rate limiting, resilience/retries, timeouts,
-  unit-of-work, idempotency, and a transactional outbox are all available through one order-insensitive
-  fluent builder — and all off until you ask for them.
+  unit-of-work, idempotency, and a transactional outbox are all wired through one order-insensitive
+  fluent builder. Nothing runs until you call a builder verb; once you activate the pipeline pack (any
+  pack verb), validation and exception handling come on with it — opt either back out with
+  `UseValidation(false)` / `UseExceptionHandling(false)`. See
+  [Pipeline behaviors](pipeline-behaviors.md#built-in-behaviors).
 
 ---
 
@@ -93,10 +96,14 @@ public sealed class CreateUserHandler : ICommandHandler<CreateUser>
         => Task.FromResult(CommandResult.FromSuccess());
 }
 
-// Dispatch through the single façade.
+// Dispatch through the single façade — await the result and check IsSuccess.
 public sealed class Users(ICqrsDispatcher cqrs)
 {
-    public Task<CommandResult> Create(string name) => cqrs.Send(new CreateUser { Name = name });
+    public async Task<bool> Create(string name)
+    {
+        CommandResult result = await cqrs.Send(new CreateUser { Name = name });
+        return result.IsSuccess;
+    }
 }
 ```
 

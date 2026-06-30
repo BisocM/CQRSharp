@@ -1,3 +1,5 @@
+using System.Threading;
+using System.Threading.Tasks;
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
@@ -53,4 +55,18 @@ public interface IInternalRequestContextFactory
     /// <param name="request">The request that requires a context.</param>
     /// <returns>The created IRequestContext instance.</returns>
     IRequestContext CreateContext(IRequest request);
+
+    /// <summary>
+    ///     Asynchronously creates the context for the given request. CQRSharp calls this once per request, before the
+    ///     pipeline runs, so a factory can load request-scoped data (for example, the current user aggregate) from async
+    ///     sources at a single awaited point instead of blocking or scattering lazy loads through the handler. The
+    ///     default wraps the synchronous <see cref="CreateContext" />, so existing synchronous factories need no
+    ///     changes; async factories override it — derive from <c>AsyncRequestContextFactory&lt;TContext&gt;</c> for a
+    ///     typed override with no synchronous stub.
+    /// </summary>
+    /// <param name="request">The request that requires a context.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous creation.</param>
+    /// <returns>The created <see cref="IRequestContext" /> instance.</returns>
+    ValueTask<IRequestContext> CreateContextAsync(IRequest request, CancellationToken cancellationToken)
+        => new(CreateContext(request));
 }

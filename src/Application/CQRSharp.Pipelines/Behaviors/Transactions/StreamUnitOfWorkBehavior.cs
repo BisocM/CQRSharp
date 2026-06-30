@@ -34,7 +34,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -54,7 +54,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 
     private IAsyncEnumerable<TItem> HandleExplicitTransaction(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken,
         Activity? activity,
         IExplicitUnitOfWork explicitUow)
@@ -159,7 +159,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 
     private IAsyncEnumerable<TItem> HandleImplicitTransaction(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken,
         Activity? activity)
     {

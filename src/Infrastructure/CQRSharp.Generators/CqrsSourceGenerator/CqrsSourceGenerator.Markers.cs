@@ -52,6 +52,16 @@ public sealed partial class CqrsSourceGenerator
         foreach (var notification in handledNotifications)
             sb.AppendLine($"[assembly: global::CQRSharp.Abstractions.Attributes.SourceGeneration.CqrsHandledNotification(typeof({notification}))]");
 
+        // One marker per context type that has a discovered IRequestContextFactory, so CQRA011 can see factories
+        // declared in referenced assemblies (the current compilation's factories are found by scanning its own source).
+        var registeredContextFactories = candidates
+            .SelectMany(c => c.ContextFactories)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(t => t, StringComparer.Ordinal);
+
+        foreach (var contextType in registeredContextFactories)
+            sb.AppendLine($"[assembly: global::CQRSharp.Abstractions.Attributes.SourceGeneration.CqrsRegisteredContextFactory(typeof({contextType}))]");
+
         return sb.ToString();
     }
 }

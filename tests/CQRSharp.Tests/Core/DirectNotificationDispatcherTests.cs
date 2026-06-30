@@ -20,6 +20,6 @@ public class DirectNotificationDispatcherTests
         INotification notification = new TestNotification();
         var act = () => dispatcher.Publish(notification, CancellationToken.None);
         await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("*services.AddGenerated()*");
+            .WithMessage("*AddCqrsGenerated*");
     }
 }

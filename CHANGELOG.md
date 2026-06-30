@@ -2,6 +2,76 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.0]
+
+A focused ease-of-use release: make the first dispatch succeed, make failures self-explanatory, and make the
+discoverable path the correct path.
+
+### Added
+
+- **`dotnet new cqrsharp` template** and a **`CQRSharp.Sample.Minimal`** project — a complete, ~30-line app that
+  registers CQRSharp, sends one request, and prints the result. `docs/getting-started.md` now opens with the same
+  runnable program instead of fragments assembled across pages.
+- **Five new analyzers and one new generator diagnostic** that turn silent runtime failures into build-time warnings:
+  - **`CQRA011`** (Warning) — a request declares a custom context but no `IRequestContextFactory<TContext>` is
+    discoverable (in this compilation or, via a new generator-emitted assembly marker, a referenced one), so dispatch
+    would throw. 
+  - **`CQRA012`** (Warning) — an `IRequestValidator<T>` is declared where CQRSharp is registered, but no pipeline pack
+    is enabled, so the validator never runs and input reaches the handler unvalidated.
+  - **`CQRA013`** (Info) — resilience/idempotency is configured but a request does not implement
+    `IRetryableRequest`/`IIdempotentRequest`, so it is silently passed through (often intentional).
+  - **`CQRA014`** (Error, with code fix) — `AddCqrs(...)` is called directly in user code; it leaves dispatch
+    unrouted. The fix rewrites it to `AddCqrsGenerated(...)`.
+  - **`CQRA017`** (Info) — a type implementing both `IPreHandlerAttribute` and `IPostHandlerAttribute` can be a single
+    `ICommandInterceptor`.
+  - **`CQRGEN010`** (Warning) — a handler binding is skipped because a bound request/result/context/notification type
+    argument is less accessible than `internal` (the handler itself is accessible), which previously surfaced only as a
+    runtime "no handler".
+- **`CQRCONF007`** — startup warning when the outbox is `Transactional` but no `IUnitOfWork` is registered at all, so
+  every notification silently dispatches in-process.
+- **`CQRCONF008`** — startup error when `RunMode.Queued` is combined with a stream request (streaming has no queued
+  path and throws at the first `Stream(...)`).
+- **`ModelBuilder.ApplyCqrsOutbox()` / `ApplyCqrsIdempotency()`** (CQRSharp.EntityFrameworkCore) — apply the outbox /
+  idempotency entity mappings in one call from `OnModelCreating`.
+- **`ICqrsBuilder.ValidateOnStart(CqrsValidationPolicy)`** — choose any policy (`WarnOnly`, `ThrowOnWarning`, …), not
+  just the on/off the `bool` overload exposed.
+- **Named pipeline continuations** — `RequestHandlerDelegate<TResult>` / `StreamHandlerDelegate<TItem>` replace the bare
+  `Func<…>` `next` parameter, so a behavior can `await next()` (the token is defaulted) and the type self-documents.
+- The meta-package's global usings now include `CQRSharp.Core.Pipelines` and `CQRSharp.Core.Notifications.Pipelines`, so
+  custom pipeline/notification behaviors resolve without manual imports.
+- **Async context hydration.** Request context factories can now create the context asynchronously: derive from the new
+  `AsyncRequestContextFactory<TContext>` and override `CreateContextAsync` to load request-scoped data (for example, the
+  current user aggregate) from async sources at a single awaited point before the pipeline runs — instead of blocking in
+  the factory or scattering lazy loads through the handler. The dispatcher awaits creation across the query, command, and
+  stream paths. Synchronous factories are unchanged: the new `IInternalRequestContextFactory.CreateContextAsync` defaults
+  to wrapping the existing synchronous `CreateContext`.
+- **Outcome-aware post-handlers.** A post-handler can now receive the request's `RequestOutcome` — the value the handler
+  returned *or* the exception it threw — not just the request. Derive from `OutcomeAwarePostHandlerAttribute` (or
+  implement `IPostHandlerOutcomeAware`) to classify on what actually happened: this is what lets a cross-cutting concern
+  such as auditing distinguish a login that *returned* a "bad credentials" verdict (a successful dispatch carrying a
+  denial) from one that succeeded, without lying via `FromError`/throw. Outcome-aware post-handlers also run on the
+  exception path (isolated, so they cannot mask the original error); plain `IPostHandlerAttribute` post-handlers keep
+  their existing success-only behavior.
+
+### Changed
+
+- **`AddCqrs` is now hidden from IntelliSense (`[EditorBrowsable(Never)]`)** and its XML doc points at
+  `AddCqrsGenerated`. It remains callable (the builder and generated bootstrap use it internally), but `CQRA014` flags
+  any direct use in your code.
+- **`UseValidation()` / `UseExceptionHandling()` are honest.** They now accept a `bool` (`UseValidation(false)` opts
+  out), and the docs state the real default: validation and exception handling are on whenever the pipeline pack is
+  active (i.e. whenever any pack verb is used), not "off by default".
+- Exception messages that pointed at the wrong registration verb (`AddCqrs()`, the internal `AddGenerated()`) now name
+  `AddCqrsGenerated(...)` and add the resolve-from-a-scope hint. A guard test keeps them from regressing.
+- `IPipelineBehaviour.cs` was renamed to `IPipelineBehavior.cs` (the only British-spelled file; the type was already
+  `IPipelineBehavior`).
+
+### Fixed
+
+- Documentation corrections: the false "custom context falls back to `RequestContextBase`" claim, the "all built-ins
+  off by default" claim, undocumented `CQRDIAG001`–`004`, the missing `ICommandInterceptor` documentation, and the
+  open-generic-notification (`INotificationPipelineBehavior<TN>`) audit pattern.
+
 ## [4.0.3]
 
 ### Fixed

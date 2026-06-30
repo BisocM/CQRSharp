@@ -4,6 +4,7 @@ using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Models.Idempotency;
 using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Idempotency;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -42,7 +43,7 @@ public class IdempotencyBehaviorTests
     {
         var behavior = Create<IdempotentRequest>(new InMemoryStore());
         var calls = 0;
-        Func<CancellationToken, Task<object>> next = _ =>
+        RequestHandlerDelegate<object> next = _ =>
         {
             calls++;
             return Task.FromResult<object>("ok");

@@ -17,7 +17,7 @@ public sealed class StreamValidationBehavior<TRequest, TItem>(
 
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

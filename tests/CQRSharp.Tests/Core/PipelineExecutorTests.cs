@@ -64,6 +64,11 @@ public class PipelineExecutorTests
 
         var mockContextFactory = new Mock<IInternalRequestContextFactory>();
         mockContextFactory.Setup(f => f.CreateContext(It.IsAny<IRequest>())).Returns(new RequestContextBase());
+        // The executor now awaits CreateContextAsync; a Moq mock returns default(ValueTask) for the un-set-up default
+        // interface method, so wire it explicitly (the default-wraps-sync behavior is covered by AsyncContextFactoryTests).
+        mockContextFactory
+            .Setup(f => f.CreateContextAsync(It.IsAny<IRequest>(), It.IsAny<CancellationToken>()))
+            .Returns(new ValueTask<IRequestContext>(new RequestContextBase()));
         _mockContextFactoryRegistry.Setup(r => r.TryGetFactory(It.IsAny<Type>(), It.IsAny<IServiceProvider>())).Returns(mockContextFactory.Object);
 
         _mockBackgroundTaskManager = new Mock<IBackgroundTaskManager>();
@@ -288,7 +293,7 @@ public class PipelineExecutorTests
     private sealed class ExemptedBehavior<TRequest, TResult>(List<string> callOrder)
         : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
     {
-        public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next,
+        public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next,
             CancellationToken cancellationToken)
         {
             callOrder.Add("exempted");
@@ -299,7 +304,7 @@ public class PipelineExecutorTests
     private sealed class OtherBehavior<TRequest, TResult>(List<string> callOrder)
         : IPipelineBehavior<TRequest, TResult> where TRequest : IRequest
     {
-        public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next,
+        public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next,
             CancellationToken cancellationToken)
         {
             callOrder.Add("other");

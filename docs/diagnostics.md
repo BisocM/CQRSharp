@@ -8,6 +8,7 @@ API** and a **health check** so you can see exactly how every request is wired.
 - [Generator diagnostics (CQRGEN)](#generator-diagnostics-cqrgen)
 - [Startup validation (CQRCONF)](#startup-validation-cqrconf)
 - [The introspection API](#the-introspection-api)
+- [Binding issues (CQRDIAG)](#binding-issues-cqrdiag)
 - [Health checks](#health-checks)
 
 ## Compile-time analyzers (CQRA)
@@ -25,9 +26,15 @@ These run in the editor and on build, in the `CQRSharp.Usage` category. Several 
 | `CQRA008` | Info | A `[PipelineExemption]` names a closed generic; the open-generic `typeof(Behavior<,>)` form is simpler. **Code fix:** convert it. |
 | `CQRA009` | Info | A value-returning command (`ICommand<TResult>`) — a reminder to use it only for a value no query can reproduce; model a queryable read as `IQuery<TResult>` instead. |
 | `CQRA010` | Warning | A project declares CQRSharp handlers but the source generator isn't running in it (no module is emitted), so its handlers won't be registered. Add the CQRSharp package to this project. |
+| `CQRA011` | Warning | A request uses a custom context (`CommandBase<TContext>` / `QueryBase<TContext>` with a non-`RequestContextBase` `TContext`) but no `IRequestContextFactory<TContext>` is discoverable, so the first dispatch throws. Implement and register a factory (the generator auto-registers any it can see). |
+| `CQRA012` | Warning | An `IRequestValidator<TRequest>` is declared but the validation behavior isn't enabled (no pipeline-pack verb where CQRSharp is registered), so the validator never runs and input reaches the handler **unvalidated**. Call `UseValidation()` (or any pack verb). |
+| `CQRA013` | Info | A resilience/idempotency behavior is configured, but a request doesn't implement the opt-in marker (`IRetryableRequest` / `IIdempotentRequest`), so the behavior never applies to it. Ignore if opting out is intentional. |
+| `CQRA014` | Error | `AddCqrs(...)` is called directly — it registers the dispatcher but not the generated handler routing, so the first `Send`/`Stream`/`Publish` throws. **Code fix:** call `AddCqrsGenerated(...)` instead. |
+| `CQRA017` | Info | A type implements both `IPreHandlerAttribute` and `IPostHandlerAttribute`; it can be a single `ICommandInterceptor` (one combined pre+post interceptor). |
 
-The handler/subscriber checks (`CQRA003`, `CQRA006`) work across assemblies because the generator emits
-assembly-level marker attributes for every handled request and notification.
+The handler/subscriber/context checks (`CQRA003`, `CQRA006`, `CQRA011`, and the validator check
+`CQRA012`) work across assemblies because the generator emits assembly-level marker attributes for every
+handled request, notification, and registered context factory.
 
 ## Generator diagnostics (CQRGEN)
 
@@ -43,6 +50,7 @@ These are reported by the source generator during compilation, in the `CQRSharp.
 | `CQRGEN007` | Error | A CQRSharp framework "well-known type" couldn't be resolved — usually mismatched package versions. |
 | `CQRGEN008` | Info | `CQRSharp.Abstractions` is referenced but `CQRSharp.Core` isn't, so generation is skipped. Reference `CQRSharp.Core` (or the meta-package). |
 | `CQRGEN009` | Warning | An open-generic handler (`Handler<T>`) is never registered — CQRSharp wires only closed, non-generic handlers, so it would otherwise fail with "no handler" at dispatch. Declare a concrete handler, or register it manually. |
+| `CQRGEN010` | Warning | A handler is registered, but its binding is **skipped** because a bound request / result / context / notification type argument is less accessible than `internal` (the handler itself is accessible, but the type arg is `private`/file-scoped), so dispatching that request fails with "no handler" at runtime. Make the type `public` or `internal`. |
 | `CQRGEN999` | Error | An unhandled exception in the generator (please report it). |
 
 ## Startup validation (CQRCONF)
@@ -108,6 +116,23 @@ foreach (var b in diag.DescribeAllRequests())
 
 Use it to dump the resolved pipeline at startup, build a `/cqrs/bindings` debug endpoint, or assert
 wiring in tests. `DescribeConfiguration()` returns the same global `CQRCONF` issues the validator checks.
+
+## Binding issues (CQRDIAG)
+
+Each `CqrsRequestBinding` carries an `Issues` list of `CqrsBindingIssue` records — per-request problems
+detected while the **source-generated** diagnostics describe one request's wiring (and surfaced through
+the [introspection API](#the-introspection-api) and the [health check](#health-checks) below). They use
+the `CQRDIAG` prefix, are all `Error` severity, and signal that the request would not dispatch correctly:
+
+| ID | Condition | Remedy |
+| --- | --- | --- |
+| `CQRDIAG001` | No `RequestMetadata` is registered for the request type. | Ensure the request (and its handler) is in an assembly where the generator runs, so it's included in the generated registry. |
+| `CQRDIAG002` | The request's metadata has no handler type — no handler was wired for it. | Declare exactly one discoverable handler for the request (see `CQRA003` / `CQRGEN003`). |
+| `CQRDIAG003` | The context factory for the request's context type couldn't be resolved — either none is registered, or resolving it threw. | Register an `IRequestContextFactory<TContext>` for the context type (or use the default context); see `CQRA011`. |
+| `CQRDIAG004` | Resolving the pipeline behaviors (request or stream) for the request threw. | Fix the failing behavior registration / its dependencies so the behaviors resolve. |
+
+These are produced by `GeneratedCqrsDiagnostics` when you call `DescribeRequest` / `DescribeAllRequests`,
+so you'll see them on a binding's `Issues` (and in the health-check report) rather than at compile time.
 
 ## Health checks
 

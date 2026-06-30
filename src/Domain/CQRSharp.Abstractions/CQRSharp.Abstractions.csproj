@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 4.0.3. Now also carries the CQRSharp analyzers (no API change), so authoring diagnostics — including CQRA010, which warns when a project has handlers but the source generator is not running there — fire in any project that references CQRSharp.
+            Version 4.1.0. Ships the new ease-of-use analyzers (no API change): CQRA011 (custom context without a factory), CQRA012 (validator declared but validation not enabled), CQRA013 (request not opted into a configured behavior), CQRA014 (direct AddCqrs misuse, with a code fix), and CQRA017 (collapse a pre+post pair to ICommandInterceptor), plus the CQRGEN010 generator diagnostic. Adds the CqrsRegisteredContextFactory assembly marker that lets CQRA011 see factories across assemblies, and the outcome-aware post-handler types (RequestOutcome, IPostHandlerOutcomeAware, OutcomeAwarePostHandlerAttribute) for post-handlers that classify on the value the handler returned or the exception it threw.
         </PackageReleaseNotes>
     </PropertyGroup>
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "BisocM",
+  "classifications": [ "CQRS", "Console", "Mediator", "AOT" ],
+  "identity": "CQRSharp.Templates.ConsoleApp",
+  "name": "CQRSharp Console App",
+  "shortName": "cqrsharp",
+  "description": "A minimal CQRSharp console app: AddCqrsGenerated, one query and its handler, dispatched end-to-end.",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "CqrsharpApp",
+  "preferNameDirectory": true,
+  "symbols": {
+    "Framework": {
+      "type": "parameter",
+      "description": "The target framework for the project.",
+      "datatype": "choice",
+      "choices": [
+        { "choice": "net8.0", "description": ".NET 8.0" },
+        { "choice": "net9.0", "description": ".NET 9.0" },
+        { "choice": "net10.0", "description": ".NET 10.0" }
+      ],
+      "defaultValue": "net8.0",
+      "replaces": "net8.0"
+    }
+  }
+}

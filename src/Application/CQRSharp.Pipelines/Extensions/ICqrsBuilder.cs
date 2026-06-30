@@ -1,6 +1,7 @@
 using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Core.Extensions;
 using CQRSharp.Core.Options;
+using CQRSharp.Core.Options.Enums;
 using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -44,9 +45,16 @@ public interface ICqrsBuilder
     /// <summary>
     ///     Enables (or disables) the fail-fast startup validator. Order-insensitive: it records the chosen validation
     ///     policy, which the build applies. Enabled maps to <c>ThrowOnError</c> (abort host start on a configuration
-    ///     error); disabled maps to <c>Off</c>.
+    ///     error); disabled maps to <c>Off</c>. For <c>WarnOnly</c> or <c>ThrowOnWarning</c>, use the overload that
+    ///     takes a <see cref="CqrsValidationPolicy" />.
     /// </summary>
     ICqrsBuilder ValidateOnStart(bool enabled = true);
+
+    /// <summary>
+    ///     Sets the fail-fast startup validator's policy explicitly (<c>Off</c>, <c>WarnOnly</c>, <c>ThrowOnError</c>, or
+    ///     <c>ThrowOnWarning</c>). Order-insensitive: the policy is recorded and applied during the build.
+    /// </summary>
+    ICqrsBuilder ValidateOnStart(CqrsValidationPolicy policy);
 
     /// <summary>
     ///     Sets the authoritative <see cref="TimeProvider" /> (the clock seam every time-dependent component reads).
@@ -75,16 +83,18 @@ public interface ICqrsBuilder
     ICqrsBuilder UseLogging();
 
     /// <summary>
-    ///     Enables the validation behavior (runs every registered request validator). Order-insensitive: it sets the
-    ///     pack accumulator's validation flag.
+    ///     Enables (default) or disables the validation behavior, which runs every registered
+    ///     <c>IRequestValidator&lt;TRequest&gt;</c> before the handler. Validation and exception handling are on whenever
+    ///     the pipeline pack is active (i.e. whenever <em>any</em> pack verb is used); call <c>UseValidation(false)</c>
+    ///     to opt out while keeping the rest of the pack.
     /// </summary>
-    ICqrsBuilder UseValidation();
+    ICqrsBuilder UseValidation(bool enabled = true);
 
     /// <summary>
-    ///     Enables request-level exception-hook support. Order-insensitive: it sets the pack accumulator's
-    ///     exception-handling flag.
+    ///     Enables (default) or disables request-level exception-hook support. Like validation, it is on whenever the
+    ///     pipeline pack is active; call <c>UseExceptionHandling(false)</c> to opt out.
     /// </summary>
-    ICqrsBuilder UseExceptionHandling();
+    ICqrsBuilder UseExceptionHandling(bool enabled = true);
 
     /// <summary>
     ///     Enables and configures the rate-limiting behavior. Order-insensitive: it stores the configuration on the

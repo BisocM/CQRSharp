@@ -34,7 +34,7 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
 {
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
-        Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+        RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
         // Creates a trace activity for the rate limiting check.
         using var activity = PipelineTelemetry.StartActivity("RateLimiting.Check", request);

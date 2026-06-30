@@ -405,3 +405,5 @@ FodyWeavers.xsd
 .nupkgs/
 artifacts/
 outputfiles.txt
+# Claude planning / working material (never committed)
+.claude/

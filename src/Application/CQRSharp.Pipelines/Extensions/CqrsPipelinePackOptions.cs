@@ -11,17 +11,20 @@ namespace CQRSharp.Pipelines.Extensions;
 public sealed class CqrsPipelinePackOptions
 {
     /// <summary>
-    ///     Registers request-level exception-hook support (the exception-handling behavior). On by default: catching
-    ///     and routing handler exceptions through registered hooks is a cross-cutting concern almost every app wants,
-    ///     and the behavior is inert (adds no overhead and changes no result) when no exception is thrown and no hooks
-    ///     are registered, so enabling it by default is safe.
+    ///     Registers request-level exception-hook support (the exception-handling behavior). On by default <em>whenever
+    ///     the pipeline pack is active</em> (i.e. whenever any pack verb is used): catching and routing handler
+    ///     exceptions through registered hooks is a cross-cutting concern almost every app wants, and the behavior is
+    ///     inert (adds no overhead and changes no result) when no exception is thrown and no hooks are registered, so
+    ///     enabling it by default is safe. Opt out with the builder's <c>UseExceptionHandling(false)</c>.
     /// </summary>
     public bool IncludeExceptionHandling { get; set; } = true;
 
     /// <summary>
     ///     Registers the validation behavior, which runs every registered <c>IRequestValidator&lt;TRequest&gt;</c> for a
-    ///     request before its handler. On by default: rejecting invalid input at the edge is a near-universal need, and
-    ///     a request with no registered validators simply passes straight through, so the default is safe.
+    ///     request before its handler. On by default <em>whenever the pipeline pack is active</em> (i.e. whenever any
+    ///     pack verb is used): rejecting invalid input at the edge is a near-universal need, and a request with no
+    ///     registered validators simply passes straight through, so the default is safe. Opt out with the builder's
+    ///     <c>UseValidation(false)</c>.
     /// </summary>
     public bool IncludeValidation { get; set; } = true;
 

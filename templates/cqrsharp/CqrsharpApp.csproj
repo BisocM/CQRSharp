@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The CQRSharp meta-package brings the runtime, the source generator, the analyzers, and the global usings
+             that make the CQRSharp.* types below import-free. -->
+        <PackageReference Include="CQRSharp" Version="4.1.0"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
+    </ItemGroup>
+
+</Project>

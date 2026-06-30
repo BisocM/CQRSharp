@@ -340,7 +340,7 @@ public class CqrsAnalyzerTests
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
                               {
-                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                  public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
                                       => next(cancellationToken);
                               }
 
@@ -369,7 +369,7 @@ public class CqrsAnalyzerTests
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
                               {
-                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                  public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
                                       => next(cancellationToken);
                               }
 
@@ -401,7 +401,7 @@ public class CqrsAnalyzerTests
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
                               {
-                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                  public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
                                       => next(cancellationToken);
                               }
 

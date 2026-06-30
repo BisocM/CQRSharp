@@ -23,7 +23,7 @@ public sealed class IdempotencyBehavior<TRequest, TResult>(
     where TRequest : IRequest
 {
     /// <inheritdoc />
-    public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+    public async Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
         if (request is not IIdempotentRequest idempotent)
             return await next(cancellationToken).ConfigureAwait(false);

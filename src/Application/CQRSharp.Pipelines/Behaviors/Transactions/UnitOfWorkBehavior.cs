@@ -32,7 +32,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <inheritdoc />
-    public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+    public async Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
         var isTransactional = request is ITransactionalCommand or ITransactionalQuery;
         if (!isTransactional) return await next(cancellationToken).ConfigureAwait(false);
@@ -48,7 +48,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
 
     public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
-    private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken,
+    private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken,
         Activity? activity, IExplicitUnitOfWork explicitUow)
     {
         if (explicitUow.HasActiveTransaction)
@@ -95,7 +95,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         }
     }
 
-    private async Task<TResult> HandleImplicitTransactionAsync(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken,
+    private async Task<TResult> HandleImplicitTransactionAsync(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken,
         Activity? activity)
     {
         logger.LogTrace("Beginning implicit transaction for {RequestName}", typeof(TRequest).Name);

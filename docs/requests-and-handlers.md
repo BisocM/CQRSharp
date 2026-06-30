@@ -273,9 +273,20 @@ public sealed class CreateOrderHandler : ICommandHandler<CreateOrder, TenantCont
 }
 ```
 
-You supply the context instance through a context factory (`IRequestContextFactory<TContext>`)
-registered in DI; when none is registered for a request, the built-in `DefaultRequestContextFactory`
-produces a `RequestContextBase`.
+You supply the context instance through a context factory (`IRequestContextFactory<TContext>`). A
+request that uses a custom context — i.e. derives from `CommandBase<TContext>` / `QueryBase<TContext>`
+(or their result-command / stream / `ResultCommandBase<…, TContext>` siblings) with a `TContext` other
+than `RequestContextBase` — **requires** a factory for that context type; there is **no** fallback for
+custom contexts. The default `DefaultRequestContextFactory` only services the **non-generic**
+`CommandBase` / `QueryBase` (which pin `TContext` to `RequestContextBase`). If a custom-context request
+has no discoverable `IRequestContextFactory<TContext>`, the **first dispatch throws**
+`InvalidOperationException` — *"No IRequestContextFactory&lt;…&gt; is registered for context type …"*.
+
+The source generator auto-registers any factory it can see, so a discoverable factory type is enough —
+no manual `services.Add…` call is required. The Sample's `CustomRequestContextFactory` is one such
+factory (an `IRequestContextFactory<SampleRequestContext>`). To catch a missing factory at build time
+rather than at runtime, the **CQRA011** analyzer (warning) flags any custom-context request that has no
+discoverable factory.
 
 > **The two type parameters must match.** If the request's `TContext` and the handler's `TContext`
 > disagree, the **CQRA001** analyzer flags the mismatch at compile time — you don't find out at
@@ -284,6 +295,30 @@ produces a `RequestContextBase`.
 Some behaviors key off the context type. For example, rate limiting only throttles a request whose
 context implements `IRateLimitedContext`; if you configure rate limiting but a request's context does
 not implement it, the **CQRA007** analyzer warns that the request passes through unthrottled.
+
+### Async context hydration
+
+When the context must be populated from an async source — a database, an HTTP API — derive from
+`AsyncRequestContextFactory<TContext>` and override `CreateContextAsync`. The dispatcher awaits it once,
+before the pipeline runs, so the handler receives a fully-populated context instead of blocking in the
+factory or scattering lazy loads through the handler. Load the request-scoped data you need as a single
+batched call:
+
+```csharp
+public sealed class UserContextFactory(IUserRepository users) : AsyncRequestContextFactory<UserContext>
+{
+    public override async ValueTask<UserContext> CreateContextAsync(IRequest request, CancellationToken ct)
+        => new() { User = await users.LoadAggregateAsync(/* id from request */, ct) }; // one query: user + roles + …
+}
+```
+
+Register it exactly like a synchronous factory (as `IRequestContextFactory<UserContext>`), or let the
+generator discover it. Synchronous factories are unchanged — the contract's `CreateContextAsync` defaults to
+wrapping `CreateContext`, so you only override it when creation needs I/O.
+
+> Keep the context to request-scoped *data the handlers need*, loaded here once — not a general-purpose
+> lazy-loading object graph. Hydrating the aggregate you need at this single awaited point is the goal;
+> making the context itself lazy-load arbitrary navigations is what you're avoiding.
 
 ## RequestMetadata
 

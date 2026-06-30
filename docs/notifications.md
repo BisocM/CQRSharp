@@ -117,6 +117,22 @@ public sealed class CommandAuditor : INotificationHandler<CommandCompletedNotifi
 > `QueryCompletedNotification<TResult>.Result` is typed as `object?`; cast it to the query's result
 > type when you need the value.
 
+### Observing *every* notification
+
+A handler like `CommandAuditor` above is closed over **one** notification type. To audit **every**
+notification with a single type, you might reach for an open-generic handler
+(`AuditAll<TN> : INotificationHandler<TN>`) — but **that does not work**: the source generator wires
+only **closed** notification handlers, so an open-generic `INotificationHandler<TN>` is never registered
+and receives nothing. The generator flags it with **CQRGEN009** (the same diagnostic it raises for any
+open-generic dispatch handler).
+
+The correct centralized "audit every notification" hook is an open-generic
+[**notification pipeline behavior**](#notification-pipeline-behaviors) —
+`INotificationPipelineBehavior<TN>` — which the runtime resolves per published notification and which
+*does* support the open generic. The Sample's `NotificationLoggingBehavior<TNotification>` demonstrates
+exactly this: one open-generic behavior that logs and times the fan-out of every notification (lifecycle
+notifications included). See [Notification pipeline behaviors](#notification-pipeline-behaviors) below.
+
 ## Notification pipeline behaviors
 
 Just as requests have a behavior pipeline, notifications have one too. Implement

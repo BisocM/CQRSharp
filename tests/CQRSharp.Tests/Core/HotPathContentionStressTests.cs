@@ -284,7 +284,7 @@ public sealed class HotPathContentionStressTests
     {
         public int PipelineExecutionPriority => priority;
 
-        public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+        public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
         {
             if (request is IContentionTracked tracked)
                 sink.RecordBehavior(tracked.ContentionId, priority);

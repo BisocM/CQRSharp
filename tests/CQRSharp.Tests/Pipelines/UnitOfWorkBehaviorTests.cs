@@ -4,6 +4,7 @@ using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Transactions;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Tests.Shared;
@@ -42,7 +43,7 @@ public class UnitOfWorkBehaviorTests
         nextDelegate.Setup(next => next(It.IsAny<CancellationToken>())).ReturnsAsync(CommandResult.FromSuccess());
 
         // Act
-        var result = await behavior.Handle(command, nextDelegate.Object, CancellationToken.None);
+        var result = await behavior.Handle(command, new RequestHandlerDelegate<CommandResult>(nextDelegate.Object), CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -62,7 +63,7 @@ public class UnitOfWorkBehaviorTests
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            behavior.Handle(command, nextDelegate.Object, CancellationToken.None));
+            behavior.Handle(command, new RequestHandlerDelegate<CommandResult>(nextDelegate.Object), CancellationToken.None));
 
         nextDelegate.Verify(next => next(It.IsAny<CancellationToken>()), Times.Once());
         _mockUoW.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -78,7 +79,7 @@ public class UnitOfWorkBehaviorTests
         nextDelegate.Setup(next => next(It.IsAny<CancellationToken>())).ReturnsAsync(CommandResult.FromSuccess());
 
         // Act
-        var result = await behavior.Handle(command, nextDelegate.Object, CancellationToken.None);
+        var result = await behavior.Handle(command, new RequestHandlerDelegate<CommandResult>(nextDelegate.Object), CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);

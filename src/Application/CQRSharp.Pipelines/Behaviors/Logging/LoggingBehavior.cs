@@ -17,7 +17,7 @@ public sealed class LoggingBehavior<TRequest, TResult>(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <inheritdoc />
-    public async Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+    public async Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
         var requestName = typeof(TRequest).Name;
         var startTimestamp = _timeProvider.GetTimestamp();

@@ -203,7 +203,7 @@ internal sealed class DiagnosticsBehaviorA<TRequest, TResult> : IPipelineBehavio
 {
     public Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 
@@ -215,7 +215,7 @@ internal sealed class DiagnosticsBehaviorB<TRequest, TResult> : IPipelineBehavio
 {
     public Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 
@@ -227,7 +227,7 @@ internal sealed class DiagnosticsBehaviorC<TRequest, TResult> : IPipelineBehavio
 {
     public Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 
@@ -261,7 +261,7 @@ internal sealed class DiagnosticsStreamBehaviorA<TRequest, TItem> : IStreamPipel
 
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 }
@@ -273,7 +273,7 @@ internal sealed class DiagnosticsStreamBehaviorB<TRequest, TItem> : IStreamPipel
 
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 }
@@ -285,7 +285,7 @@ internal sealed class DiagnosticsStreamBehaviorC<TRequest, TItem> : IStreamPipel
 
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
-        Func<CancellationToken, IAsyncEnumerable<TItem>> next,
+        StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
         => next(cancellationToken);
 }

@@ -96,4 +96,52 @@ internal static class CqrsDiagnostics
         true,
         "CQRSharp registers handlers only in assemblies where its source generator runs (each emits its own module). A handler-bearing project without the generator emits no module, so its handlers are silently skipped and fail with \"no handler\" at dispatch. Reference the CQRSharp meta-package (or the generator) from this project.",
         customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor MissingContextFactory = new(
+        "CQRA011",
+        "Custom request context has no registered factory",
+        "Request '{0}' declares context type '{1}', but no IRequestContextFactory<{1}> is discoverable in this compilation or referenced assemblies, so dispatching it throws at runtime. Implement and register a factory for '{1}', or use the default context (CommandBase/QueryBase without a custom context type).",
+        Category,
+        DiagnosticSeverity.Warning,
+        true,
+        "A request deriving from CommandBase<TContext>/QueryBase<TContext> with a custom TContext needs an IRequestContextFactory<TContext>; without one the dispatcher throws 'No IRequestContextFactory ... is registered' on first dispatch. The generator auto-registers any factory it can see, so a discoverable factory type is enough.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor ValidatorWithoutValidation = new(
+        "CQRA012",
+        "Validator declared but the validation behavior is not enabled",
+        "'{0}' is an IRequestValidator<{1}>, but the CQRSharp pipeline pack is not enabled where CQRSharp is registered, so the validation behavior never runs and '{1}' reaches its handler unvalidated. Call UseValidation() (or any pipeline-pack verb) on the builder.",
+        Category,
+        DiagnosticSeverity.Warning,
+        true,
+        "The validation behavior runs registered validators only when the pipeline pack is active. With a CQRSharp registration present but no pack verb, a validator is silently inert and invalid input reaches the handler. Enable it via the builder's UseValidation()/UsePipelinePack() (or AddCqrsPipelinePack).",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor BehaviorMarkerMissing = new(
+        "CQRA013",
+        "Request does not opt into a configured pipeline behavior",
+        "{0} is configured, but request '{1}' does not implement {2}, so it is never {3}. Implement {2} to opt in (ignore this if opting out is intentional).",
+        Category,
+        DiagnosticSeverity.Info,
+        true,
+        "Resilience (retry) and idempotency apply only to requests that opt in by implementing IRetryableRequest / IIdempotentRequest. A request that does not is silently passed through. Opting out is frequently intentional, so this is informational.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor DirectCoreRegistration = new(
+        "CQRA014",
+        "AddCqrs() leaves dispatch unrouted — call AddCqrsGenerated()",
+        "'AddCqrs(...)' registers the dispatcher but not the source-generated handler routing, so the first Send/Stream/Publish throws at runtime. Call AddCqrsGenerated(...) instead.",
+        Category,
+        DiagnosticSeverity.Error,
+        true,
+        "AddCqrs is the low-level core registration used internally by the fluent builder and the generated bootstrap; calling it directly from your code wires the dispatcher without the generated routing. AddCqrsGenerated(...) applies both.");
+
+    public static readonly DiagnosticDescriptor CollapseToCommandInterceptor = new(
+        "CQRA017",
+        "Pre- and post-handler attributes can be one ICommandInterceptor",
+        "'{0}' implements both IPreHandlerAttribute and IPostHandlerAttribute; implement ICommandInterceptor instead for a single combined pre+post interceptor.",
+        Category,
+        DiagnosticSeverity.Info,
+        true,
+        "ICommandInterceptor combines IPreHandlerAttribute and IPostHandlerAttribute into one interface (OnBeforeHandle/OnAfterHandle); using it directly is the idiomatic way to write a combined pre+post interceptor.");
 }

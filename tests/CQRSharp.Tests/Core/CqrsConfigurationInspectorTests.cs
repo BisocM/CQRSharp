@@ -1,7 +1,10 @@
 using System.Data;
+using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Command;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Abstractions.Models.Requests;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
 using CQRSharp.Abstractions.Models.Outbox;
@@ -298,6 +301,70 @@ public sealed class CqrsConfigurationInspectorTests
     }
 
     [Fact]
+    public async Task CQRCONF007_warns_when_transactional_without_any_unit_of_work()
+    {
+        var services = new ServiceCollection();
+        // Supply the outbox triplet so only CQRCONF007 is in play; register NO IUnitOfWork.
+        services.AddSingleton<IOutboxStore, FakeOutboxStore>();
+        services.AddSingleton<INotificationSerializer, FakeNotificationSerializer>();
+        services.AddSingleton<IDirectNotificationDispatcher, FakeDirectNotificationDispatcher>();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        var issue = Inspect(scope.ServiceProvider, OutboxMode.Transactional)
+            .Should().ContainSingle(i => i.Code == "CQRCONF007").Subject;
+
+        issue.Severity.Should().Be(CqrsBindingIssueSeverity.Warning);
+        issue.Message.Should().Contain("no IUnitOfWork");
+    }
+
+    [Fact]
+    public async Task CQRCONF007_not_reported_when_a_unit_of_work_is_registered()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IOutboxStore, FakeOutboxStore>();
+        services.AddSingleton<INotificationSerializer, FakeNotificationSerializer>();
+        services.AddSingleton<IDirectNotificationDispatcher, FakeDirectNotificationDispatcher>();
+        services.AddScoped<IUnitOfWork, ExplicitUnitOfWork>();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+
+        Inspect(scope.ServiceProvider, OutboxMode.Transactional).Should().NotContain(i => i.Code == "CQRCONF007");
+    }
+
+    [Fact]
+    public void CQRCONF008_errors_when_queued_run_mode_has_a_stream_binding()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var issues = CqrsConfigurationInspector.Inspect(
+            provider,
+            new OutboxOptions { Mode = OutboxMode.Disabled },
+            new DispatcherOptions { RunMode = RunMode.Queued },
+            new[] { BindingFor(typeof(StreamRequest)) },
+            null);
+
+        var issue = issues.Should().ContainSingle(i => i.Code == "CQRCONF008").Subject;
+        issue.Severity.Should().Be(CqrsBindingIssueSeverity.Error);
+        issue.Message.Should().Contain(typeof(StreamRequest).FullName!);
+    }
+
+    [Fact]
+    public void CQRCONF008_not_reported_for_inline_run_mode()
+    {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+
+        var issues = CqrsConfigurationInspector.Inspect(
+            provider,
+            new OutboxOptions { Mode = OutboxMode.Disabled },
+            new DispatcherOptions { RunMode = RunMode.Inline },
+            new[] { BindingFor(typeof(StreamRequest)) },
+            null);
+
+        issues.Should().NotContain(i => i.Code == "CQRCONF008");
+    }
+
+    [Fact]
     public void Generated_notification_registry_is_resolvable_and_reports_stable_names()
     {
         var services = new ServiceCollection();
@@ -358,6 +425,12 @@ public sealed class CqrsConfigurationInspectorTests
     }
 
     private sealed class RetryableRequest : CommandBase, IRetryableRequest;
+
+    private sealed class StreamRequest : IStreamRequest<int>
+    {
+        public IRequestContext? Context { get; set; }
+        public RequestMetadata? Metadata { get; set; }
+    }
 
     private sealed class NonExplicitUnitOfWork : IUnitOfWork
     {

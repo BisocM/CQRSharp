@@ -27,7 +27,7 @@ public sealed class CqrsBuilder : ICqrsBuilder
     private Action<DispatcherOptions>? _configureDispatcher;
     private Action<NotificationOptions>? _configureNotifications;
 
-    private bool _validateOnStart;
+    private CqrsValidationPolicy _validationPolicy = CqrsValidationPolicy.Off;
 
     // The pack is only registered if at least one pack-related verb was used; this flag tracks that so a builder
     // that configures nothing pack-related does not pull in the (idempotent, but still unnecessary) pack marker.
@@ -75,7 +75,14 @@ public sealed class CqrsBuilder : ICqrsBuilder
     /// <inheritdoc />
     public ICqrsBuilder ValidateOnStart(bool enabled = true)
     {
-        _validateOnStart = enabled;
+        _validationPolicy = enabled ? CqrsValidationPolicy.ThrowOnError : CqrsValidationPolicy.Off;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public ICqrsBuilder ValidateOnStart(CqrsValidationPolicy policy)
+    {
+        _validationPolicy = policy;
         return this;
     }
 
@@ -112,18 +119,18 @@ public sealed class CqrsBuilder : ICqrsBuilder
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder UseValidation()
+    public ICqrsBuilder UseValidation(bool enabled = true)
     {
         _usePipelinePack = true;
-        _pack.IncludeValidation = true;
+        _pack.IncludeValidation = enabled;
         return this;
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder UseExceptionHandling()
+    public ICqrsBuilder UseExceptionHandling(bool enabled = true)
     {
         _usePipelinePack = true;
-        _pack.IncludeExceptionHandling = true;
+        _pack.IncludeExceptionHandling = enabled;
         return this;
     }
 
@@ -197,15 +204,13 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public IServiceCollection Build()
     {
         // 1) Core services. The outbox mode comes from UseOutbox (off — Disabled — when it was not used), and AddCqrs
-        //    registers the outbox processor host service off that mode. A disabled validator maps to the Off policy;
-        //    otherwise leave the AddCqrs default (ThrowOnError) so enabling it is just "don't turn it off".
+        //    registers the outbox processor host service off that mode. The startup-validator policy is whatever
+        //    ValidateOnStart(...) recorded; the builder path defaults to Off (call ValidateOnStart() to turn it on).
         Services.AddCqrs(
             _configureQueue,
             _outbox is not null ? OutboxModeConfigurator : null,
             _configureDispatcher,
-            _validateOnStart
-                ? null
-                : opts => opts.Policy = CqrsValidationPolicy.Off);
+            opts => opts.Policy = _validationPolicy);
 
         // 1b) Notification dispatch options (publish strategy). Applied directly; the Options default (Sequential) is
         //     used when this verb was not called.

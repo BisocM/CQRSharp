@@ -13,7 +13,7 @@ public sealed class LoggingPipelineBehavior<TRequest, TResult>(
 {
     public async Task<TResult> Handle(
         TRequest request,
-        Func<CancellationToken, Task<TResult>> next,
+        RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
     {
         var requestName = typeof(TRequest).Name;

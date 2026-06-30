@@ -4,6 +4,7 @@ This guide takes you from an empty project to dispatching commands, queries, str
 notifications, then layering on opt-in behaviors and a transactional outbox.
 
 - [Install](#install)
+- [Your first app](#your-first-app)
 - [Register CQRSharp](#register-cqrsharp)
 - [Global usings](#global-usings)
 - [Your first command](#your-first-command)
@@ -30,6 +31,54 @@ dotnet add package CQRSharp.EntityFrameworkCore   # EF Core relational stores
 
 CQRSharp targets **net8.0, net9.0, and net10.0**. The authoring contracts also compile against
 `netstandard2.0` consumers.
+
+## Your first app
+
+Here is a complete program — register CQRSharp, send one request, print the result. It compiles and runs as-is on a
+.NET 8+ console app that references the `CQRSharp` meta-package (the CQRSharp types are import-free thanks to the
+package's global usings; only the host/DI usings are explicit):
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddCqrsGenerated();              // wires the dispatcher + every discovered handler
+
+using var host = builder.Build();
+await host.StartAsync();
+
+using (var scope = host.Services.CreateScope())   // CQRSharp services are scoped — resolve from a scope
+{
+    var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+    var greeting = await dispatcher.Send(new Greet("world"));
+    Console.WriteLine(greeting);                  // -> Hello, world!
+}
+
+await host.StopAsync();
+
+// The query and its handler. Discovered and wired by the source generator — there is no manual registration.
+public sealed class Greet(string name) : QueryBase<string>
+{
+    public string Name { get; } = name;
+}
+
+public sealed class GreetHandler : IQueryHandler<Greet, string>
+{
+    public Task<string> Handle(Greet query, CancellationToken cancellationToken)
+        => Task.FromResult($"Hello, {query.Name}!");
+}
+```
+
+This is the [`CQRSharp.Sample.Minimal`](../src/Presentation/CQRSharp.Sample.Minimal) project verbatim. You can scaffold
+the same app in one command with the included template:
+
+```bash
+dotnet new install templates/cqrsharp   # or: dotnet new install CQRSharp.Templates
+dotnet new cqrsharp -n MyApp
+```
+
+The rest of this guide breaks the pieces down and layers on queries, streams, notifications, behaviors, and an outbox.
 
 ## Register CQRSharp
 
@@ -96,10 +145,18 @@ Dispatch it through the single façade, `ICqrsDispatcher`:
 ```csharp
 public sealed class UsersController(ICqrsDispatcher cqrs)
 {
-    public Task<CommandResult> Create(string name)
-        => cqrs.Send(new CreateUser { Name = name });
+    public async Task<IResult> Create(string name)
+    {
+        CommandResult result = await cqrs.Send(new CreateUser { Name = name });
+        return result.IsSuccess
+            ? Results.Ok()
+            : Results.Problem(result.ErrorMessage, statusCode: result.ErrorCode ?? 400);
+    }
 }
 ```
+
+`Send` returns the command's `CommandResult`; **await it and check `IsSuccess`** to decide the outcome
+(there is no `Task`-returning `Send` overload that discards the result).
 
 ## Queries
 

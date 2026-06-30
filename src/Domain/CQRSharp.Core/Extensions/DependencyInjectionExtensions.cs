@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
@@ -27,8 +28,10 @@ namespace CQRSharp.Core.Extensions;
 public static class DependencyInjectionExtensions
 {
 	/// <summary>
-	///     Registers the core services required for the CQRSharp library to function.
-	///     This is the primary entry point for setting up the library.
+	///     Low-level core registration. <b>Prefer <c>AddCqrsGenerated(...)</c></b>, which also applies the
+	///     source-generated handler routing. Calling <c>AddCqrs</c> directly registers the dispatcher but NOT the
+	///     routing, so the first <c>Send</c>/<c>Stream</c>/<c>Publish</c> finds no handler and fails at runtime. This is
+	///     intended only for the generated bootstrap and the fluent builder, which call it internally.
 	/// </summary>
 	/// <param name="services">The <see cref="IServiceCollection" /> to add the services to.</param>
 	/// <param name="configureQueue">An optional action to configure the background task queue options.</param>
@@ -43,6 +46,7 @@ public static class DependencyInjectionExtensions
 	///     is found.
 	/// </param>
 	/// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
+	[EditorBrowsable(EditorBrowsableState.Never)]
 	public static IServiceCollection AddCqrs(this IServiceCollection services,
         Action<BackgroundTaskQueueOptions>? configureQueue = null,
         Action<OutboxOptions>? configureOutbox = null,

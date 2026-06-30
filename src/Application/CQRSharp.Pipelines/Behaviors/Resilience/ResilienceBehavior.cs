@@ -25,7 +25,7 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
 
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request,
-        Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+        RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
         // Creates a trace activity that spans the entire resilience operation.
         using var activity = PipelineTelemetry.StartActivity("Resilience.Operation", request);
