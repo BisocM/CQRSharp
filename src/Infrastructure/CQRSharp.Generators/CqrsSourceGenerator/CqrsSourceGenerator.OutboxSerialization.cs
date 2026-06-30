@@ -25,7 +25,7 @@ public sealed partial class CqrsSourceGenerator
     // shared nested type emits exactly once.
     // ------------------------------------------------------------------------------------------------------
 
-    private static string GenerateOutboxNotificationSerializer(IReadOnlyList<NotificationModel> stableNotifications)
+    private static string GenerateOutboxNotificationSerializer(IReadOnlyList<NotificationModel> stableNotifications, KnownSnapshot known)
     {
         var entries = stableNotifications
             .Select(n => new OutboxEmitEntry(
@@ -50,7 +50,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System.Text.Json;");
         sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
         sb.AppendLine();
-        sb.AppendLine("namespace CQRSharp.Core.Serialization.Generated");
+        sb.AppendLine($"namespace {known.ModuleNamespace}");
         sb.AppendLine("{");
         EmitSummary(sb, "    ", "Source-generated, AOT-safe (reflection-free) serializer for outbox notifications that carry a stable <c>[NotificationName]</c>.");
         sb.AppendLine("    internal sealed class GeneratedOutboxNotificationSerializer : INotificationSerializer, IStableNotificationNameProvider");

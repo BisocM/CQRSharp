@@ -28,6 +28,9 @@
     <ItemGroup>
         <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <ProjectReference Include="..\..\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <!-- A second handler-bearing assembly so the Native AOT publish exercises CQRSharp's multi-assembly codegen
+             path (its module is wired by this app's AddCqrsGenerated; see SampleHostedService.RunExternalModuleTestAsync). -->
+        <ProjectReference Include="..\CQRSharp.Sample.ExternalModule\CQRSharp.Sample.ExternalModule.csproj"/>
         <!-- The Redis integration is referenced only so the NativeAOT Sample publish exercises its IL (the publish
              workflow greps the published output for Redis types). It is registered guarded and never connected — the
              in-memory store stays the one used at runtime — see Program.cs. -->

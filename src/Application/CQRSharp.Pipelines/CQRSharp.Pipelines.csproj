@@ -26,7 +26,7 @@
         <Title>Optional Pipeline Behaviors for CQRSharp</Title>
         <Description>Optional, opt-in pipeline behaviors for CQRSharp — validation, unit of work, resilience/retries, timeouts, rate limiting, idempotency, and logging — plus a one-call pipeline-pack registration for sensible defaults.</Description>
         <PackageReleaseNotes>
-            Version 4.0.1. No functional changes in this package (value-returning command support lives in CQRSharp.Abstractions and CQRSharp.Core).
+            Version 4.0.2. No functional changes in this package (multi-assembly support lives in CQRSharp.Abstractions and CQRSharp.Core).
         </PackageReleaseNotes>
     </PropertyGroup>
 

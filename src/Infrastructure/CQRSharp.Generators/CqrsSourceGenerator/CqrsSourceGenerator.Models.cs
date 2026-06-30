@@ -45,7 +45,9 @@ public sealed partial class CqrsSourceGenerator
         string RequestContextBaseTypeName,
         string PreHandlerInterfaceName,
         string PostHandlerInterfaceName,
-        string PipelineExemptionAttributeName);
+        string PipelineExemptionAttributeName,
+        string ModuleNamespace,
+        EquatableArray<string> ReferencedModuleRegistrars);
 
     /// <summary>A single CQRSharp-handler interface a concrete, accessible type implements.</summary>
     private sealed record HandlerImplModel(

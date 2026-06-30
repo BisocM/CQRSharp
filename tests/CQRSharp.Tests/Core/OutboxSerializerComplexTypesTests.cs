@@ -2,7 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CQRSharp.Abstractions.Attributes.Notifications;
 using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Core.Extensions;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Tests.Core;
 
@@ -15,14 +17,14 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public sealed class OutboxSerializerComplexTypesTests
 {
-    private const string GeneratedSerializerTypeName =
-        "CQRSharp.Core.Serialization.Generated.GeneratedOutboxNotificationSerializer";
-
+    // The generated serializer is now per-assembly and internal; resolve the composite INotificationSerializer (which
+    // delegates to it) from DI rather than reflecting on a fixed generated type name.
     private static INotificationSerializer GetSerializer()
     {
-        var type = typeof(ScalarsNotification).Assembly.GetType(GeneratedSerializerTypeName, false);
-        type.Should().NotBeNull();
-        return (INotificationSerializer)Activator.CreateInstance(type!, true)!;
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated();
+        var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<INotificationSerializer>();
     }
 
     private static T RoundTrip<T>(T original) where T : class, INotification

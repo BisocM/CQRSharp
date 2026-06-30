@@ -23,4 +23,17 @@
     <Using Include="CQRSharp.Pipelines.Extensions" />
   </ItemGroup>
 
+  <!--
+    Multi-assembly support. CQRSharp can run in several assemblies of one reference graph (e.g. handlers split across
+    Application/Infrastructure projects): each emits its own uniquely-namespaced module, and the *composition root*
+    emits the single AddCqrsGenerated/AddGenerated that wires them all. The root is your executable by default. If your
+    entry point is a library (a plugin host, a test host), mark it:
+        <PropertyGroup><CQRSharpCompositionRoot>true</CQRSharpCompositionRoot></PropertyGroup>
+    These two properties are exposed to the generator so it can make that decision.
+  -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="CQRSharpCompositionRoot" />
+    <CompilerVisibleProperty Include="OutputType" />
+  </ItemGroup>
+
 </Project>

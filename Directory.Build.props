@@ -7,7 +7,7 @@
     <PropertyGroup>
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
-        <Version>4.0.1</Version>
+        <Version>4.0.2</Version>
         <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
@@ -32,6 +32,18 @@
         <None Include="$(MSBuildThisFileDirectory)Assets/CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
         <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Visible="false"/>
         <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false"/>
+    </ItemGroup>
+
+    <!--
+        Surface the multi-assembly composition-root signal to the CQRSharp source generator. The generator emits the
+        global AddCqrsGenerated/AddGenerated entry points (which wire every module in the reference graph) only in the
+        composition root: an executable by default, or any project that sets <CQRSharpCompositionRoot>true</...>. The
+        OutputType is exposed so the generator can apply the executable default. (For package consumers the same two
+        properties are exposed via the meta-package's buildTransitive props.)
+    -->
+    <ItemGroup>
+        <CompilerVisibleProperty Include="CQRSharpCompositionRoot"/>
+        <CompilerVisibleProperty Include="OutputType"/>
     </ItemGroup>
 
 </Project>

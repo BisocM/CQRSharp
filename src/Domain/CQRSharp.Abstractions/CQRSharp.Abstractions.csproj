@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 4.0.1. Adds value-returning commands: ICommand&lt;TResult&gt; with ResultCommandBase&lt;TResult&gt;, IResultCommandHandler, and CommandResult&lt;TResult&gt; — for a command that mints a value no query can return.
+            Version 4.0.2. Adds the [CqrsGeneratedModule] assembly marker that lets a composition root discover and wire each referenced assembly's source-generated module, so CQRSharp can span multiple assemblies.
         </PackageReleaseNotes>
     </PropertyGroup>
 

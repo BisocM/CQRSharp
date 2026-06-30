@@ -2,6 +2,25 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.2]
+
+### Fixed
+
+- **Multi-assembly applications.** CQRSharp can now span several assemblies in one reference graph (e.g. handlers split
+  across `Application` / `Infrastructure` / per-feature projects). Previously the generator emitted fixed-name DI types
+  into every assembly it ran in, so two in the same graph collided (`CS0121` on the generated `AddGenerated`), and each
+  assembly's dispatcher only knew its own requests. Now each assembly emits its own uniquely-namespaced **module**, and
+  the **composition root** emits the single `AddCqrsGenerated()` / `AddGenerated()` that wires every module in the graph.
+
+### Added
+
+- **`ICqrsModule` + `AddCqrsModuleComposition`** (CQRSharp.Core) and the **`[CqrsGeneratedModule]`** assembly marker
+  (CQRSharp.Abstractions): each assembly with handlers contributes a module; the composition root merges them into one
+  set of registries and routing dispatchers. A referenced assembly's `internal` handlers are registered too, because
+  that assembly's own module registers them — the root never needs to name them.
+- **`CQRSharpCompositionRoot`** MSBuild property. The composition root is your executable by default; set
+  `<CQRSharpCompositionRoot>true</CQRSharpCompositionRoot>` when the entry point is a library (a plugin host, a test host).
+
 ## [4.0.1]
 
 ### Added

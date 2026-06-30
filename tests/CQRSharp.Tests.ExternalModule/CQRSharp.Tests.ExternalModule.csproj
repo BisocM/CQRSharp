@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        A second assembly in the CQRSharp.Tests reference graph, used to prove multi-assembly support: the generator
+        runs here and emits this assembly's own uniquely-namespaced module + [CqrsGeneratedModule] marker, but NO
+        AddCqrsGenerated entry point (this is a library, not the composition root). The handlers below are deliberately
+        INTERNAL — the composition root cannot name them, yet they are registered because this assembly's own module
+        registers them. That is the property the per-assembly module design buys over a root-aggregates-everything design.
+    -->
+    <PropertyGroup>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <LangVersion>default</LangVersion>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+</Project>

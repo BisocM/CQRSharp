@@ -29,7 +29,7 @@
         <Title>EF Core integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
         <Description>An Entity Framework Core integration for CQRSharp. Its first feature is a durable IOutboxStore backed by a DbContext: atomic claim with an optimistic-concurrency visibility lease, persisted retry/back-off and dead-lettering. It also provides a durable IIdempotencyStore backed by a keyed table with an optimistic-concurrency claim and a retention window. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
         <PackageReleaseNotes>
-            Version 4.0.1. No functional changes in this package.
+            Version 4.0.2. No functional changes in this package.
         </PackageReleaseNotes>
     </PropertyGroup>
 

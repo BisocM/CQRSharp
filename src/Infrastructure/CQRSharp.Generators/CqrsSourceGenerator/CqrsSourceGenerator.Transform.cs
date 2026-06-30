@@ -42,7 +42,50 @@ public sealed partial class CqrsSourceGenerator
             contextBase,
             preHandler,
             postHandler,
-            pipelineExemption);
+            pipelineExemption,
+            ModuleNamespaceFor(compilation.AssemblyName),
+            new EquatableArray<string>(GetReferencedModuleRegistrars(compilation)));
+    }
+
+    // The per-assembly namespace the generated module (dispatchers, registries, registrar) lives in. Keying it to the
+    // assembly name means two assemblies in one reference graph never emit colliding generated types — the root cause
+    // of the multi-assembly CS0121. Sanitized to a single valid identifier; assembly names are unique within a graph.
+    private static string ModuleNamespaceFor(string? assemblyName)
+    {
+        var name = string.IsNullOrEmpty(assemblyName) ? "Anonymous" : assemblyName!;
+        var sb = new StringBuilder("CQRSharp.Generated.");
+        for (var i = 0; i < name.Length; i++)
+        {
+            var c = name[i];
+            var ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+            if (i == 0 && c >= '0' && c <= '9') sb.Append('_');
+            sb.Append(ok ? c : '_');
+        }
+
+        return sb.ToString();
+    }
+
+    // The generated module registrars of every referenced assembly that ran the generator, read from the
+    // [assembly: CqrsGeneratedModule(typeof(...))] markers. A composition root emits a Register call for each, so a
+    // single AddCqrsGenerated wires its whole reference graph at compile time (no runtime assembly scanning).
+    private static string[] GetReferencedModuleRegistrars(Compilation compilation)
+    {
+        var moduleAttribute = compilation.GetTypeByMetadataName(
+            "CQRSharp.Abstractions.Attributes.SourceGeneration.CqrsGeneratedModuleAttribute");
+        if (moduleAttribute is null) return Array.Empty<string>();
+
+        var registrars = new List<string>();
+        foreach (var reference in compilation.SourceModule.ReferencedAssemblySymbols)
+        foreach (var attribute in reference.GetAttributes())
+        {
+            if (!SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, moduleAttribute)) continue;
+            if (attribute.ConstructorArguments.Length == 0) continue;
+            if (attribute.ConstructorArguments[0].Value is INamedTypeSymbol registrar)
+                registrars.Add(registrar.ToDisplayString(Fq));
+        }
+
+        registrars.Sort(StringComparer.Ordinal);
+        return registrars.ToArray();
     }
 
     // ============================================================================================================

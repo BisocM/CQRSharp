@@ -76,35 +76,35 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
             ReportWellKnownTypeIssues(known, context);
 
             var stableNotifications = CollectSerializableNotifications(candidates, context);
+            var hasModule = HasModuleContent(candidates);
 
-            var registrarSourceCode = GenerateRegistrations(candidates, known, stableNotifications, context, config);
-            context.AddSource("CqrsGeneratedRegistrar.g.cs", SourceText.From(registrarSourceCode, Encoding.UTF8));
-
-            var bootstrapSourceCode = GenerateBootstrap(known);
-            context.AddSource("CqrsGeneratedBootstrap.g.cs", SourceText.From(bootstrapSourceCode, Encoding.UTF8));
-
-            if (stableNotifications.Count > 0)
+            // Every assembly with registerable content emits its own uniquely-namespaced module (dispatchers,
+            // registry data, registrar) — never colliding across assemblies in one reference graph.
+            if (hasModule)
             {
-                var outboxSerializerSourceCode = GenerateOutboxNotificationSerializer(stableNotifications);
-                context.AddSource("CqrsGeneratedOutboxNotificationSerializer.g.cs", SourceText.From(outboxSerializerSourceCode, Encoding.UTF8));
+                context.AddSource("CqrsModule.g.cs",
+                    SourceText.From(GenerateModule(candidates, known, stableNotifications, context, config), Encoding.UTF8));
+                context.AddSource("GeneratedRequestDispatcher.g.cs",
+                    SourceText.From(GenerateDispatcher(candidates, known), Encoding.UTF8));
+                context.AddSource("GeneratedStreamRequestDispatcher.g.cs",
+                    SourceText.From(GenerateStreamDispatcher(candidates, known), Encoding.UTF8));
+                context.AddSource("GeneratedDirectNotificationDispatcher.g.cs",
+                    SourceText.From(GenerateNotificationDispatcher(candidates, known), Encoding.UTF8));
+                context.AddSource("GeneratedCqrsDiagnostics.g.cs",
+                    SourceText.From(GenerateDiagnostics(candidates, known), Encoding.UTF8));
+
+                if (stableNotifications.Count > 0)
+                    context.AddSource("GeneratedOutboxNotificationSerializer.g.cs",
+                        SourceText.From(GenerateOutboxNotificationSerializer(stableNotifications, known), Encoding.UTF8));
             }
 
-            var dispatcherSourceCode = GenerateDispatcher(candidates);
-            context.AddSource("GeneratedRequestDispatcher.g.cs", SourceText.From(dispatcherSourceCode, Encoding.UTF8));
+            // Only the composition root emits the global AddGenerated/AddCqrsGenerated entry points (which wire every
+            // module in the reference graph), so they exist in exactly one assembly and never collide.
+            if (config.IsCompositionRoot)
+                context.AddSource("CqrsGeneratedBootstrap.g.cs",
+                    SourceText.From(GenerateBootstrap(known, hasModule), Encoding.UTF8));
 
-            var streamDispatcherSourceCode = GenerateStreamDispatcher(candidates);
-            context.AddSource("GeneratedStreamRequestDispatcher.g.cs", SourceText.From(streamDispatcherSourceCode, Encoding.UTF8));
-
-            var notificationDispatcherSourceCode = GenerateNotificationDispatcher(candidates);
-            context.AddSource("GeneratedDirectNotificationDispatcher.g.cs", SourceText.From(notificationDispatcherSourceCode, Encoding.UTF8));
-
-            var diagnosticsSourceCode = GenerateDiagnostics(candidates);
-            context.AddSource("GeneratedCqrsDiagnostics.g.cs", SourceText.From(diagnosticsSourceCode, Encoding.UTF8));
-
-            var notificationRegistrySourceCode = GenerateNotificationRegistry(candidates, stableNotifications);
-            context.AddSource("GeneratedCqrsNotificationRegistry.g.cs", SourceText.From(notificationRegistrySourceCode, Encoding.UTF8));
-
-            var markersSourceCode = GenerateAssemblyMarkers(candidates);
+            var markersSourceCode = GenerateAssemblyMarkers(candidates, known, hasModule);
             context.AddSource("CqrsGeneratedAssemblyMarkers.g.cs", SourceText.From(markersSourceCode, Encoding.UTF8));
 
             ReportInaccessibleHandlers(candidates, context);

@@ -7,7 +7,7 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
-    private static string GenerateDiagnostics(ImmutableArray<CandidateModel> candidates)
+    private static string GenerateDiagnostics(ImmutableArray<CandidateModel> candidates, KnownSnapshot known)
     {
         var requests = candidates
             .Where(c => c.Request is not null)
@@ -36,9 +36,9 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
         sb.AppendLine("using Microsoft.Extensions.Options;");
         sb.AppendLine();
-        sb.AppendLine("namespace CQRSharp.Core.Diagnostics.Generated");
+        sb.AppendLine($"namespace {known.ModuleNamespace}");
         sb.AppendLine("{");
-        EmitSummary(sb, "    ", "Source-generated, AOT-safe <c>ICqrsDiagnostics</c> that describes the registered request bindings and overall configuration.");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe <c>ICqrsDiagnostics</c> that describes this assembly's request bindings and overall configuration.");
         sb.AppendLine("    public sealed class GeneratedCqrsDiagnostics(");
         sb.AppendLine("        IServiceProvider services,");
         sb.AppendLine("        IRequestRegistry requestRegistry,");

@@ -14,6 +14,7 @@ using CQRSharp.Sample.Application.Queries.Requests;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Domain.Events;
 using CQRSharp.Sample.Infrastructure.Interceptors;
+using CQRSharp.Sample.ExternalModule;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -55,6 +56,7 @@ public sealed class SampleHostedService(
 
             await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
             await RunResultCommandTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
+            await RunExternalModuleTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunDynamicSendTestAsync(cqrs, userId, stoppingToken).ConfigureAwait(false);
             await RunStreamingTestAsync(cqrs, diagnostics, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
             await RunStreamExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
@@ -176,6 +178,19 @@ public sealed class SampleHostedService(
 
         Require(result.IsSuccess, "MintTokenCommand did not succeed.");
         Require(result.Value == "token:svc", $"MintTokenCommand returned an unexpected value '{result.Value}'.");
+    }
+
+    private static async Task RunExternalModuleTestAsync(
+        ICqrsDispatcher cqrs,
+        CancellationToken cancellationToken)
+    {
+        // A query whose handler lives (internal) in a SEPARATE assembly (CQRSharp.Sample.ExternalModule). Proves the
+        // composition root's single AddCqrsGenerated wires a referenced assembly's module — under Native AOT.
+        var greeting = await cqrs.Send(new ExternalGreetingQuery { Name = "Sample" }, cancellationToken)
+            .ConfigureAwait(false);
+
+        Require(greeting == "hello from the external module, Sample",
+            $"ExternalGreetingQuery returned an unexpected value '{greeting}'.");
     }
 
     private static async Task RunDynamicSendTestAsync(
