@@ -5,9 +5,6 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <LangVersion>default</LangVersion>
-        <!-- This test assembly is the composition root: it owns the AddCqrsGenerated/AddGenerated entry points and
-             composes its own module plus the referenced CQRSharp.Tests.ExternalModule (the multi-assembly fixture). -->
-        <CQRSharpCompositionRoot>true</CQRSharpCompositionRoot>
         <TargetFrameworks>net8.0</TargetFrameworks>
         <!-- The analyzer/generator diagnostics are exercised by unit tests; suppress them on this project's own code.
              CQRGEN006 fires on the intentionally-private test handler fixtures (which are registered manually). -->

@@ -68,24 +68,30 @@ public sealed class PipelineExecutor(
         where TRequest : IRequest<TResult>
     {
         if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
-        {
-            // Capture the caller's trace context so the queued execution's spans link back to the originating request.
-            var parentContext = Activity.Current?.Context ?? default;
-            return _backgroundTaskManager.EnqueueAsync<TResult>(
-                async workerToken =>
-                {
-                    using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
-
-                    if (!ct.CanBeCanceled)
-                        return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
-
-                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
-                    return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, linkedCts.Token).ConfigureAwait(false);
-                },
-                ct);
-        }
+            return ExecuteQueryQueuedAsync<TRequest, TResult>(query, ct);
 
         return ExecuteQueryImmediateAsync<TRequest, TResult>(query, ct);
+    }
+
+    private async Task<TResult> ExecuteQueryQueuedAsync<TRequest, TResult>(TRequest query, CancellationToken ct)
+        where TRequest : IRequest<TResult>
+    {
+        await EnsureQueueConsumerStartedAsync(ct).ConfigureAwait(false);
+
+        // Capture the caller's trace context so the queued execution's spans link back to the originating request.
+        var parentContext = Activity.Current?.Context ?? default;
+        return await _backgroundTaskManager.EnqueueAsync<TResult>(
+            async workerToken =>
+            {
+                using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
+
+                if (!ct.CanBeCanceled)
+                    return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, workerToken).ConfigureAwait(false);
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
+                return await ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, linkedCts.Token).ConfigureAwait(false);
+            },
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -103,24 +109,56 @@ public sealed class PipelineExecutor(
         where TRequest : ICommand
     {
         if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
-        {
-            // Capture the caller's trace context so the queued execution's spans link back to the originating request.
-            var parentContext = Activity.Current?.Context ?? default;
-            return _backgroundTaskManager.EnqueueAsync<CommandResult>(
-                async workerToken =>
-                {
-                    using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
-
-                    if (!ct.CanBeCanceled)
-                        return await ExecuteCommandInNewScopeAsync(command, workerToken).ConfigureAwait(false);
-
-                    using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
-                    return await ExecuteCommandInNewScopeAsync(command, linkedCts.Token).ConfigureAwait(false);
-                },
-                ct);
-        }
+            return ExecuteCommandQueuedAsync(command, ct);
 
         return ExecuteCommandImmediateAsync(command, ct);
+    }
+
+    private async Task<CommandResult> ExecuteCommandQueuedAsync<TRequest>(TRequest command, CancellationToken ct)
+        where TRequest : ICommand
+    {
+        await EnsureQueueConsumerStartedAsync(ct).ConfigureAwait(false);
+
+        // Capture the caller's trace context so the queued execution's spans link back to the originating request.
+        var parentContext = Activity.Current?.Context ?? default;
+        return await _backgroundTaskManager.EnqueueAsync<CommandResult>(
+            async workerToken =>
+            {
+                using var dispatch = StartQueuedDispatchActivity<TRequest>(parentContext);
+
+                if (!ct.CanBeCanceled)
+                    return await ExecuteCommandInNewScopeAsync(command, workerToken).ConfigureAwait(false);
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, workerToken);
+                return await ExecuteCommandInNewScopeAsync(command, linkedCts.Token).ConfigureAwait(false);
+            },
+            ct).ConfigureAwait(false);
+    }
+
+    // RunMode.Queued only completes when the background consumer runs the queued work item, and the consumer only runs
+    // once the Generic Host has started its hosted services. Without a running host nothing drains the queue and the
+    // dispatch would hang forever — so wait (bounded) for the consumer's readiness signal and throw a clear error if it
+    // never comes. In a normal app the consumer started long ago, so the signal is already set and this is a no-op.
+    private async Task EnsureQueueConsumerStartedAsync(CancellationToken ct)
+    {
+        var readiness = _services.GetService<ConsumerReadiness>();
+        if (readiness is null || readiness.Started.IsCompleted) return;
+
+        var timeout = _services.GetService<IOptions<BackgroundTaskQueueOptions>>()?.Value.ConsumerStartTimeout
+                      ?? TimeSpan.FromSeconds(10);
+        var timeProvider = _services.GetService<TimeProvider>() ?? TimeProvider.System;
+
+        var delayTask = Task.Delay(timeout, timeProvider, ct);
+        if (await Task.WhenAny(readiness.Started, delayTask).ConfigureAwait(false) != delayTask)
+            return;
+
+        // ct firing cancels delayTask — observe it so a cancelled dispatch surfaces OperationCanceledException.
+        await delayTask.ConfigureAwait(false);
+
+        throw new InvalidOperationException(
+            $"RunMode.Queued requires a running host, but the background task-queue consumer did not start within {timeout}. " +
+            "Start the Generic Host (host.RunAsync()/StartAsync) before dispatching, switch to RunMode.Inline (the default), " +
+            "or increase BackgroundTaskQueueOptions.ConsumerStartTimeout.");
     }
 
     /// <inheritdoc />

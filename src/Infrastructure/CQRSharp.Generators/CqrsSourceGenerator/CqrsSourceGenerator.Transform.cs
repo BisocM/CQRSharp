@@ -136,8 +136,16 @@ public sealed partial class CqrsSourceGenerator
             : Array.Empty<ExceptionHookModel>();
         var aotBehavior = BuildAotOpenGenericBehavior(type, compilation, isAccessible);
 
+        // An open-generic dispatch handler (e.g. `class H<T> : ICommandHandler<C<T>>`) is silently unregistered — the
+        // generator wires only closed, non-generic handlers — so it would fail only as a runtime "no handler". Carry it
+        // through so CQRGEN009 can flag it at the declaration. (Open-generic pipeline behaviors ARE supported and handled
+        // separately via AotOpenGenericBehaviorName, so they are excluded here.)
+        var isOpenGenericHandler = type is { IsAbstract: false, IsGenericType: true } &&
+                                   ImplementsDispatchHandlerInterface(type, compilation);
+
         // Drop types that are not CQRSharp-relevant in any way, to keep the collected set small.
         if (!implementsAnyHandler &&
+            !isOpenGenericHandler &&
             handlers.Length == 0 &&
             forwarders.Length == 0 &&
             request is null &&
@@ -161,7 +169,29 @@ public sealed partial class CqrsSourceGenerator
             new EquatableArray<string>(handledNotifications),
             new EquatableArray<string>(contextFactories),
             new EquatableArray<ExceptionHookModel>(exceptionHooks),
-            aotBehavior);
+            aotBehavior,
+            isOpenGenericHandler);
+    }
+
+    // True when the type implements one of the core dispatch-handler interfaces (command/query/result-command/stream/
+    // notification) — the ones the generator registers and that fail with a runtime "no handler" if unregistered.
+    // Deliberately excludes pipeline behaviors (supported as open generics) and validators/exception hooks.
+    private static bool ImplementsDispatchHandlerInterface(INamedTypeSymbol type, Compilation compilation)
+    {
+        var known = CqrsKnownSymbols.For(compilation);
+        var dispatchHandlerDefs = new[]
+        {
+            known.ICommandHandler1, known.ICommandHandler2,
+            known.IResultCommandHandler2, known.IResultCommandHandler3,
+            known.IQueryHandler2, known.IQueryHandler3,
+            known.IStreamRequestHandler2, known.IStreamRequestHandler3,
+            known.INotificationHandler
+        };
+
+        return GetInterfacesAndBaseInterfaces(type).Any(iface =>
+            iface.IsGenericType &&
+            dispatchHandlerDefs.Any(def => def is not null &&
+                                           SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, def)));
     }
 
     private static HandlerImplModel[] BuildHandlerImpls(INamedTypeSymbol type, Compilation compilation)

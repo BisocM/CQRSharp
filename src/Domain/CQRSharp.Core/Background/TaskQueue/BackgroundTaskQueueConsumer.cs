@@ -15,6 +15,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 {
     private readonly SemaphoreSlim _concurrencyLimiter;
     private readonly ILogger<BackgroundTaskQueueConsumer> _logger;
+    private readonly ConsumerReadiness _readiness;
 
     /// <summary>
     ///     A collection of tasks that are currently being processed. Used to ensure graceful shutdown.
@@ -32,15 +33,18 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     /// <param name="taskQueue">The background task queue to consume from.</param>
     /// <param name="logger">The logger for this consumer.</param>
     /// <param name="options">The configuration options for the queue.</param>
+    /// <param name="readiness">The readiness signal completed when the consumer loop starts.</param>
     /// <param name="timeProvider">The time source for shutdown timing; defaults to <see cref="TimeProvider.System" />.</param>
     public BackgroundTaskQueueConsumer(
         IBackgroundTaskQueue taskQueue,
         ILogger<BackgroundTaskQueueConsumer> logger,
         IOptions<BackgroundTaskQueueOptions> options,
+        ConsumerReadiness readiness,
         TimeProvider? timeProvider = null)
     {
         _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _readiness = readiness ?? throw new ArgumentNullException(nameof(readiness));
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         var opts = options.Value ?? throw new ArgumentNullException(nameof(options));
@@ -60,6 +64,10 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Background task queue consumer is starting with max concurrency of {MaxConcurrency}.", _concurrencyLimiter.CurrentCount);
+
+        // Signal readiness as soon as the loop starts so a RunMode.Queued dispatch can tell the consumer is alive
+        // (and won't hang waiting for work that nothing would drain).
+        _readiness.MarkStarted();
 
         try
         {

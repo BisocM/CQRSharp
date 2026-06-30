@@ -36,6 +36,14 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         true);
 
+    private static readonly DiagnosticDescriptor OpenGenericHandlerDiagnostic = new(
+        "CQRGEN009",
+        "Open-generic handler is not registered",
+        "'{0}' is an open-generic handler, which CQRSharp does not register — only closed, non-generic handler types are wired. Declare a concrete (closed) handler or register it manually; otherwise dispatching its request throws \"no handler\" at runtime.",
+        "CQRSharp.Generators",
+        DiagnosticSeverity.Warning,
+        true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Project each candidate type into a small, value-equatable model in the transform. Because no symbols or
@@ -98,9 +106,11 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
                         SourceText.From(GenerateOutboxNotificationSerializer(stableNotifications, known), Encoding.UTF8));
             }
 
-            // Only the composition root emits the global AddGenerated/AddCqrsGenerated entry points (which wire every
-            // module in the reference graph), so they exist in exactly one assembly and never collide.
-            if (config.IsCompositionRoot)
+            // Every CQRSharp-referencing assembly emits the internal AddGenerated/AddCqrsGenerated entry points (which
+            // wire this assembly's module plus every referenced assembly's module). Internal visibility means they
+            // never collide across assemblies, so there is no "composition root" to designate — you call
+            // AddCqrsGenerated from wherever you set up DI, and it wires that assembly's whole reference graph.
+            if (known.CoreReferenced)
                 context.AddSource("CqrsGeneratedBootstrap.g.cs",
                     SourceText.From(GenerateBootstrap(known, hasModule), Encoding.UTF8));
 
@@ -108,6 +118,7 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
             context.AddSource("CqrsGeneratedAssemblyMarkers.g.cs", SourceText.From(markersSourceCode, Encoding.UTF8));
 
             ReportInaccessibleHandlers(candidates, context);
+            ReportOpenGenericHandlers(candidates, context);
         }
         catch (Exception ex)
         {
@@ -179,6 +190,17 @@ public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
         {
             var location = candidate.Location?.ToLocation() ?? Location.None;
             context.ReportDiagnostic(Diagnostic.Create(HandlerNotAccessibleDiagnostic, location, candidate.TypeName));
+        }
+    }
+
+    // CQRGEN009: an open-generic dispatch handler is silently unregistered (the generator wires only closed types),
+    // surfacing only as a runtime "no handler". Flag it at the declaration so the gap is caught at build time.
+    private static void ReportOpenGenericHandlers(ImmutableArray<CandidateModel> candidates, SourceProductionContext context)
+    {
+        foreach (var candidate in candidates.Where(c => c.IsOpenGenericHandler))
+        {
+            var location = candidate.Location?.ToLocation() ?? Location.None;
+            context.ReportDiagnostic(Diagnostic.Create(OpenGenericHandlerDiagnostic, location, candidate.TypeName));
         }
     }
 

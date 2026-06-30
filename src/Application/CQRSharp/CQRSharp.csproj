@@ -37,7 +37,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Ship the source generator and analyzers transitively from the meta-package for plug-and-play support. -->
+        <!--
+            Ship the source generator AND the analyzers in the meta-package. The analyzers ALSO ship with
+            CQRSharp.Abstractions, so they run in a handler project that references only the abstractions (e.g. one that
+            forgot the generator — CQRA010). NuGet does not flow analyzer assets transitively, so the meta-package's
+            dependency on Abstractions carries exclude="Analyzers"; the meta-package therefore ships its own copy for its
+            direct consumers, who get exactly one (the transitive copy is excluded).
+        -->
         <None Include="..\..\Infrastructure\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"

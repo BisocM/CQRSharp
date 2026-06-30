@@ -54,6 +54,7 @@ public static class DependencyInjectionExtensions
             .Validate(o => o.Capacity > 0, "BackgroundTaskQueueOptions.Capacity must be greater than zero.")
             .Validate(o => o.CallbackChannelCapacity > 0, "BackgroundTaskQueueOptions.CallbackChannelCapacity must be greater than zero.")
             .Validate(o => o.NotificationMaxRetries >= 1, "BackgroundTaskQueueOptions.NotificationMaxRetries must be at least 1.")
+            .Validate(o => o.ConsumerStartTimeout > TimeSpan.Zero, "BackgroundTaskQueueOptions.ConsumerStartTimeout must be greater than zero.")
             .ValidateOnStart();
 
         services.Configure<DispatcherOptions>(opts => configureDispatcher?.Invoke(opts));
@@ -79,6 +80,10 @@ public static class DependencyInjectionExtensions
 
         // Single CQRSharp façade: inject one thing (scoped to preserve DI scope semantics).
         services.TryAddScoped<ICqrsDispatcher, CqrsDispatcher>();
+
+        // Readiness signal so a RunMode.Queued dispatch can detect a started consumer (and fail loudly, not hang,
+        // when the host never starts it).
+        services.TryAddSingleton<ConsumerReadiness>();
 
         services.TryAddSingleton<BackgroundTaskQueue>();
         services.TryAddSingleton<IBackgroundTaskQueue>(sp => sp.GetRequiredService<BackgroundTaskQueue>());

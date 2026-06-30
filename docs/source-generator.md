@@ -15,7 +15,8 @@ CQRSharp — it's here for the curious and for contributors.
 `CqrsSourceGenerator` scans each compilation for requests, handlers, contexts, and notifications. Because
 CQRSharp supports apps spread across several assemblies (see
 [Multi-assembly applications](#multi-assembly-applications)), the output splits into two layers: a **module**
-that every assembly with handlers emits, and a **bootstrap** that only the composition root emits.
+that every assembly with handlers emits, and a **bootstrap** (the `AddCqrsGenerated` entry points) that every
+CQRSharp-referencing assembly emits — `internal`, so they never collide across assemblies.
 
 | Generated source | Emitted in | Contains |
 | --- | --- | --- |
@@ -26,12 +27,15 @@ that every assembly with handlers emits, and a **bootstrap** that only the compo
 | `GeneratedCqrsDiagnostics.g.cs` | every assembly with handlers | The `ICqrsDiagnostics` describer for this assembly's request bindings. |
 | `GeneratedOutboxNotificationSerializer.g.cs` | when there are `[NotificationName]` notifications | The AOT-safe (de)serializer for this assembly's stable notifications. |
 | `CqrsGeneratedAssemblyMarkers.g.cs` | every assembly with handlers | Assembly-level markers: one per handled request/notification (for the analyzers) and one `[CqrsGeneratedModule]` naming this assembly's registrar. |
-| `CqrsGeneratedBootstrap.g.cs` | the composition root only | `AddCqrsGenerated(...)` / `AddGenerated()` — registers every module in the reference graph (this assembly's and each referenced assembly's), then `AddCqrsModuleComposition()` merges them. |
+| `CqrsGeneratedBootstrap.g.cs` | every CQRSharp-referencing assembly (`internal`) | `AddCqrsGenerated(...)` / `AddGenerated()` — registers every module in this assembly's reference graph (its own and each referenced assembly's), then `AddCqrsModuleComposition()` merges them. You call it from whichever assembly wires DI. |
 
 The module's types are emitted into a per-assembly namespace (`CQRSharp.Generated.<AssemblyName>`) so two assemblies
-in one reference graph never collide. The composition-root entry points stay in the canonical `CQRSharp.Core.Extensions`,
-so consumer code always calls a stable `AddCqrsGenerated(...)`. A second generator, `CqrsAotHintGenerator`, emits an
-`AotHintProvider` that keeps generic instantiations rooted for the AOT compiler.
+in one reference graph never collide. The `AddCqrsGenerated` entry points keep the stable type name
+`CQRSharp.Core.Extensions.CqrsGeneratedBootstrap`, but are emitted **`internal`** — so even when two assemblies both
+emit them, a referenced assembly's copy is invisible to the referencing one and there is nothing to collide on. You
+call `AddCqrsGenerated(...)` from inside the assembly that wires DI, where `internal` visibility is exactly right. A
+second generator, `CqrsAotHintGenerator`, emits an `AotHintProvider` that keeps generic instantiations rooted for the
+AOT compiler.
 
 ## The well-known-type handoff
 
@@ -81,29 +85,30 @@ reported as **CQRGEN005**.
 ## Multi-assembly applications
 
 CQRSharp can run across several assemblies in one reference graph — handlers in `Application`, more in
-`Infrastructure`, a host that ties them together. Two mechanisms make that work without the generated code
-colliding:
+`Infrastructure`, a host that ties them together — with **no setup beyond referencing the package**. Two mechanisms
+make that work:
 
-- **Per-assembly modules.** Every assembly with handlers emits its own module (above) into a unique namespace
-  and registers it additively as an `ICqrsModule`. Crucially, a module registers *its own* handlers — including
-  `internal` ones a different assembly could never name — so encapsulation is preserved.
-- **One composition root.** Exactly one assembly emits the global `AddCqrsGenerated()` / `AddGenerated()`. It
-  reads the `[CqrsGeneratedModule]` marker off each referenced assembly at compile time, calls every module's
-  registrar, then `AddCqrsModuleComposition()` merges the modules into one set of registries and a routing
-  dispatcher per kind (request, stream, notification) that dispatches by runtime type to the owning module —
-  all at compile time, no runtime reflection.
+- **Per-assembly modules.** Every assembly with handlers emits its own module into a unique namespace
+  (`CQRSharp.Generated.<AssemblyName>`) and registers it additively as an `ICqrsModule`. Crucially, a module registers
+  *its own* handlers — including `internal` ones a different assembly could never name — so encapsulation is preserved.
+- **Internal entry points.** Every CQRSharp-referencing assembly emits its own `internal` `AddCqrsGenerated()` /
+  `AddGenerated()`. It reads the `[CqrsGeneratedModule]` marker off each referenced assembly at compile time, calls
+  every module's registrar, then `AddCqrsModuleComposition()` merges them into one set of registries and a routing
+  dispatcher per kind (request, stream, notification) — all at compile time, no runtime reflection. Because the entry
+  points are `internal`, two assemblies that both emit them never collide: each assembly uses its own.
 
-The composition root is your **executable** by default. If your entry point is a library — a plugin host, a test
-host — mark it:
+**There is no "composition root" to designate.** Call `AddCqrsGenerated()` from wherever you wire DI (your host's
+`Program.cs`) and it wires that assembly's whole reference graph. A test project that references your host — itself
+"executable" under the test SDK — just works: its `internal` entry point and the host's never see each other.
 
-```xml
-<PropertyGroup>
-  <CQRSharpCompositionRoot>true</CQRSharpCompositionRoot>
-</PropertyGroup>
-```
+The one rule: **put the package on every project that has handlers** (so it emits a module) *and* on the project that
+calls `AddCqrsGenerated()` (so the entry point exists there). The meta-package is the simplest way to do both — and if a
+handler project is missing it, **CQRA010** warns you at build (the analyzers ship with `CQRSharp.Abstractions`, so the
+warning fires even in a project that lacks the generator).
 
 The analyzers also use the per-request/notification markers for cross-assembly checks (`CQRA003` "no handler",
 `CQRA006` "no subscriber"), so a request whose handler lives in a referenced assembly isn't falsely flagged.
 
 > **Accessibility.** Within an assembly the generator registers `public` and `internal` handlers. A handler less
-> accessible than `internal` (e.g. a `private` nested type) can't be registered — make it at least `internal`.
+> accessible than `internal` (e.g. a `private` nested type) can't be registered — make it at least `internal`. And an
+> **open-generic** handler (`Handler<T>`) is never registered — CQRSharp wires closed types only; **CQRGEN009** flags it.

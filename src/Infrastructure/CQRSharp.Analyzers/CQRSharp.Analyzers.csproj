@@ -1,7 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
+        <!-- This Roslyn component now builds as a (build-order) dependency of CQRSharp.Abstractions, so it can be pulled
+             into a Native-AOT publish of a consumer. netstandard2.0 has no AOT; force PublishAot off (TreatAsLocalProperty
+             lets this win over a global -p:PublishAot=true) so the consumer's AOT publish doesn't fail with NETSDK1207. -->
+        <PublishAot>false</PublishAot>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Analyzers</RootNamespace>

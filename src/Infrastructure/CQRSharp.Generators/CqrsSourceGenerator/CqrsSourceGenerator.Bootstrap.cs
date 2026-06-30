@@ -4,9 +4,11 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
-    // Emitted only in the composition-root assembly (see GeneratorConfig.IsCompositionRoot). It owns the two global
-    // entry points — AddGenerated (registers every module in the reference graph then composes them) and the
-    // AddCqrsGenerated convenience overloads — so they exist in exactly one assembly and never collide.
+    // Emitted in every CQRSharp-referencing assembly, as INTERNAL entry points. Because they are internal, two
+    // assemblies that both emit them never collide — a referenced assembly's internal AddCqrsGenerated is invisible
+    // to the referencing one, so each assembly uses its own. That removes the need to designate a "composition root".
+    // AddGenerated wires this assembly's module plus every referenced assembly's module; you call AddCqrsGenerated
+    // from wherever you set up DI (which is always inside the calling assembly, so internal visibility suffices).
     private static string GenerateBootstrap(KnownSnapshot known, bool hasLocalModule)
     {
         var sb = new StringBuilder();
@@ -18,13 +20,13 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
         sb.AppendLine("{");
-        EmitSummary(sb, "    ", "Source-generated composition-root registrations: wires this assembly's CQRSharp module and every referenced assembly's module into one set of framework services.");
-        sb.AppendLine("    public static class CqrsGeneratedRegistrations");
+        EmitSummary(sb, "    ", "Source-generated registrations: wires this assembly's CQRSharp module and every referenced assembly's module into one set of framework services. Internal, so it never collides across assemblies.");
+        sb.AppendLine("    internal static class CqrsGeneratedRegistrations");
         sb.AppendLine("    {");
         EmitSummary(sb, "        ", "Registers the source-generated handlers and dispatchers of this assembly and every referenced CQRSharp assembly, then composes the merged registries and routing dispatchers. Call this after <c>AddCqrs</c> (or use <c>AddCqrsGenerated</c>, which does both).");
         sb.AppendLine("        /// <param name=\"services\">The service collection to register the generated CQRSharp services into.</param>");
         sb.AppendLine("        /// <returns>The same service collection, to allow chaining.</returns>");
-        sb.AppendLine("        public static IServiceCollection AddGenerated(this IServiceCollection services)");
+        sb.AppendLine("        internal static IServiceCollection AddGenerated(this IServiceCollection services)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
         sb.AppendLine();
@@ -38,11 +40,11 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         EmitSummary(sb, "    ", "One-call source-generated bootstrap that registers CQRSharp and its generated handlers and dispatchers together.");
-        sb.AppendLine("    public static class CqrsGeneratedBootstrap");
+        sb.AppendLine("    internal static class CqrsGeneratedBootstrap");
         sb.AppendLine("    {");
         EmitSummary(sb, "        ", "Registers CQRSharp (<c>AddCqrs</c>) and the source-generated handlers and dispatchers (<c>AddGenerated</c>) in a single call, optionally configuring the background queue, outbox, dispatcher, and startup validation.");
         sb.AppendLine(
-            "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null, Action<CqrsStartupValidationOptions>? configureValidation = null)");
+            "        internal static IServiceCollection AddCqrsGenerated(this IServiceCollection services, Action<BackgroundTaskQueueOptions>? configureQueue = null, Action<OutboxOptions>? configureOutbox = null, Action<DispatcherOptions>? configureDispatcher = null, Action<CqrsStartupValidationOptions>? configureValidation = null)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
         sb.AppendLine();
@@ -60,7 +62,7 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine();
             EmitSummary(sb, "        ", "Registers CQRSharp and the source-generated handlers and dispatchers, configuring the pipeline through the fluent <c>ICqrsBuilder</c> (verb order does not matter).");
             sb.AppendLine(
-                "        public static IServiceCollection AddCqrsGenerated(this IServiceCollection services, System.Action<global::CQRSharp.Pipelines.Extensions.ICqrsBuilder> configure)");
+                "        internal static IServiceCollection AddCqrsGenerated(this IServiceCollection services, System.Action<global::CQRSharp.Pipelines.Extensions.ICqrsBuilder> configure)");
             sb.AppendLine("        {");
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(configure);");

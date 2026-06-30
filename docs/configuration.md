@@ -146,6 +146,33 @@ full it rejects new work and publishes a `TaskRejectedNotification`; accepted wo
 `TaskEnqueuedNotification`. The result of a queued dispatch flows back to the caller through a
 completion source — awaiting `Send(...)` works identically to inline mode.
 
+Queued dispatch requires a **running Generic Host**: the queue is drained by a `BackgroundService` that runs only after
+the host starts. If you build the provider without starting the host (a plain console, a DI-only test), a queued
+`Send(...)` waits up to `BackgroundTaskQueueOptions.ConsumerStartTimeout` (default 10 s) for the consumer and then throws
+a clear error instead of hanging forever.
+
+## Hosting & lifetimes
+
+CQRSharp is built for the .NET **Generic Host**. Two consequences are worth knowing for non-standard setups:
+
+- **Queued dispatch and the outbox need a started host.** Both are driven by background `IHostedService`s (the queue
+  consumer, the outbox processor), which run only after `host.StartAsync()`/`RunAsync()`. The startup validator is also
+  a hosted service. So if you build a provider and never start the host, none of them run. Under the defaults
+  (`RunMode.Inline`, outbox disabled) this is irrelevant; turn either on and you need a running host. Queued dispatch
+  fails fast in that case (above); the outbox would silently not deliver.
+- **Resolve `ICqrsDispatcher` from a scope, not the root provider.** The dispatcher and its pipeline are *scoped*, so a
+  handler's scoped dependencies (an EF `DbContext`, a unit of work) get a fresh instance per dispatch. Hosted services,
+  controllers, and minimal-API handlers already run in a scope. In console or background-job glue, create one:
+
+  ```csharp
+  using var scope = provider.CreateScope();
+  var cqrs = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+  ```
+
+  Resolving the façade straight from the **root** provider silently runs handlers (and their scoped dependencies) as
+  process-lifetime singletons — a captive-dependency hazard. Enabling `ValidateScopes` on `BuildServiceProvider` turns
+  that mistake into an explicit error.
+
 ## Startup validation
 
 CQRSharp ships a hosted **startup validator** that inspects the wired-up configuration and per-request

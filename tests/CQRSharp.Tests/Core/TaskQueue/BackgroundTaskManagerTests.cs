@@ -239,7 +239,7 @@ public class BackgroundTaskManagerTests
         var (queue, metrics, _) = CreateTestSystem(opts);
         var itemsProcessed = new ConcurrentBag<int>();
 
-        var consumer = new BackgroundTaskQueueConsumer(queue, NullLogger<BackgroundTaskQueueConsumer>.Instance, Opts(opts));
+        var consumer = new BackgroundTaskQueueConsumer(queue, NullLogger<BackgroundTaskQueueConsumer>.Instance, Opts(opts), new ConsumerReadiness());
         var consumerTask = consumer.StartAsync(CancellationToken.None);
 
         // Act
@@ -273,7 +273,7 @@ public class BackgroundTaskManagerTests
         // Arrange
         var opts = MakeOptions(1, BoundedChannelFullMode.Wait);
         var (queue, _, _) = CreateTestSystem(opts);
-        var consumer = new BackgroundTaskQueueConsumer(queue, NullLogger<BackgroundTaskQueueConsumer>.Instance, Opts(opts));
+        var consumer = new BackgroundTaskQueueConsumer(queue, NullLogger<BackgroundTaskQueueConsumer>.Instance, Opts(opts), new ConsumerReadiness());
         var consumerTask = consumer.StartAsync(CancellationToken.None);
 
         // Act

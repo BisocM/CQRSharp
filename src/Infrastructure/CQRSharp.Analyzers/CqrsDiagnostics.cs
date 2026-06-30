@@ -86,4 +86,14 @@ internal static class CqrsDiagnostics
         true,
         "The rate-limiting behavior only throttles a request whose context implements IRateLimitedContext (it supplies the user/request identifiers the limiter keys on); a request whose context does not implement it silently passes through unthrottled. Implement IRateLimitedContext on the context to opt in.",
         customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor GeneratorNotRunning = new(
+        "CQRA010",
+        "CQRSharp handlers found but the source generator is not running in this project",
+        "This project declares CQRSharp handler(s) but the CQRSharp source generator is not running here, so no module is emitted and these handlers are never registered. Add the CQRSharp meta-package (or the CQRSharp.Generators analyzer) to this project.",
+        Category,
+        DiagnosticSeverity.Warning,
+        true,
+        "CQRSharp registers handlers only in assemblies where its source generator runs (each emits its own module). A handler-bearing project without the generator emits no module, so its handlers are silently skipped and fail with \"no handler\" at dispatch. Reference the CQRSharp meta-package (or the generator) from this project.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
 }

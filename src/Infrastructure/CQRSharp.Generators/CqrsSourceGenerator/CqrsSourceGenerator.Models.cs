@@ -111,7 +111,8 @@ public sealed partial class CqrsSourceGenerator
         EquatableArray<string> HandledNotifications,
         EquatableArray<string> ContextFactories,
         EquatableArray<ExceptionHookModel> ExceptionHooks,
-        string? AotOpenGenericBehaviorName);
+        string? AotOpenGenericBehaviorName,
+        bool IsOpenGenericHandler);
 
     // ---- Outbox serializer graph (was reference-equality classes; now value-equatable records) ----
 

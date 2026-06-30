@@ -13,3 +13,4 @@ CQRA006 | CQRSharp.Usage | Info | A published notification has no discoverable s
 CQRA007 | CQRSharp.Usage | Warning | A request's context does not implement IRateLimitedContext while rate limiting is configured.
 CQRA008 | CQRSharp.Usage | Info | A closed-generic PipelineExemption can use the simpler open-generic form.
 CQRA009 | CQRSharp.Usage | Info | A value-returning command (ICommand&lt;TResult&gt;) — confirm the value cannot be queried.
+CQRA010 | CQRSharp.Usage | Warning | CQRSharp handlers found but the source generator is not running in this project.

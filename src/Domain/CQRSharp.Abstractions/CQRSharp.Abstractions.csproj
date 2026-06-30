@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 4.0.2. Adds the [CqrsGeneratedModule] assembly marker that lets a composition root discover and wire each referenced assembly's source-generated module, so CQRSharp can span multiple assemblies.
+            Version 4.0.3. Now also carries the CQRSharp analyzers (no API change), so authoring diagnostics — including CQRA010, which warns when a project has handlers but the source generator is not running there — fire in any project that references CQRSharp.
         </PackageReleaseNotes>
     </PropertyGroup>
 
@@ -40,6 +40,25 @@
     -->
     <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
         <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2"/>
+    </ItemGroup>
+
+    <!--
+        Ship the CQRSharp analyzers WITH Abstractions (every handler project references it), so authoring diagnostics run
+        even in a project that is missing the source generator — which is exactly what CQRA010 detects. The
+        ProjectReference is build-order only (ReferenceOutputAssembly=false so Abstractions takes no compile dependency,
+        PrivateAssets=all so the project reference's assets don't flow to consumers); the analyzer reaches consumers via
+        the packed analyzers/dotnet/cs DLL below, which also flows transitively to meta-package consumers.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
+                          PrivateAssets="all"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\..\Infrastructure\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs"
+              Visible="false"/>
     </ItemGroup>
 
 </Project>

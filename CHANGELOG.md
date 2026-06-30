@@ -2,6 +2,36 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.3]
+
+### Fixed
+
+- **Multi-assembly setup is now zero-config.** The generated `AddCqrsGenerated`/`AddGenerated` entry points are emitted
+  **`internal`**, so two assemblies that both emit them never collide — a referenced assembly's copy is invisible to the
+  referencing one. This removes the "composition root" concept entirely: there is nothing to designate, and a **test
+  project that references the host it tests just works** (previously the test SDK made it executable, so it self-elected
+  as a second composition root and collided with the host — `CS0121`). Put the package on your handler projects and your
+  host, call `AddCqrsGenerated()`, done.
+- **`RunMode.Queued` no longer hangs without a running host.** Queued dispatch is drained by a background service that
+  only runs once the Generic Host starts. If the host never starts (a plain console, a DI-only test), a queued
+  `Send(...)` now waits up to `BackgroundTaskQueueOptions.ConsumerStartTimeout` (default 10 s) and throws a clear error,
+  instead of awaiting a task nothing would ever complete.
+
+### Added
+
+- **`CQRGEN009`** — a warning when an open-generic handler (`Handler<T>`) is declared. CQRSharp registers only closed,
+  non-generic handlers, so an open-generic one was previously silently unwired and failed only as a runtime "no handler".
+- **`CQRA010`** — a warning when a project declares CQRSharp handlers but the source generator is not running in it (so
+  no module is emitted and its handlers go unregistered). To make this fire even in a project that is *missing* the
+  generator, the **CQRSharp analyzers now ship with `CQRSharp.Abstractions`** (which every handler project references), in
+  addition to the meta-package — a packaging change with no API impact.
+- **`BackgroundTaskQueueOptions.ConsumerStartTimeout`** — bounds the queued-dispatch wait described above.
+
+### Changed
+
+- **The `CQRSharpCompositionRoot` MSBuild property is no longer needed and is ignored.** Introduced in 4.0.2, it is
+  obsoleted by the internal entry points above. Setting it has no effect (and no longer needs removing).
+
 ## [4.0.2]
 
 ### Fixed
