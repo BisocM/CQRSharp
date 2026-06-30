@@ -54,6 +54,7 @@ public sealed class SampleHostedService(
                 .ConfigureAwait(false);
 
             await RunQueryTestAsync(cqrs, diagnostics, userId, stoppingToken).ConfigureAwait(false);
+            await RunResultCommandTestAsync(cqrs, stoppingToken).ConfigureAwait(false);
             await RunDynamicSendTestAsync(cqrs, userId, stoppingToken).ConfigureAwait(false);
             await RunStreamingTestAsync(cqrs, diagnostics, scopeMarker.Id, stoppingToken).ConfigureAwait(false);
             await RunStreamExceptionHandlingTestAsync(cqrs, diagnostics, stoppingToken).ConfigureAwait(false);
@@ -163,6 +164,18 @@ public sealed class SampleHostedService(
 
         RequireNotificationPipelineExecuted(diagnostics, typeof(QueryInitiatedNotification<User?>));
         RequireNotificationPipelineExecuted(diagnostics, typeof(QueryCompletedNotification<User?>));
+    }
+
+    private static async Task RunResultCommandTestAsync(
+        ICqrsDispatcher cqrs,
+        CancellationToken cancellationToken)
+    {
+        // A value-returning command (ICommand<TResult>): the minted value flows back in CommandResult<TResult>.
+        CommandResult<string> result = await cqrs.Send(new MintTokenCommand { Subject = "svc" }, cancellationToken)
+            .ConfigureAwait(false);
+
+        Require(result.IsSuccess, "MintTokenCommand did not succeed.");
+        Require(result.Value == "token:svc", $"MintTokenCommand returned an unexpected value '{result.Value}'.");
     }
 
     private static async Task RunDynamicSendTestAsync(

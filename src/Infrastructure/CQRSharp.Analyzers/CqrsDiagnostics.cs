@@ -36,6 +36,15 @@ internal static class CqrsDiagnostics
         true,
         "A generic pipeline behavior is registered as an open generic and closed per request, so spelling out the type arguments in [PipelineExemption] is unnecessary; typeof(Behavior<,>) is the simpler, more robust form.");
 
+    public static readonly DiagnosticDescriptor ValueCommandGuidance = new(
+        "CQRA009",
+        "Command returns data — confirm it cannot be queried",
+        "'{0}' returns data from a command (ICommand<{1}>). Use a value-returning command only for a value no query could reproduce (a one-time secret or token); if '{1}' is persisted and queryable, model the read as IQuery<{1}> instead.",
+        Category,
+        DiagnosticSeverity.Info,
+        true,
+        "ICommand<TResult> deliberately relaxes the command/query split. It is intended only for a value minted at the instant of the operation that no query can return (a one-time API key, a generated token); for anything queryable, return a CommandResult and read the value with a query.");
+
     // The following are Warning/Info (not Error): the analyzer cannot be certain the code is broken because handlers
     // may be registered another way (manual DI), and a notification with no subscriber is legal.
 

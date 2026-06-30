@@ -2,6 +2,19 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.1]
+
+### Added
+
+- **Value-returning commands.** `ICommand<TResult>` — with `ResultCommandBase<TResult>` /
+  `ResultCommandBase<TResult, TContext>` and `IResultCommandHandler<TCommand, TResult>` — models a command that
+  mutates state and returns a value no query could reproduce: a secret minted at the instant of the operation and
+  never persisted in readable form (a one-time API key, a generated token shown once). The handler returns a new
+  `CommandResult<TResult>` (the outcome plus the value on success; its `ToString()` never prints the value). The
+  analyzer **CQRA009** raises an informational reminder on each `ICommand<TResult>` declaration so the choice stays
+  deliberate. A value-returning command dispatches through the query path, so it publishes the query lifecycle
+  notifications rather than the command ones.
+
 ## [4.0.0]
 
 ### Breaking changes

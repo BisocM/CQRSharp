@@ -19,7 +19,8 @@ public record CommandResult
     /// <param name="isSuccess">Indicates whether the command succeeded.</param>
     /// <param name="errorMessage">Optional error message if the command failed.</param>
     /// <param name="errorCode">Optional error code if the command failed.</param>
-    private CommandResult(bool isSuccess, string? errorMessage = null, int? errorCode = null)
+    /// <remarks>Protected so <see cref="CommandResult{TResult}" /> can chain to it.</remarks>
+    protected CommandResult(bool isSuccess, string? errorMessage = null, int? errorCode = null)
     {
         IsSuccess = isSuccess;
         ErrorMessage = errorMessage;

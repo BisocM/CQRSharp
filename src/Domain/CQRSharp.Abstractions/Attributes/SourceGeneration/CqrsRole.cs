@@ -96,5 +96,17 @@ public enum CqrsRole
     CqrsHandledRequestAttribute,
 
     /// <summary>The generator-emitted <c>CqrsHandledNotificationAttribute</c>.</summary>
-    CqrsHandledNotificationAttribute
+    CqrsHandledNotificationAttribute,
+
+    /// <summary><c>ICommand&lt;TResult&gt;</c> — a value-returning command.</summary>
+    ICommandWithResult,
+
+    /// <summary><c>CommandResult&lt;TResult&gt;</c>.</summary>
+    CommandResultGeneric,
+
+    /// <summary><c>IResultCommandHandler&lt;TCommand, TResult&gt;</c>.</summary>
+    IResultCommandHandler2,
+
+    /// <summary><c>IResultCommandHandler&lt;TCommand, TResult, TContext&gt;</c>.</summary>
+    IResultCommandHandler3
 }

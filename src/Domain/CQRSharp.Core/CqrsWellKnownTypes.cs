@@ -51,3 +51,7 @@ using CQRSharp.Core.Pipelines;
 [assembly: CqrsWellKnownType(CqrsRole.IRequestContextFactory, typeof(IRequestContextFactory<>))]
 [assembly: CqrsWellKnownType(CqrsRole.CqrsHandledRequestAttribute, typeof(CqrsHandledRequestAttribute))]
 [assembly: CqrsWellKnownType(CqrsRole.CqrsHandledNotificationAttribute, typeof(CqrsHandledNotificationAttribute))]
+[assembly: CqrsWellKnownType(CqrsRole.ICommandWithResult, typeof(ICommand<>))]
+[assembly: CqrsWellKnownType(CqrsRole.CommandResultGeneric, typeof(CommandResult<>))]
+[assembly: CqrsWellKnownType(CqrsRole.IResultCommandHandler2, typeof(IResultCommandHandler<,>))]
+[assembly: CqrsWellKnownType(CqrsRole.IResultCommandHandler3, typeof(IResultCommandHandler<,,>))]

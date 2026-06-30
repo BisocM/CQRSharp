@@ -412,4 +412,30 @@ public class CqrsAnalyzerTests
         var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
         diagnostics.Should().NotContain(d => d.Id == "CQRA008");
     }
+
+    [Fact(DisplayName = "CQRA009: a value-returning command is flagged with guidance")]
+    public async Task CQRA009_FlagsValueReturningCommand()
+    {
+        const string source = """
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+
+                              public sealed class MintToken : ResultCommandBase<string> { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new ResultCommandGuidanceAnalyzer());
+        diagnostics.Should().ContainSingle(d => d.Id == "CQRA009" && d.Severity == DiagnosticSeverity.Info);
+    }
+
+    [Fact(DisplayName = "CQRA009: a plain (outcome-only) command is not flagged")]
+    public async Task CQRA009_DoesNotFlagPlainCommand()
+    {
+        const string source = """
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+
+                              public sealed class DoThing : CommandBase { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new ResultCommandGuidanceAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA009");
+    }
 }

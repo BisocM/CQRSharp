@@ -65,7 +65,7 @@ public sealed class PipelineExecutor(
     /// <returns>A task that represents the asynchronous operation, containing the result of the query.</returns>
     public Task<TResult> ExecuteQueryAsync<TRequest, TResult>(
         TRequest query, CancellationToken ct)
-        where TRequest : IQuery<TResult>
+        where TRequest : IRequest<TResult>
     {
         if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
         {
@@ -139,7 +139,7 @@ public sealed class PipelineExecutor(
 
     private Task<TResult> ExecuteQueryImmediateAsync<TRequest, TResult>(
         TRequest query, CancellationToken ct)
-        where TRequest : IQuery<TResult>
+        where TRequest : IRequest<TResult>
     {
         return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
             ? ExecuteQueryInNewScopeAsync<TRequest, TResult>(query, ct)
@@ -149,7 +149,7 @@ public sealed class PipelineExecutor(
     private async Task<TResult> ExecuteQueryInNewScopeAsync<TRequest, TResult>(
         TRequest query,
         CancellationToken ct)
-        where TRequest : IQuery<TResult>
+        where TRequest : IRequest<TResult>
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         return await ExecuteQueryInProviderAsync<TRequest, TResult>(query, scope.ServiceProvider, ct).ConfigureAwait(false);
@@ -159,7 +159,7 @@ public sealed class PipelineExecutor(
         TRequest query,
         IServiceProvider provider,
         CancellationToken ct)
-        where TRequest : IQuery<TResult>
+        where TRequest : IRequest<TResult>
     {
         using var activity = CqrsActivitySource.StartRequest("CQRS Query", typeof(TRequest));
         try

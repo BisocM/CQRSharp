@@ -12,3 +12,4 @@ CQRA005 | CQRSharp.Usage | Error | A PipelineExemption target that is not a pipe
 CQRA006 | CQRSharp.Usage | Info | A published notification has no discoverable subscriber.
 CQRA007 | CQRSharp.Usage | Warning | A request's context does not implement IRateLimitedContext while rate limiting is configured.
 CQRA008 | CQRSharp.Usage | Info | A closed-generic PipelineExemption can use the simpler open-generic form.
+CQRA009 | CQRSharp.Usage | Info | A value-returning command (ICommand&lt;TResult&gt;) — confirm the value cannot be queried.

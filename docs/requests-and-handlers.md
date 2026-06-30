@@ -172,9 +172,49 @@ return CommandResult.FromSuccess();
 return CommandResult.FromError("Name already taken", errorCode: 409);
 ```
 
-The constructor is private — always use the factory methods. If a command needs to return *data*,
-model it as a query, or expose the data another way; `CommandResult` is intentionally about outcome,
-not payload.
+The constructor is private — always use the factory methods. `CommandResult` is intentionally about
+outcome, not payload — if a command needs to return *data*, model the read as a query. The one exception is
+a value no query could ever reproduce; see [value-returning commands](#value-returning-commands).
+
+## Value-returning commands
+
+Occasionally a command both mutates state **and** produces a value that **no query can return** — a secret
+minted at the instant of the operation and never persisted in readable form (a one-time API key whose hash
+alone is stored, a generated token shown once). For that narrow case, derive the request from
+`ResultCommandBase<TResult>` (it implements `ICommand<TResult>`) and handle it with
+`IResultCommandHandler<TCommand, TResult>`, which returns a `CommandResult<TResult>` — the outcome plus the
+value on success:
+
+```csharp
+public sealed class MintApiKey : ResultCommandBase<ApiKeySecret>
+{
+    public required Guid UserId { get; init; }
+}
+
+public sealed class MintApiKeyHandler : IResultCommandHandler<MintApiKey, ApiKeySecret>
+{
+    public Task<CommandResult<ApiKeySecret>> Handle(MintApiKey c, CancellationToken ct)
+    {
+        var (plaintext, hash) = ApiKey.Generate();
+        _store.Save(c.UserId, hash);          // only the hash is persisted
+        return Task.FromResult(CommandResult<ApiKeySecret>.FromSuccess(plaintext));
+    }
+}
+
+// var r = await cqrs.Send(new MintApiKey { UserId = id });
+// if (r.IsSuccess) ShowOnce(r.Value);        // the secret, the one time it ever exists
+```
+
+`CommandResult<TResult>` carries `IsSuccess`, `ErrorMessage`, `ErrorCode`, and `Value` (set on success); use
+`FromSuccess(value)` / `FromError(message, code)`. Its `ToString()` deliberately never prints `Value` — it
+may be a secret. For a custom context, derive from `ResultCommandBase<TResult, TContext>`.
+
+> **Use this sparingly.** It deliberately relaxes the command/query split. For any value a query *can*
+> return, return a plain `CommandResult` and read the value with an `IQuery<TResult>`. The analyzer
+> **CQRA009** raises an informational reminder on every `ICommand<TResult>` so the choice stays deliberate.
+>
+> A value-returning command dispatches through the same path as a query, so it publishes the **query**
+> lifecycle notifications (`QueryInitiated`/`Completed`/`Failed`), not the command ones.
 
 ## Request context
 

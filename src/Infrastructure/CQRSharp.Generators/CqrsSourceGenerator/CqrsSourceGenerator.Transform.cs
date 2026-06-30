@@ -125,6 +125,8 @@ public sealed partial class CqrsSourceGenerator
     {
         var known = CqrsKnownSymbols.For(compilation);
         var commandHandlerDef = known.ICommandHandler2;
+        var resultCommandHandlerDef = known.IResultCommandHandler3;
+        var commandResultGenericDef = known.CommandResultGeneric;
         var queryHandlerDef = known.IQueryHandler3;
         var streamHandlerDef = known.IStreamRequestHandler3;
         var asyncEnumerableDef = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
@@ -155,6 +157,21 @@ public sealed partial class CqrsSourceGenerator
                 var contextType = iface.TypeArguments[2];
                 if (!IsAccessibleFromGeneratedCode(requestType) || !IsAccessibleFromGeneratedCode(resultType) ||
                     !IsAccessibleFromGeneratedCode(contextType)) continue;
+                result.Add(new HandlerImplModel(implName, HandlerKind.Query, requestType.ToDisplayString(Fq),
+                    resultType.ToDisplayString(Fq), iface.ToDisplayString(FqNullable), iface.ToDisplayString(Fq),
+                    BuildRequestMetadata(requestType, compilation)));
+            }
+            else if (resultCommandHandlerDef is not null && commandResultGenericDef is not null &&
+                     SymbolEqualityComparer.Default.Equals(def, resultCommandHandlerDef))
+            {
+                if (iface.TypeArguments.Length < 3) continue;
+                var requestType = iface.TypeArguments[0];
+                var valueType = iface.TypeArguments[1];
+                var contextType = iface.TypeArguments[2];
+                if (!IsAccessibleFromGeneratedCode(requestType) || !IsAccessibleFromGeneratedCode(valueType) ||
+                    !IsAccessibleFromGeneratedCode(contextType)) continue;
+                // A value-returning command dispatches like a query whose result is CommandResult<TValue>.
+                var resultType = commandResultGenericDef.Construct(valueType);
                 result.Add(new HandlerImplModel(implName, HandlerKind.Query, requestType.ToDisplayString(Fq),
                     resultType.ToDisplayString(Fq), iface.ToDisplayString(FqNullable), iface.ToDisplayString(Fq),
                     BuildRequestMetadata(requestType, compilation)));
@@ -203,6 +220,8 @@ public sealed partial class CqrsSourceGenerator
         var commandSymbol = known.ICommand;
         var querySymbol = known.IQuery;
         var streamRequestSymbol = known.IStreamRequest;
+        var commandWithResultSymbol = known.ICommandWithResult;
+        var commandResultGenericDef = known.CommandResultGeneric;
         if (commandSymbol is null || querySymbol is null) return null;
 
         var streamInterface = streamRequestSymbol is null
@@ -211,6 +230,10 @@ public sealed partial class CqrsSourceGenerator
                 i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol));
         var queryInterface = type.AllInterfaces.FirstOrDefault(i =>
             i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol));
+        var resultCommandInterface = commandWithResultSymbol is null
+            ? null
+            : type.AllInterfaces.FirstOrDefault(i =>
+                i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, commandWithResultSymbol));
         var isCommand = type.AllInterfaces.Contains(commandSymbol, SymbolEqualityComparer.Default);
 
         RequestKind kind;
@@ -226,6 +249,14 @@ public sealed partial class CqrsSourceGenerator
             kind = RequestKind.Query;
             resultOrItemNullable = queryInterface.TypeArguments[0].ToDisplayString(FqNullable);
             queryResultNonNullable = queryInterface.TypeArguments[0].ToDisplayString(Fq);
+        }
+        else if (resultCommandInterface is not null && commandResultGenericDef is not null)
+        {
+            // A value-returning command (ICommand<TValue>) dispatches like a query whose result is CommandResult<TValue>.
+            kind = RequestKind.Query;
+            var commandResult = commandResultGenericDef.Construct(resultCommandInterface.TypeArguments[0]);
+            resultOrItemNullable = commandResult.ToDisplayString(FqNullable);
+            queryResultNonNullable = commandResult.ToDisplayString(Fq);
         }
         else if (isCommand)
         {
@@ -376,6 +407,8 @@ public sealed partial class CqrsSourceGenerator
         var querySymbol = known.IQuery;
         var streamRequestSymbol = known.IStreamRequest;
         var commandResultSymbol = known.CommandResult;
+        var commandWithResultSymbol = known.ICommandWithResult;
+        var commandResultGenericDef = known.CommandResultGeneric;
         var asyncEnumerableSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
         if (commandSymbol is null || querySymbol is null || commandResultSymbol is null) return null;
         if (requestType is not INamedTypeSymbol requestSymbol) return null;
@@ -386,14 +419,22 @@ public sealed partial class CqrsSourceGenerator
             ? null
             : requestSymbol.AllInterfaces.FirstOrDefault(i =>
                 i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol));
+        var resultCommandInterface = commandWithResultSymbol is null
+            ? null
+            : requestSymbol.AllInterfaces.FirstOrDefault(i =>
+                i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, commandWithResultSymbol));
         var isCommand = requestSymbol.AllInterfaces.Contains(commandSymbol, SymbolEqualityComparer.Default);
-        if (!isCommand && queryInterface is null && streamInterface is null) return null;
+        if (!isCommand && queryInterface is null && streamInterface is null && resultCommandInterface is null) return null;
 
         ITypeSymbol resultType;
         if (streamInterface is not null)
         {
             if (asyncEnumerableSymbol is null) return null;
             resultType = asyncEnumerableSymbol.Construct(streamInterface.TypeArguments[0]);
+        }
+        else if (resultCommandInterface is not null && commandResultGenericDef is not null)
+        {
+            resultType = commandResultGenericDef.Construct(resultCommandInterface.TypeArguments[0]);
         }
         else
         {
@@ -475,10 +516,12 @@ public sealed partial class CqrsSourceGenerator
     {
         var known = CqrsKnownSymbols.For(compilation);
         var commandHandlerSymbols = new[] { known.ICommandHandler1, known.ICommandHandler2 };
+        var resultCommandHandlerSymbols = new[] { known.IResultCommandHandler2, known.IResultCommandHandler3 };
         var queryHandlerSymbols = new[] { known.IQueryHandler2, known.IQueryHandler3 };
         var streamHandlerSymbols = new[] { known.IStreamRequestHandler2, known.IStreamRequestHandler3 };
 
         return commandHandlerSymbols
+            .Concat(resultCommandHandlerSymbols)
             .Concat(queryHandlerSymbols)
             .Concat(streamHandlerSymbols)
             .Concat(new[]

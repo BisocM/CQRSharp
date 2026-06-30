@@ -42,7 +42,11 @@ namespace CQRSharp.Shared
         IStreamPipelineBehavior,
         IRequestContextFactory,
         CqrsHandledRequestAttribute,
-        CqrsHandledNotificationAttribute
+        CqrsHandledNotificationAttribute,
+        ICommandWithResult,
+        CommandResultGeneric,
+        IResultCommandHandler2,
+        IResultCommandHandler3
     }
 
     /// <summary>
@@ -201,5 +205,9 @@ namespace CQRSharp.Shared
         public INamedTypeSymbol? IRequestContextFactory => Get(CqrsRole.IRequestContextFactory);
         public INamedTypeSymbol? CqrsHandledRequestAttribute => Get(CqrsRole.CqrsHandledRequestAttribute);
         public INamedTypeSymbol? CqrsHandledNotificationAttribute => Get(CqrsRole.CqrsHandledNotificationAttribute);
+        public INamedTypeSymbol? ICommandWithResult => Get(CqrsRole.ICommandWithResult);
+        public INamedTypeSymbol? CommandResultGeneric => Get(CqrsRole.CommandResultGeneric);
+        public INamedTypeSymbol? IResultCommandHandler2 => Get(CqrsRole.IResultCommandHandler2);
+        public INamedTypeSymbol? IResultCommandHandler3 => Get(CqrsRole.IResultCommandHandler3);
     }
 }
