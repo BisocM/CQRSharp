@@ -258,7 +258,7 @@ public sealed class PipelineExecutor(
     private async IAsyncEnumerable<TItem> ExecuteStreamInProviderCore<TRequest, TItem>(
         TRequest request,
         IServiceProvider provider,
-        CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TItem>
     {
         using var activity = CqrsActivitySource.StartRequest("CQRS Stream", typeof(TRequest));
@@ -658,6 +658,7 @@ public sealed class PipelineExecutor(
     ///     Discovers and executes all <see cref="IPostHandlerAttribute" />s attached to the request class.
     /// </summary>
     /// <param name="request">The request being processed.</param>
+    /// <param name="outcome">The outcome of the handler: its returned value, or the exception it threw.</param>
     /// <param name="sp">The scoped service provider.</param>
     /// <param name="ct">The cancellation token.</param>
     private static async Task InvokePostHandleAttributes(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
@@ -702,6 +703,7 @@ public sealed class PipelineExecutor(
     /// </summary>
     /// <param name="requestBase">The request object.</param>
     /// <param name="services">The scoped service provider used to resolve the context factory.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous context creation.</param>
     /// <exception cref="InvalidOperationException">Thrown if metadata or a required context factory is not found.</exception>
     private async ValueTask InitializeRequestContextAsync(IRequest requestBase, IServiceProvider services, CancellationToken cancellationToken)
     {

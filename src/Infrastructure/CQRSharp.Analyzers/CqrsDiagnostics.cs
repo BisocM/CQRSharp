@@ -139,7 +139,7 @@ internal static class CqrsDiagnostics
     public static readonly DiagnosticDescriptor CollapseToCommandInterceptor = new(
         "CQRA017",
         "Pre- and post-handler attributes can be one ICommandInterceptor",
-        "'{0}' implements both IPreHandlerAttribute and IPostHandlerAttribute; implement ICommandInterceptor instead for a single combined pre+post interceptor.",
+        "'{0}' implements both IPreHandlerAttribute and IPostHandlerAttribute. Implement ICommandInterceptor instead for a single combined pre+post interceptor.",
         Category,
         DiagnosticSeverity.Info,
         true,
