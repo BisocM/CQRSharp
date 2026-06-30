@@ -7,7 +7,7 @@
     <PropertyGroup>
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
-        <Version>4.1.0</Version>
+        <Version>4.2.0</Version>
         <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>

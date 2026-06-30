@@ -24,7 +24,7 @@ public class CustomInterceptorAttribute(int priority) : Attribute, ICommandInter
         await Task.CompletedTask;
     }
 
-    public async Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider,
+    public async Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
         var logger = serviceProvider.GetService<ILogger<CustomInterceptorAttribute>>();

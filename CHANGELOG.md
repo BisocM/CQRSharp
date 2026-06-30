@@ -2,6 +2,25 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.2.0]
+
+### Changed
+
+- **Post-handlers are uniformly outcome-aware — breaking.** `IPostHandlerAttribute.OnAfterHandle` now takes the
+  request's `RequestOutcome` (the value the handler returned, or the exception it threw) and runs on **both** the success
+  and the exception paths — previously it received only the request and ran on success only. This collapses 4.1.0's
+  opt-in `IPostHandlerOutcomeAware` / `OutcomeAwarePostHandlerAttribute` into the single post-handler contract: there is
+  no longer an outcome-blind post-handler.
+  **Migration:** add a `RequestOutcome outcome` parameter to your `OnAfterHandle` implementations —
+  `OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)` — and read
+  `outcome.Result` (the returned value, cast to the request's result type) or `outcome.Exception` to classify on what
+  happened. A post-handler now also runs when the handler threw; it is isolated, so a fault in it cannot mask the
+  original exception.
+
+### Removed
+
+- `IPostHandlerOutcomeAware` and `OutcomeAwarePostHandlerAttribute` (added in 4.1.0) — folded into `IPostHandlerAttribute`.
+
 ## [4.1.0]
 
 A focused ease-of-use release: make the first dispatch succeed, make failures self-explanatory, and make the

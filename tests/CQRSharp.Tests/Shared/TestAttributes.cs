@@ -26,5 +26,5 @@ public class TestPostHandlerAttribute(int priority) : Attribute, IPostHandlerAtt
     public int PostHandlerExecutionPriority { get; } = priority;
 
     /// <inheritdoc />
-    public virtual Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
+    public virtual Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
 }

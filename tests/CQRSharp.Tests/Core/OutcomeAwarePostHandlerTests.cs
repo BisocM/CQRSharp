@@ -11,10 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace CQRSharp.Tests.Core;
 
 /// <summary>
-///     Verifies the outcome-aware post-handler (4.1.0): a post-handler deriving from
-///     <see cref="OutcomeAwarePostHandlerAttribute" /> receives the request's <see cref="RequestOutcome" /> — the typed
-///     returned value on success (so it can classify on a verdict that an otherwise-successful dispatch carried) and the
-///     exception on failure, without masking it.
+///     Verifies the outcome-aware post-handler (4.2.0): a post-handler (<see cref="IPostHandlerAttribute" />) receives
+///     the request's <see cref="RequestOutcome" /> — the typed returned value on success (so it can classify on a verdict
+///     that an otherwise-successful dispatch carried) and the exception on failure, without masking it.
 /// </summary>
 public sealed class OutcomeAwarePostHandlerTests
 {
@@ -65,11 +64,11 @@ public sealed class OutcomeRecorder
     public RequestOutcome? Captured { get; set; }
 }
 
-public sealed class CaptureOutcomeAttribute : OutcomeAwarePostHandlerAttribute
+public sealed class CaptureOutcomeAttribute : Attribute, IPostHandlerAttribute
 {
-    public override int PostHandlerExecutionPriority => 0;
+    public int PostHandlerExecutionPriority => 0;
 
-    public override Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         serviceProvider.GetRequiredService<OutcomeRecorder>().Captured = outcome;
         return Task.CompletedTask;

@@ -245,9 +245,9 @@ public class PipelineExecutorTests
             .Callback(() => callOrder.Add("pre1")).Returns(Task.CompletedTask);
         mockPreHandler2.Setup(p => p.OnBeforeHandle(It.IsAny<IRequest>(), It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
             .Callback(() => callOrder.Add("pre2")).Returns(Task.CompletedTask);
-        mockPostHandler1.Setup(p => p.OnAfterHandle(It.IsAny<IRequest>(), It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
+        mockPostHandler1.Setup(p => p.OnAfterHandle(It.IsAny<IRequest>(), It.IsAny<RequestOutcome>(), It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
             .Callback(() => callOrder.Add("post1")).Returns(Task.CompletedTask);
-        mockPostHandler2.Setup(p => p.OnAfterHandle(It.IsAny<IRequest>(), It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
+        mockPostHandler2.Setup(p => p.OnAfterHandle(It.IsAny<IRequest>(), It.IsAny<RequestOutcome>(), It.IsAny<IServiceProvider>(), It.IsAny<CancellationToken>()))
             .Callback(() => callOrder.Add("post2")).Returns(Task.CompletedTask);
 
         RequestMetadata metadata = new(requestType, handlerType,

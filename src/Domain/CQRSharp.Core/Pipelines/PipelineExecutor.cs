@@ -665,18 +665,11 @@ public sealed class PipelineExecutor(
     {
         if (request.Metadata is null) return;
 
+        // Every post-handler receives the request's outcome (the returned value or the thrown exception) and runs on
+        // both the success and the exception paths.
         var postHandlers = GetPostHandlers(request);
         for (var i = 0; i < postHandlers.Length; i++)
-        {
-            var postHandler = postHandlers[i];
-
-            // An outcome-aware post-handler is handed the returned value (or the thrown exception) and runs on both the
-            // success and the exception paths. A plain post-handler keeps its existing success-only behavior.
-            if (postHandler is IPostHandlerOutcomeAware outcomeAware)
-                await outcomeAware.OnAfterHandle(request, outcome, sp, ct).ConfigureAwait(false);
-            else if (!outcome.Threw)
-                await postHandler.OnAfterHandle(request, sp, ct).ConfigureAwait(false);
-        }
+            await postHandlers[i].OnAfterHandle(request, outcome, sp, ct).ConfigureAwait(false);
     }
 
     /// <summary>

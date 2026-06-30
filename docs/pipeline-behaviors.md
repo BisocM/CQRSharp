@@ -267,13 +267,14 @@ public interface IPreHandlerAttribute
 public interface IPostHandlerAttribute
 {
     int PostHandlerExecutionPriority { get; }  // lower runs first
-    Task OnAfterHandle(IRequest request, IServiceProvider services, CancellationToken ct);
+    Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider services, CancellationToken ct);
 }
 ```
 
 Pre-handlers run just before the handler (ordered by `PreHandlerExecutionPriority`); post-handlers run
-just after (ordered by `PostHandlerExecutionPriority`). They receive the `IServiceProvider` so they can
-resolve dependencies. The generator records them on `RequestMetadata.PreHandlers` / `PostHandlers`.
+just after (ordered by `PostHandlerExecutionPriority`), on both the success and exception paths. They
+receive the `IServiceProvider` so they can resolve dependencies, and a post-handler also receives the
+request's `RequestOutcome` — the value the handler returned, or the exception it threw. The generator records them on `RequestMetadata.PreHandlers` / `PostHandlers`.
 
 ### ICommandInterceptor — the one-stop pre+post interface
 
@@ -301,9 +302,9 @@ public sealed class AuditAttribute(int priority) : Attribute, ICommandIntercepto
         return Task.CompletedTask;
     }
 
-    public Task OnAfterHandle(IRequest request, IServiceProvider services, CancellationToken ct)
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider services, CancellationToken ct)
     {
-        // ... runs after the handler ...
+        // ... runs after the handler, with its outcome (the returned value or the thrown exception) ...
         return Task.CompletedTask;
     }
 }
@@ -317,25 +318,20 @@ records a self-test marker on both `OnBeforeHandle` and `OnAfterHandle`. When a 
 `IPreHandlerAttribute` and `IPostHandlerAttribute` directly, the **CQRA017** analyzer (info) suggests
 collapsing it to a single `ICommandInterceptor`.
 
-### Outcome-aware post-handlers — seeing the result or the exception
+### Auditing on the outcome — the result or the exception
 
-A plain `OnAfterHandle(IRequest, IServiceProvider, CancellationToken)` is **blind to what the handler
-produced** — it gets the request and nothing else, and it runs only on success. That is fine for
-"fire-on-completion" concerns, but it cannot classify on the *result*. The motivating case is auditing an
-operation whose outcome is a returned value rather than success-vs-throw: a login command that returns a
-`CommandResult<LoginResult>` carrying a `BadCredentials` verdict is a perfectly successful dispatch (no
-exception) that must still be audited as a failure.
-
-For that, derive from `OutcomeAwarePostHandlerAttribute` (or implement `IPostHandlerOutcomeAware`). It
-receives a `RequestOutcome` — the value the handler returned **or** the exception it threw — and runs on
-**both** paths:
+`OnAfterHandle` receives the request's `RequestOutcome` and runs on **both** the success and the exception
+paths, so a post-handler can classify on what the handler actually produced — not merely that it ran. The
+motivating case is auditing an operation whose outcome is a *returned value* rather than success-vs-throw: a
+login command that returns a `CommandResult<LoginResult>` carrying a `BadCredentials` verdict is a perfectly
+successful dispatch (no exception) that must still be audited as a failure.
 
 ```csharp
-public sealed class AuditLoginAttribute : OutcomeAwarePostHandlerAttribute
+public sealed class AuditLoginAttribute : Attribute, IPostHandlerAttribute
 {
-    public override int PostHandlerExecutionPriority => 0;
+    public int PostHandlerExecutionPriority => 0;
 
-    public override Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
     {
         var audit = sp.GetRequiredService<IAuditSink>();
 
@@ -353,9 +349,7 @@ public sealed class AuditLoginAttribute : OutcomeAwarePostHandlerAttribute
 `RequestOutcome.Result` is the dispatch result (a `CommandResult<T>`, a `CommandResult`, or a query value),
 boxed as `object` — cast it to the request's result type. `Threw` reports the *dispatch* outcome (did it
 fault), deliberately distinct from any business verdict the value carries. On the exception path the
-post-handler is isolated, so a fault in your auditing never masks the original exception. Plain
-`IPostHandlerAttribute` post-handlers are unaffected — they keep running success-only with the legacy
-signature.
+post-handler is isolated, so a fault in your auditing never masks the original exception.
 
 Interceptors are best for small, declarative, per-request concerns that read naturally as an attribute on
 the request type; reach for a **behavior** when the concern is cross-cutting across many requests or needs

@@ -2,7 +2,7 @@ namespace CQRSharp.Abstractions.Attributes.Pipelines;
 
 /// <summary>
 ///     The outcome of a request after its handler ran: the value it returned, or the exception it threw. Handed to an
-///     outcome-aware post-handler (<see cref="IPostHandlerOutcomeAware" />) so a cross-cutting concern such as auditing
+///     post-handler (<see cref="IPostHandlerAttribute" />) so a cross-cutting concern such as auditing
 ///     can classify on what actually happened — including a value that encodes a business denial on an otherwise
 ///     successful dispatch (for example, a login that returns a "bad credentials" verdict without throwing).
 /// </summary>

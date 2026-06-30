@@ -252,7 +252,7 @@ public class NewDiagnosticsTests
                                   public int PreHandlerExecutionPriority => 0;
                                   public int PostHandlerExecutionPriority => 0;
                                   public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
-                                  public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
+                                  public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
                               }
                               """;
 
@@ -275,7 +275,7 @@ public class NewDiagnosticsTests
                                   public int PreHandlerExecutionPriority => 0;
                                   public int PostHandlerExecutionPriority => 0;
                                   public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
-                                  public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
+                                  public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken) => Task.CompletedTask;
                               }
                               """;
 

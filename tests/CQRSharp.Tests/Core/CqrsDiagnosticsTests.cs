@@ -305,6 +305,6 @@ internal sealed class DiagnosticsInterceptorAttribute(int priority) : Attribute,
     public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         => Task.CompletedTask;
 
-    public Task OnAfterHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken)
         => Task.CompletedTask;
 }
