@@ -18,7 +18,7 @@ namespace CQRSharp.Pipelines.Behaviors.Resilience;
 public sealed class ResilienceBehavior<TRequest, TResult>(
     ILogger<ResilienceBehavior<TRequest, TResult>> logger,
     IOptions<ResilienceOptions> options,
-    TimeProvider? timeProvider = null) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
+    TimeProvider? timeProvider = null) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior, ICqrsResilienceBehaviorMarker
     where TRequest : IRequest
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;

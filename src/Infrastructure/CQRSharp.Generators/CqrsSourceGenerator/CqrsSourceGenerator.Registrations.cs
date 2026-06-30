@@ -1,20 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 
 namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
-    private static readonly SymbolDisplayFormat FullyQualifiedNullableTypeFormat =
-        SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
-            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
-            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
     private static readonly DiagnosticDescriptor MissingRequestHandlerDiagnostic = new(
         "CQRGEN003",
         "No handler found for request",
@@ -32,9 +26,9 @@ public sealed partial class CqrsSourceGenerator
         true);
 
     private static string GenerateRegistrations(
-        Compilation compilation,
-        ImmutableArray<INamedTypeSymbol> candidateClasses,
-        StableNotificationInfo[] stableNotifications,
+        ImmutableArray<CandidateModel> candidates,
+        KnownSnapshot known,
+        IReadOnlyList<NotificationModel> stableNotifications,
         SourceProductionContext context,
         GeneratorConfig config)
     {
@@ -56,18 +50,25 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Extensions");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated dependency-injection registrations for the CQRSharp handlers, request bindings, context factories, and exception hooks discovered at compile time.");
         sb.AppendLine("    public static class CqrsGeneratedRegistrations");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Registers every compile-time-discovered handler, request binding, context factory, and exception hook, together with the generated AOT-safe dispatchers. Call this after <c>AddCqrs</c> (or use <c>AddCqrsGenerated</c>, which does both).");
+        sb.AppendLine("        /// <param name=\"services\">The service collection to register the generated CQRSharp services into.</param>");
+        sb.AppendLine("        /// <returns>The same service collection, to allow chaining.</returns>");
         sb.AppendLine("        public static IServiceCollection AddGenerated(this IServiceCollection services)");
         sb.AppendLine("        {");
 
-        var handlerBindingsByRequest = CollectHandlerBindings(compilation, candidateClasses);
+        var handlerBindingsByRequest = candidates
+            .SelectMany(c => c.Handlers)
+            .GroupBy(h => h.RequestTypeName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        GenerateHandlerServices(sb, compilation, candidateClasses);
-        GenerateRequestRegistry(sb, compilation, candidateClasses, context, handlerBindingsByRequest, config);
+        GenerateHandlerServices(sb, candidates);
+        GenerateRequestRegistry(sb, candidates, known, handlerBindingsByRequest, context, config);
         GenerateHandlerRegistry(sb, handlerBindingsByRequest);
-        GenerateContextFactoryRegistry(sb, compilation, candidateClasses);
-        GenerateRequestExceptionHookRegistry(sb, compilation, candidateClasses);
+        GenerateContextFactoryRegistry(sb, candidates, known);
+        GenerateRequestExceptionHookRegistry(sb, candidates);
 
         sb.AppendLine();
         sb.AppendLine("            // Registering the generated dispatchers. RemoveAll first so the generated implementations");
@@ -94,7 +95,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine(
             "            services.AddScoped<global::CQRSharp.Core.Pipelines.IStreamRequestDispatcher, global::CQRSharp.Core.Streams.Generated.GeneratedStreamRequestDispatcher>();");
 
-        if (stableNotifications.Length > 0)
+        if (stableNotifications.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("            // Register the generated outbox notification serializer.");
@@ -113,150 +114,197 @@ public sealed partial class CqrsSourceGenerator
         return sb.ToString();
     }
 
-    private static void GenerateRequestExceptionHookRegistry(
+    private static HandlerImplModel SelectDeterministicBinding(List<HandlerImplModel> bindings)
+    {
+        return bindings
+            .OrderBy(b => b.ImplTypeName, StringComparer.Ordinal)
+            .ThenBy(b => b.InterfaceNameOrdinal, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static void GenerateHandlerServices(StringBuilder sb, ImmutableArray<CandidateModel> candidates)
+    {
+        sb.AppendLine();
+        sb.AppendLine("            // Registering Handler Services by Interface Implementation.");
+        sb.AppendLine("            // The concrete handler is what dispatch resolves (via the request registry); the interface");
+        sb.AppendLine("            // forwarders below are kept so consumers can also resolve a handler by its interface directly.");
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            if (candidate.HandlerForwarderInterfaces.Count == 0) continue;
+            if (!seen.Add(candidate.TypeName)) continue;
+
+            sb.AppendLine($"            services.AddTransient(typeof({candidate.TypeName}));");
+
+            foreach (var iface in candidate.HandlerForwarderInterfaces)
+                sb.AppendLine($"            services.AddTransient(typeof({iface}), sp => sp.GetRequiredService<{candidate.TypeName}>());");
+        }
+    }
+
+    private static void GenerateRequestRegistry(
         StringBuilder sb,
-        Compilation compilation,
-        ImmutableArray<INamedTypeSymbol> candidateClasses)
+        ImmutableArray<CandidateModel> candidates,
+        KnownSnapshot known,
+        Dictionary<string, List<HandlerImplModel>> handlerBindingsByRequest,
+        SourceProductionContext context,
+        GeneratorConfig config)
+    {
+        sb.AppendLine();
+        sb.AppendLine("            // Registering Request Registry");
+        sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, RequestMetadata>();");
+
+        if (string.IsNullOrEmpty(known.PreHandlerInterfaceName) ||
+            string.IsNullOrEmpty(known.PostHandlerInterfaceName) ||
+            string.IsNullOrEmpty(known.PipelineExemptionAttributeName))
+            return;
+
+        // Diagnostics: request types declared in this compilation should have exactly one handler.
+        if (!config.SuppressMissingRequestHandlerDiagnostics)
+        {
+            foreach (var candidate in candidates.Where(c => c.Request is not null))
+            {
+                var requestKey = candidate.Request!.RequestTypeName;
+                if (handlerBindingsByRequest.ContainsKey(requestKey)) continue;
+
+                var location = candidate.Location?.ToLocation() ?? Location.None;
+                context.ReportDiagnostic(Diagnostic.Create(MissingRequestHandlerDiagnostic, location, requestKey));
+            }
+        }
+
+        var locationByName = new Dictionary<string, LocationInfo?>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+            if (!locationByName.ContainsKey(candidate.TypeName))
+                locationByName[candidate.TypeName] = candidate.Location;
+
+        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var bindings = kvp.Value;
+            if (bindings.Count == 0) continue;
+
+            var selected = SelectDeterministicBinding(bindings);
+
+            if (bindings.Count > 1)
+            {
+                var descriptions = string.Join(
+                    ", ",
+                    bindings
+                        .OrderBy(b => b.ImplTypeName, StringComparer.Ordinal)
+                        .ThenBy(b => b.InterfaceNameOrdinal, StringComparer.Ordinal)
+                        .Select(b => $"{b.ImplTypeName} ({b.InterfaceNameOrdinal})"));
+
+                var location = (locationByName.TryGetValue(selected.ImplTypeName, out var loc) ? loc?.ToLocation() : null) ?? Location.None;
+                context.ReportDiagnostic(Diagnostic.Create(MultipleRequestHandlersDiagnostic, location, kvp.Key, descriptions));
+            }
+
+            var requestTypeName = selected.RequestTypeName;
+            var metadata = selected.RequestMetadata;
+
+            var preHandlersCode = RenderAttributeArray(metadata.PreHandlers, known.PreHandlerInterfaceName);
+            var postHandlersCode = RenderAttributeArray(metadata.PostHandlers, known.PostHandlerInterfaceName);
+            var pipelineExemptionsCode = RenderAttributeArray(metadata.PipelineExemptions, known.PipelineExemptionAttributeName);
+
+            var resultTypeCode = selected.ResultTypeName is not null
+                ? $"typeof({selected.ResultTypeName})"
+                : "null";
+
+            sb.AppendLine(
+                $"            requestMetadataMappings.TryAdd(typeof({requestTypeName}), new RequestMetadata(typeof({requestTypeName}), typeof({selected.ImplTypeName}), {preHandlersCode}, {postHandlersCode}, {pipelineExemptionsCode}, {resultTypeCode}, typeof({metadata.ContextTypeName})));");
+        }
+
+        sb.AppendLine("            services.AddSingleton<IRequestRegistry>(new RequestRegistry(requestMetadataMappings));");
+    }
+
+    private static string RenderAttributeArray(EquatableArray<AttributeModel> attributes, string fullyQualifiedInterfaceName)
+    {
+        if (attributes.Count == 0) return $"System.Array.Empty<{fullyQualifiedInterfaceName}>()";
+
+        var instancesCode = attributes.Select(attr =>
+            $"new {attr.AttributeTypeName}({string.Join(", ", attr.ConstructorArgs)})");
+
+        return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
+    }
+
+    private static void GenerateHandlerRegistry(StringBuilder sb, Dictionary<string, List<HandlerImplModel>> handlerBindingsByRequest)
+    {
+        sb.AppendLine();
+        sb.AppendLine("            // Registering Handler Registry");
+        sb.AppendLine("            var handlerInvokerMappings = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();");
+
+        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var bindings = kvp.Value;
+            if (bindings.Count == 0) continue;
+            var selected = SelectDeterministicBinding(bindings);
+
+            var requestType = selected.RequestTypeName;
+            var handlerInterface = selected.InterfaceNameNullable;
+            var invokerLambda = selected.Kind == HandlerKind.Stream
+                ? $"(handler, request, ct) => global::System.Threading.Tasks.Task.FromResult((object?)(({handlerInterface})handler).Handle(({requestType})request, ct))"
+                : $"async (handler, request, ct) => (object?)await (({handlerInterface})handler).Handle(({requestType})request, ct).ConfigureAwait(false)";
+            sb.AppendLine($"            handlerInvokerMappings.TryAdd(typeof({requestType}), {invokerLambda});");
+        }
+
+        sb.AppendLine("            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerInvokerMappings));");
+    }
+
+    private static void GenerateContextFactoryRegistry(StringBuilder sb, ImmutableArray<CandidateModel> candidates, KnownSnapshot known)
+    {
+        sb.AppendLine();
+        sb.AppendLine("            // Registering Context Factory Registry");
+        sb.AppendLine("            var factoryMappings = new ConcurrentDictionary<Type, Func<System.IServiceProvider, object?>>();");
+
+        if (string.IsNullOrEmpty(known.RequestContextBaseTypeName)) return;
+
+        var contextTypes = candidates
+            .SelectMany(c => c.ContextFactories)
+            .Distinct(StringComparer.Ordinal);
+
+        foreach (var contextTypeName in contextTypes)
+            sb.AppendLine($"            factoryMappings.TryAdd(typeof({contextTypeName}), sp => sp.GetService<IRequestContextFactory<{contextTypeName}>>());");
+
+        // Always register the default RequestContextBase factory (provided by CQRSharp.Core).
+        sb.AppendLine(
+            $"            factoryMappings.TryAdd(typeof({known.RequestContextBaseTypeName}), sp => sp.GetService<global::CQRSharp.Core.Factories.IRequestContextFactory>());");
+
+        sb.AppendLine("            services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(factoryMappings));");
+    }
+
+    private static void GenerateRequestExceptionHookRegistry(StringBuilder sb, ImmutableArray<CandidateModel> candidates)
     {
         sb.AppendLine();
         sb.AppendLine("            // Registering Request Exception Hook Registry");
         sb.AppendLine(
             "            var exceptionHookMappings = new ConcurrentDictionary<Type, global::CQRSharp.Core.Exceptions.RequestExceptionHookInvoker>();");
 
-        var exceptionActionDef =
-            CqrsKnownSymbols.For(compilation).IRequestExceptionAction2;
-        var exceptionHandlerDef =
-            CqrsKnownSymbols.For(compilation).IRequestExceptionHandler3;
-        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
-        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
-        var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
-        var asyncEnumerableSymbol = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
-        var commandResultSymbol = CqrsKnownSymbols.For(compilation).CommandResult;
-        var systemExceptionSymbol = compilation.GetTypeByMetadataName("System.Exception");
+        var hooks = candidates.SelectMany(c => c.ExceptionHooks).ToArray();
 
-        if (exceptionActionDef is null ||
-            exceptionHandlerDef is null ||
-            commandSymbol is null ||
-            querySymbol is null ||
-            commandResultSymbol is null ||
-            systemExceptionSymbol is null)
+        foreach (var requestGroup in hooks
+                     .GroupBy(h => h.RequestTypeName, StringComparer.Ordinal)
+                     .OrderBy(g => g.Key, StringComparer.Ordinal))
         {
-            sb.AppendLine(
-                "            services.AddSingleton<global::CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry, global::CQRSharp.Core.Exceptions.RequestExceptionHookRegistry>();");
-            return;
-        }
-
-        var hooksByRequest =
-            new Dictionary<ITypeSymbol, Dictionary<ITypeSymbol, ExceptionHookKind>>(SymbolEqualityComparer.Default);
-
-        void RecordHook(ITypeSymbol requestType, ITypeSymbol exceptionType, ExceptionHookKind kind)
-        {
-            if (!hooksByRequest.TryGetValue(requestType, out var byException))
-            {
-                byException = new Dictionary<ITypeSymbol, ExceptionHookKind>(SymbolEqualityComparer.Default);
-                hooksByRequest.Add(requestType, byException);
-            }
-
-            byException.TryGetValue(exceptionType, out var existing);
-            byException[exceptionType] = existing | kind;
-        }
-
-        static bool IsConcrete(INamedTypeSymbol type) => type is { IsAbstract: false, IsGenericType: false };
-
-        static bool IsExceptionType(ITypeSymbol exceptionType, INamedTypeSymbol systemExceptionSymbol)
-        {
-            for (var current = exceptionType; current is not null; current = current.BaseType)
-                if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, systemExceptionSymbol.OriginalDefinition))
-                    return true;
-
-            return false;
-        }
-
-        foreach (var implementation in candidateClasses.Where(c => IsConcrete(c) && IsAccessibleFromGeneratedCode(c)))
-        foreach (var iface in GetInterfacesAndBaseInterfaces(implementation))
-        {
-            if (!iface.IsGenericType) continue;
-
-            if (SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, exceptionActionDef))
-            {
-                if (iface.TypeArguments.Length < 2) continue;
-                var requestType = iface.TypeArguments[0];
-                var exceptionType = iface.TypeArguments[1];
-
-                if (!IsAccessibleFromGeneratedCode(requestType) ||
-                    !IsAccessibleFromGeneratedCode(exceptionType) ||
-                    !IsExceptionType(exceptionType, systemExceptionSymbol))
-                    continue;
-
-                RecordHook(requestType, exceptionType, ExceptionHookKind.Action);
-            }
-            else if (SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, exceptionHandlerDef))
-            {
-                if (iface.TypeArguments.Length < 3) continue;
-                var requestType = iface.TypeArguments[0];
-                var exceptionType = iface.TypeArguments[2];
-
-                if (!IsAccessibleFromGeneratedCode(requestType) ||
-                    !IsAccessibleFromGeneratedCode(exceptionType) ||
-                    !IsExceptionType(exceptionType, systemExceptionSymbol))
-                    continue;
-
-                RecordHook(requestType, exceptionType, ExceptionHookKind.Handler);
-            }
-        }
-
-        static int GetInheritanceDepth(ITypeSymbol type)
-        {
-            var depth = 0;
-            for (var current = type.BaseType; current is not null; current = current.BaseType)
-                depth++;
-            return depth;
-        }
-
-        foreach (var requestEntry in hooksByRequest
-                     .OrderBy(k => k.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
-        {
-            if (requestEntry.Key is not INamedTypeSymbol requestSymbol) continue;
-
-            var isCommand = requestSymbol.AllInterfaces.Contains(commandSymbol, SymbolEqualityComparer.Default);
-            var queryInterface = requestSymbol.AllInterfaces
-                .FirstOrDefault(i => i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol));
-
-            var streamInterface = streamRequestSymbol is null
-                ? null
-                : requestSymbol.AllInterfaces.FirstOrDefault(i =>
-                    i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol));
-
-            if (!isCommand && queryInterface is null && streamInterface is null) continue;
-
-            ITypeSymbol resultType;
-            if (streamInterface is not null)
-            {
-                if (asyncEnumerableSymbol is null) continue;
-                resultType = asyncEnumerableSymbol.Construct(streamInterface.TypeArguments[0]);
-            }
-            else
-            {
-                resultType = (ITypeSymbol)(queryInterface?.TypeArguments[0] ?? commandResultSymbol);
-            }
-
-            if (!IsAccessibleFromGeneratedCode(resultType)) continue;
-
-            var requestTypeName = requestSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var resultTypeName = resultType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var requestTypeName = requestGroup.Key;
+            var resultTypeName = requestGroup.First().ResultTypeName;
 
             sb.AppendLine($"            exceptionHookMappings.TryAdd(typeof({requestTypeName}), async (sp, request, exception, ct) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                var typedRequest = ({requestTypeName})request;");
 
-            foreach (var exceptionEntry in requestEntry.Value
-                         .OrderByDescending(e => GetInheritanceDepth(e.Key))
-                         .ThenBy(e => e.Key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
-            {
-                if (exceptionEntry.Key is not INamedTypeSymbol exceptionSymbol) continue;
+            var byException = requestGroup
+                .GroupBy(h => h.ExceptionTypeName, StringComparer.Ordinal)
+                .Select(g => new
+                {
+                    ExceptionTypeName = g.Key,
+                    Depth = g.First().ExceptionInheritanceDepth,
+                    Kind = g.Aggregate(ExceptionHookKind.None, (acc, h) => acc | h.Kind)
+                })
+                .OrderByDescending(e => e.Depth)
+                .ThenBy(e => e.ExceptionTypeName, StringComparer.Ordinal);
 
-                var exceptionTypeName = exceptionSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var kind = exceptionEntry.Value;
+            foreach (var exception in byException)
+            {
+                var exceptionTypeName = exception.ExceptionTypeName;
+                var kind = exception.Kind;
 
                 sb.AppendLine("                {");
                 sb.AppendLine($"                    if (exception is {exceptionTypeName} typedException)");
@@ -299,290 +347,13 @@ public sealed partial class CqrsSourceGenerator
             "            services.AddSingleton<global::CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry>(new global::CQRSharp.Core.Exceptions.RequestExceptionHookRegistry(exceptionHookMappings));");
     }
 
-    private static Dictionary<string, List<HandlerBinding>> CollectHandlerBindings(
-        Compilation compilation,
-        ImmutableArray<INamedTypeSymbol> candidateClasses)
+    private static string GenerateDispatcher(ImmutableArray<CandidateModel> candidates)
     {
-        var commandHandlerDef = CqrsKnownSymbols.For(compilation).ICommandHandler2;
-        var queryHandlerDef = CqrsKnownSymbols.For(compilation).IQueryHandler3;
-        var streamHandlerDef = CqrsKnownSymbols.For(compilation).IStreamRequestHandler3;
-        var asyncEnumerableDef = compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1");
+        var requests = candidates
+            .Where(c => c.Request is { Kind: RequestKind.Command or RequestKind.Query })
+            .Select(c => c.Request!)
+            .ToList();
 
-        var bindingsByRequest = new Dictionary<string, List<HandlerBinding>>(StringComparer.Ordinal);
-        if (commandHandlerDef is null || queryHandlerDef is null) return bindingsByRequest;
-
-        foreach (var handlerImplementation in candidateClasses
-                     .Where(c => c is { IsAbstract: false, IsGenericType: false } && IsAccessibleFromGeneratedCode(c)))
-        foreach (var iface in GetInterfacesAndBaseInterfaces(handlerImplementation))
-        {
-            if (!iface.IsGenericType) continue;
-
-            if (SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, commandHandlerDef))
-            {
-                if (iface.TypeArguments.Length < 2) continue;
-                var requestType = iface.TypeArguments[0];
-                var contextType = iface.TypeArguments[1];
-
-                if (!IsAccessibleFromGeneratedCode(requestType) || !IsAccessibleFromGeneratedCode(contextType))
-                    continue;
-
-                AddHandlerBinding(
-                    bindingsByRequest,
-                    requestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    new HandlerBinding(handlerImplementation, iface, requestType, null, false));
-            }
-            else if (SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, queryHandlerDef))
-            {
-                if (iface.TypeArguments.Length < 3) continue;
-                var requestType = iface.TypeArguments[0];
-                var resultType = iface.TypeArguments[1];
-                var contextType = iface.TypeArguments[2];
-
-                if (!IsAccessibleFromGeneratedCode(requestType) ||
-                    !IsAccessibleFromGeneratedCode(resultType) ||
-                    !IsAccessibleFromGeneratedCode(contextType))
-                    continue;
-
-                AddHandlerBinding(
-                    bindingsByRequest,
-                    requestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    new HandlerBinding(handlerImplementation, iface, requestType, resultType, false));
-            }
-            else if (streamHandlerDef is not null &&
-                     asyncEnumerableDef is not null &&
-                     SymbolEqualityComparer.Default.Equals(iface.OriginalDefinition, streamHandlerDef))
-            {
-                if (iface.TypeArguments.Length < 3) continue;
-                var requestType = iface.TypeArguments[0];
-                var itemType = iface.TypeArguments[1];
-                var contextType = iface.TypeArguments[2];
-
-                if (!IsAccessibleFromGeneratedCode(requestType) ||
-                    !IsAccessibleFromGeneratedCode(itemType) ||
-                    !IsAccessibleFromGeneratedCode(contextType))
-                    continue;
-
-                var streamResultType = asyncEnumerableDef.Construct(itemType);
-
-                AddHandlerBinding(
-                    bindingsByRequest,
-                    requestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    new HandlerBinding(handlerImplementation, iface, requestType, streamResultType, true));
-            }
-        }
-
-        return bindingsByRequest;
-    }
-
-    private static void AddHandlerBinding(
-        Dictionary<string, List<HandlerBinding>> bindingsByRequest,
-        string requestKey,
-        HandlerBinding binding)
-    {
-        if (!bindingsByRequest.TryGetValue(requestKey, out var bindings))
-        {
-            bindings = new List<HandlerBinding>();
-            bindingsByRequest.Add(requestKey, bindings);
-        }
-
-        bindings.Add(binding);
-    }
-
-    private static HandlerBinding SelectDeterministicBinding(List<HandlerBinding> bindings)
-    {
-        return bindings
-            .OrderBy(b => b.HandlerImplementation.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
-            .ThenBy(b => b.HandlerInterface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
-            .First();
-    }
-
-    private static void GenerateHandlerServices(StringBuilder sb, Compilation compilation, ImmutableArray<INamedTypeSymbol> candidateClasses)
-    {
-        sb.AppendLine();
-        sb.AppendLine("            // Registering Handler Services by Interface Implementation.");
-        sb.AppendLine("            // The concrete handler is what dispatch resolves (via the request registry); the interface");
-        sb.AppendLine("            // forwarders below are kept so consumers can also resolve a handler by its interface directly.");
-
-        var allKnownHandlers = GetAllKnownHandlerSymbols(compilation)
-            .Select(s => s!.OriginalDefinition)
-            .ToArray();
-
-        if (!allKnownHandlers.Any()) return;
-
-        var handlerImplementations = candidateClasses
-            .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                        IsAccessibleFromGeneratedCode(c) &&
-                        GetInterfacesAndBaseInterfaces(c).Any(iface => iface.IsGenericType && allKnownHandlers.Contains(iface.OriginalDefinition, SymbolEqualityComparer.Default)))
-            .Distinct(SymbolEqualityComparer.Default)
-            .Cast<INamedTypeSymbol>();
-
-        foreach (var implementationSymbol in handlerImplementations)
-        {
-            var implementationTypeName = implementationSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            sb.AppendLine($"            services.AddTransient(typeof({implementationTypeName}));");
-
-            var implementedInterfaces = GetInterfacesAndBaseInterfaces(implementationSymbol)
-                .Where(iface => iface.IsGenericType && allKnownHandlers.Contains(iface.OriginalDefinition, SymbolEqualityComparer.Default));
-
-            foreach (var iface in implementedInterfaces)
-            {
-                var interfaceTypeName = iface.ToDisplayString(FullyQualifiedNullableTypeFormat);
-                sb.AppendLine($"            services.AddTransient(typeof({interfaceTypeName}), sp => sp.GetRequiredService<{implementationTypeName}>());");
-            }
-        }
-    }
-
-    private static void GenerateRequestRegistry(
-        StringBuilder sb,
-        Compilation compilation,
-        ImmutableArray<INamedTypeSymbol> candidateClasses,
-        SourceProductionContext context,
-        Dictionary<string, List<HandlerBinding>> handlerBindingsByRequest,
-        GeneratorConfig config)
-    {
-        sb.AppendLine();
-        sb.AppendLine("            // Registering Request Registry");
-        sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, RequestMetadata>();");
-
-        var preHandlerInterfaceSymbol = CqrsKnownSymbols.For(compilation).IPreHandlerAttribute;
-        var postHandlerInterfaceSymbol = CqrsKnownSymbols.For(compilation).IPostHandlerAttribute;
-        var pipelineExemptionAttributeSymbol = CqrsKnownSymbols.For(compilation).PipelineExemptionAttribute;
-
-        if (preHandlerInterfaceSymbol is null || postHandlerInterfaceSymbol is null || pipelineExemptionAttributeSymbol is null)
-            return;
-
-        // Diagnostics: request types declared in this compilation should have exactly one handler.
-        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
-        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
-        var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
-        if (!config.SuppressMissingRequestHandlerDiagnostics &&
-            commandSymbol is not null && querySymbol is not null)
-        {
-            var declaredRequestTypes = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                            IsAccessibleFromGeneratedCode(c) &&
-                            (c.AllInterfaces.Contains(commandSymbol, SymbolEqualityComparer.Default) ||
-                             c.AllInterfaces.Any(i => i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol)) ||
-                             (streamRequestSymbol is not null &&
-                              c.AllInterfaces.Any(i => i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol)))))
-                .ToArray();
-
-            foreach (var requestType in declaredRequestTypes)
-            {
-                var requestKey = requestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                if (handlerBindingsByRequest.ContainsKey(requestKey)) continue;
-
-                var location = requestType.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-                context.ReportDiagnostic(Diagnostic.Create(MissingRequestHandlerDiagnostic, location, requestKey));
-            }
-        }
-
-        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            var requestKey = kvp.Key;
-            var bindings = kvp.Value;
-            if (bindings.Count == 0) continue;
-
-            var selected = SelectDeterministicBinding(bindings);
-
-            if (bindings.Count > 1)
-            {
-                var descriptions = string.Join(
-                    ", ",
-                    bindings
-                        .OrderBy(b => b.HandlerImplementation.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
-                        .ThenBy(b => b.HandlerInterface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
-                        .Select(b =>
-                            $"{b.HandlerImplementation.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} ({b.HandlerInterface.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"));
-
-                var location = selected.HandlerImplementation.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-                context.ReportDiagnostic(Diagnostic.Create(MultipleRequestHandlersDiagnostic, location, requestKey, descriptions));
-            }
-
-            var handlerImplementationName = selected.HandlerImplementation.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var requestTypeSymbol = selected.RequestType;
-            var requestTypeName = requestTypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-            var preHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, preHandlerInterfaceSymbol,
-                preHandlerInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-            var postHandlersCode = GenerateAttributeArrayCode(requestTypeSymbol, postHandlerInterfaceSymbol,
-                postHandlerInterfaceSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-            var pipelineExemptionsCode = GenerateAttributeArrayCode(requestTypeSymbol, pipelineExemptionAttributeSymbol,
-                pipelineExemptionAttributeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-
-            var resultTypeCode = selected.ResultType is not null
-                ? $"typeof({selected.ResultType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)})"
-                : "null";
-
-            var defaultContextType = CqrsKnownSymbols.For(compilation).RequestContextBase;
-            var contextTypeSymbol = GetRequestContextType(requestTypeSymbol, compilation) ?? defaultContextType;
-            if (contextTypeSymbol is null || !IsAccessibleFromGeneratedCode(contextTypeSymbol))
-                contextTypeSymbol = defaultContextType;
-
-            var contextTypeName = contextTypeSymbol?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "global::System.Object";
-
-            sb.AppendLine(
-                $"            requestMetadataMappings.TryAdd(typeof({requestTypeName}), new RequestMetadata(typeof({requestTypeName}), typeof({handlerImplementationName}), {preHandlersCode}, {postHandlersCode}, {pipelineExemptionsCode}, {resultTypeCode}, typeof({contextTypeName})));");
-        }
-
-        sb.AppendLine("            services.AddSingleton<IRequestRegistry>(new RequestRegistry(requestMetadataMappings));");
-    }
-
-    private static void GenerateHandlerRegistry(StringBuilder sb, Dictionary<string, List<HandlerBinding>> handlerBindingsByRequest)
-    {
-        sb.AppendLine();
-        sb.AppendLine("            // Registering Handler Registry");
-        sb.AppendLine("            var handlerInvokerMappings = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();");
-
-        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            var bindings = kvp.Value;
-            if (bindings.Count == 0) continue;
-            var selected = SelectDeterministicBinding(bindings);
-
-            var requestType = selected.RequestType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var handlerInterface = selected.HandlerInterface.ToDisplayString(FullyQualifiedNullableTypeFormat);
-            var invokerLambda = selected.IsStream
-                ? $"(handler, request, ct) => global::System.Threading.Tasks.Task.FromResult((object?)(({handlerInterface})handler).Handle(({requestType})request, ct))"
-                : $"async (handler, request, ct) => (object?)await (({handlerInterface})handler).Handle(({requestType})request, ct).ConfigureAwait(false)";
-            sb.AppendLine($"            handlerInvokerMappings.TryAdd(typeof({requestType}), {invokerLambda});");
-        }
-
-        sb.AppendLine("            services.AddSingleton<IHandlerRegistry>(new HandlerRegistry(handlerInvokerMappings));");
-    }
-
-    private static void GenerateContextFactoryRegistry(StringBuilder sb, Compilation compilation, ImmutableArray<INamedTypeSymbol> candidateClasses)
-    {
-        sb.AppendLine();
-        sb.AppendLine("            // Registering Context Factory Registry");
-        sb.AppendLine("            var factoryMappings = new ConcurrentDictionary<Type, Func<System.IServiceProvider, object?>>();");
-
-        var factoryInterfaceSymbol = CqrsKnownSymbols.For(compilation).IRequestContextFactory;
-        if (factoryInterfaceSymbol is null) return;
-
-        var contextTypes = candidateClasses
-            .Where(c => c is { IsAbstract: false } && IsAccessibleFromGeneratedCode(c))
-            .SelectMany(c => GetInterfacesAndBaseInterfaces(c).Where(i => i.OriginalDefinition.Equals(factoryInterfaceSymbol.OriginalDefinition, SymbolEqualityComparer.Default)))
-            .Select(i => i.TypeArguments.FirstOrDefault())
-            .Where(t => t is not null && IsAccessibleFromGeneratedCode(t))
-            .Distinct(SymbolEqualityComparer.Default)
-            .Cast<ITypeSymbol>();
-
-        foreach (var tContext in contextTypes)
-        {
-            var contextTypeName = tContext.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            sb.AppendLine($"            factoryMappings.TryAdd(typeof({contextTypeName}), sp => sp.GetService<IRequestContextFactory<{contextTypeName}>>());");
-        }
-
-        // Always register the default RequestContextBase factory (provided by CQRSharp.Core).
-        sb.AppendLine(
-            $"            factoryMappings.TryAdd(typeof({CqrsKnownSymbols.For(compilation).RequestContextBase!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}), sp => sp.GetService<global::CQRSharp.Core.Factories.IRequestContextFactory>());");
-
-        sb.AppendLine("            services.AddSingleton<IContextFactoryRegistry>(new ContextFactoryRegistry(factoryMappings));");
-    }
-
-    private static string GenerateDispatcher(Compilation compilation, ImmutableArray<INamedTypeSymbol> candidateClasses)
-    {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated />");
         sb.AppendLine("#nullable enable");
@@ -594,44 +365,23 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Requests.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe dispatcher that routes a request to its handler pipeline without reflection.");
         sb.AppendLine("    public sealed class GeneratedRequestDispatcher(IPipelineExecutor pipelineExecutor) : IRequestDispatcher");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Dispatches the request to its source-generated handler pipeline and returns the typed response.");
         sb.AppendLine("        public Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            return request switch");
         sb.AppendLine("            {");
 
-        var commandSymbol = CqrsKnownSymbols.For(compilation).ICommand;
-        var querySymbol = CqrsKnownSymbols.For(compilation).IQuery;
-        var typeFormat = SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
-            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
-            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
-        if (commandSymbol is not null && querySymbol is not null)
+        foreach (var request in requests)
         {
-            var requestSymbols = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                            IsAccessibleFromGeneratedCode(c) &&
-                            c.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, commandSymbol) ||
-                                                     (i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol))))
-                .ToList();
-
-            foreach (var request in requestSymbols)
-            {
-                var requestName = request.ToDisplayString(typeFormat);
-                var queryInterface = request.AllInterfaces.FirstOrDefault(i => i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol));
-
-                if (queryInterface is not null) // It's a query
-                {
-                    var resultName = queryInterface.TypeArguments[0].ToDisplayString(typeFormat);
-                    sb.AppendLine(
-                        $"                {requestName} q => (Task<TResponse>)(object)pipelineExecutor.ExecuteQueryAsync<{requestName}, {resultName}>(q, cancellationToken),");
-                }
-                else // It's a command
-                {
-                    sb.AppendLine($"                {requestName} c => (Task<TResponse>)(object)pipelineExecutor.ExecuteCommandAsync(c, cancellationToken),");
-                }
-            }
+            var requestName = request.RequestTypeNameNullable;
+            if (request.Kind == RequestKind.Query)
+                sb.AppendLine(
+                    $"                {requestName} q => (Task<TResponse>)(object)pipelineExecutor.ExecuteQueryAsync<{requestName}, {request.ResultOrItemNullable}>(q, cancellationToken),");
+            else
+                sb.AppendLine($"                {requestName} c => (Task<TResponse>)(object)pipelineExecutor.ExecuteCommandAsync(c, cancellationToken),");
         }
 
         sb.AppendLine(
@@ -639,36 +389,20 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Dispatches the request to its source-generated handler pipeline and returns the response as an object.");
         sb.AppendLine("        public async Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            return request switch");
         sb.AppendLine("            {");
 
-        if (commandSymbol is not null && querySymbol is not null)
+        foreach (var request in requests)
         {
-            var requestSymbols = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                            IsAccessibleFromGeneratedCode(c) &&
-                            c.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, commandSymbol) ||
-                                                     (i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol))))
-                .ToList();
-
-            foreach (var request in requestSymbols)
-            {
-                var requestName = request.ToDisplayString(typeFormat);
-                var queryInterface = request.AllInterfaces.FirstOrDefault(i => i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, querySymbol));
-
-                if (queryInterface is not null) // It's a query
-                {
-                    var resultName = queryInterface.TypeArguments[0].ToDisplayString(typeFormat);
-                    sb.AppendLine(
-                        $"                {requestName} q => await pipelineExecutor.ExecuteQueryAsync<{requestName}, {resultName}>(q, cancellationToken),");
-                }
-                else // It's a command
-                {
-                    sb.AppendLine($"                {requestName} c => await pipelineExecutor.ExecuteCommandAsync(c, cancellationToken),");
-                }
-            }
+            var requestName = request.RequestTypeNameNullable;
+            if (request.Kind == RequestKind.Query)
+                sb.AppendLine(
+                    $"                {requestName} q => await pipelineExecutor.ExecuteQueryAsync<{requestName}, {request.ResultOrItemNullable}>(q, cancellationToken),");
+            else
+                sb.AppendLine($"                {requestName} c => await pipelineExecutor.ExecuteCommandAsync(c, cancellationToken),");
         }
 
         sb.AppendLine(
@@ -681,8 +415,13 @@ public sealed partial class CqrsSourceGenerator
         return sb.ToString();
     }
 
-    private static string GenerateStreamDispatcher(Compilation compilation, ImmutableArray<INamedTypeSymbol> candidateClasses)
+    private static string GenerateStreamDispatcher(ImmutableArray<CandidateModel> candidates)
     {
+        var requests = candidates
+            .Where(c => c.Request is { Kind: RequestKind.Stream })
+            .Select(c => c.Request!)
+            .ToList();
+
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated />");
         sb.AppendLine("#nullable enable");
@@ -695,8 +434,10 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Streams.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe dispatcher that routes a streaming request to its handler pipeline without reflection.");
         sb.AppendLine("    public sealed class GeneratedStreamRequestDispatcher(IPipelineExecutor pipelineExecutor) : IStreamRequestDispatcher");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Dispatches the streaming request to its source-generated handler pipeline and returns the produced asynchronous stream.");
         sb.AppendLine(
             "        public IAsyncEnumerable<TItem> ExecuteAsync<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
@@ -704,63 +445,25 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("            return request switch");
         sb.AppendLine("            {");
 
-        var streamRequestSymbol = CqrsKnownSymbols.For(compilation).IStreamRequest;
-        var typeFormat = SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
-            SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions |
-            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
-
-        if (streamRequestSymbol is not null)
-        {
-            var requestSymbols = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                            IsAccessibleFromGeneratedCode(c) &&
-                            c.AllInterfaces.Any(i => i.IsGenericType &&
-                                                     SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol)))
-                .ToList();
-
-            foreach (var request in requestSymbols)
-            {
-                var requestName = request.ToDisplayString(typeFormat);
-                var streamInterface = request.AllInterfaces.First(i =>
-                    i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol));
-                var itemTypeName = streamInterface.TypeArguments[0].ToDisplayString(typeFormat);
-
-                sb.AppendLine(
-                    $"                {requestName} r => (global::System.Collections.Generic.IAsyncEnumerable<TItem>)(object)pipelineExecutor.ExecuteStreamAsync<{requestName}, {itemTypeName}>(r, cancellationToken),");
-            }
-        }
+        foreach (var request in requests)
+            sb.AppendLine(
+                $"                {request.RequestTypeNameNullable} r => (global::System.Collections.Generic.IAsyncEnumerable<TItem>)(object)pipelineExecutor.ExecuteStreamAsync<{request.RequestTypeNameNullable}, {request.ResultOrItemNullable}>(r, cancellationToken),");
 
         sb.AppendLine(
             "                _ => throw new InvalidOperationException($\"No stream handler or pipeline found for request type '{request.GetType().FullName}'. Ensure it's public or internal and has a corresponding handler.\")");
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Dispatches the streaming request to its source-generated handler pipeline and returns the produced items as objects.");
         sb.AppendLine("        public IAsyncEnumerable<object?> ExecuteAsync(IStreamRequest request, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(request);");
         sb.AppendLine("            return request switch");
         sb.AppendLine("            {");
 
-        if (streamRequestSymbol is not null)
-        {
-            var requestSymbols = candidateClasses
-                .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                            IsAccessibleFromGeneratedCode(c) &&
-                            c.AllInterfaces.Any(i => i.IsGenericType &&
-                                                     SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol)))
-                .ToList();
-
-            foreach (var request in requestSymbols)
-            {
-                var requestName = request.ToDisplayString(typeFormat);
-                var streamInterface = request.AllInterfaces.First(i =>
-                    i.IsGenericType && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, streamRequestSymbol));
-                var itemTypeName = streamInterface.TypeArguments[0].ToDisplayString(typeFormat);
-
-                sb.AppendLine(
-                    $"                {requestName} r => Box(pipelineExecutor.ExecuteStreamAsync<{requestName}, {itemTypeName}>(r, cancellationToken), cancellationToken),");
-            }
-        }
+        foreach (var request in requests)
+            sb.AppendLine(
+                $"                {request.RequestTypeNameNullable} r => Box(pipelineExecutor.ExecuteStreamAsync<{request.RequestTypeNameNullable}, {request.ResultOrItemNullable}>(r, cancellationToken), cancellationToken),");
 
         sb.AppendLine(
             "                _ => throw new InvalidOperationException($\"No stream handler or pipeline found for request type '{request.GetType().FullName}'. Ensure it's public or internal and has a corresponding handler.\")");
@@ -777,36 +480,5 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("}");
 
         return sb.ToString();
-    }
-
-    private sealed class HandlerBinding
-    {
-        public HandlerBinding(
-            INamedTypeSymbol handlerImplementation,
-            INamedTypeSymbol handlerInterface,
-            ITypeSymbol requestType,
-            ITypeSymbol? resultType,
-            bool isStream)
-        {
-            HandlerImplementation = handlerImplementation;
-            HandlerInterface = handlerInterface;
-            RequestType = requestType;
-            ResultType = resultType;
-            IsStream = isStream;
-        }
-
-        public INamedTypeSymbol HandlerImplementation { get; }
-        public INamedTypeSymbol HandlerInterface { get; }
-        public ITypeSymbol RequestType { get; }
-        public ITypeSymbol? ResultType { get; }
-        public bool IsStream { get; }
-    }
-
-    [Flags]
-    private enum ExceptionHookKind
-    {
-        None = 0,
-        Action = 1,
-        Handler = 2
     }
 }

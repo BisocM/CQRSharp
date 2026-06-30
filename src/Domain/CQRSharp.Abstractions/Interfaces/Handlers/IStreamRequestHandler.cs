@@ -1,4 +1,3 @@
-#if !NETSTANDARD2_0
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 
@@ -26,4 +25,3 @@ public interface IStreamRequestHandler<in TRequest, TItem, TContext>
 public interface IStreamRequestHandler<in TRequest, TItem>
     : IStreamRequestHandler<TRequest, TItem, RequestContextBase>
     where TRequest : IStreamRequest<TItem>;
-#endif

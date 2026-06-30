@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -18,515 +17,34 @@ public sealed partial class CqrsSourceGenerator
         DiagnosticSeverity.Error,
         true);
 
-    private static bool IsAccessibleFromGeneratedCode(IMethodSymbol methodSymbol)
+    // ------------------------------------------------------------------------------------------------------
+    // Emit. STJ source-gen cannot be used: Roslyn runs every generator against the user's original syntax, so a
+    // [JsonSerializable] context we emit is invisible to STJ's generator, and reflection-based JsonSerializer is not
+    // AOT-safe. So the serializer is hand-rolled over Utf8JsonReader/Writer. One Serialize_/Deserialize_ pair per
+    // notification, plus WriteObj_/ReadObj_ per object type and WriteColl_/ReadColl_ per element type, deduped so a
+    // shared nested type emits exactly once.
+    // ------------------------------------------------------------------------------------------------------
+
+    private static string GenerateOutboxNotificationSerializer(IReadOnlyList<NotificationModel> stableNotifications)
     {
-        if (methodSymbol.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
-            return false;
-
-        return IsAccessibleFromGeneratedCode(methodSymbol.ContainingType);
-    }
-
-    private static StableNotificationInfo[] CollectStableNotifications(
-        Compilation compilation,
-        ImmutableArray<INamedTypeSymbol> candidateClasses,
-        SourceProductionContext context)
-    {
-        var known = CqrsKnownSymbols.For(compilation);
-        var notificationSymbol = known.INotification;
-        var notificationNameAttributeSymbol = known.NotificationNameAttribute;
-
-        var jsonPropertyNameAttributeSymbol =
-            compilation.GetTypeByMetadataName("System.Text.Json.Serialization.JsonPropertyNameAttribute");
-        var jsonIgnoreAttributeSymbol =
-            compilation.GetTypeByMetadataName("System.Text.Json.Serialization.JsonIgnoreAttribute");
-
-        var guidSymbol = compilation.GetTypeByMetadataName("System.Guid");
-        var dateTimeSymbol = compilation.GetTypeByMetadataName("System.DateTime");
-        var dateTimeOffsetSymbol = compilation.GetTypeByMetadataName("System.DateTimeOffset");
-        var nullableSymbol = compilation.GetTypeByMetadataName("System.Nullable`1");
-
-        if (notificationSymbol is null || notificationNameAttributeSymbol is null)
-            return Array.Empty<StableNotificationInfo>();
-
-        var stableNotificationsWithPotentialDuplicates = candidateClasses
-            .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                        IsAccessibleFromGeneratedCode(c) &&
-                        c.AllInterfaces.Contains(notificationSymbol, SymbolEqualityComparer.Default))
-            .Select(c =>
-            {
-                var attr = c.GetAttributes()
-                    .FirstOrDefault(a =>
-                        a.AttributeClass is not null &&
-                        SymbolEqualityComparer.Default.Equals(a.AttributeClass, notificationNameAttributeSymbol));
-                if (attr is null) return null;
-
-                var arg = attr.ConstructorArguments.FirstOrDefault();
-                var stableName = arg.Value as string;
-                if (string.IsNullOrWhiteSpace(stableName)) return null;
-
-                var typeName = c.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-                if (!TryCreateStableNotificationInfo(
-                        c,
-                        stableName!,
-                        typeName,
-                        guidSymbol,
-                        dateTimeSymbol,
-                        dateTimeOffsetSymbol,
-                        nullableSymbol,
-                        jsonPropertyNameAttributeSymbol,
-                        jsonIgnoreAttributeSymbol,
-                        context,
-                        out var info))
-                    return null;
-
-                return info;
-            })
-            .Where(x => x is not null)
-            .Cast<StableNotificationInfo>()
+        var entries = stableNotifications
+            .Select(n => new OutboxEmitEntry(
+                n.TypeName,
+                n.StableName!,
+                n.OutboxRoot!,
+                "Serialize_" + CreateIdentifierSuffix(n.StableName!, "N_"),
+                "Deserialize_" + CreateIdentifierSuffix(n.StableName!, "N_")))
             .ToArray();
 
-        foreach (var group in stableNotificationsWithPotentialDuplicates
-                     .GroupBy(n => n.StableName, StringComparer.Ordinal)
-                     .Where(g => g.Count() > 1))
-        {
-            var types = string.Join(", ", group.Select(n => n.TypeName));
-            context.ReportDiagnostic(Diagnostic.Create(
-                new DiagnosticDescriptor(
-                    "CQRGEN002",
-                    "Duplicate NotificationName",
-                    "Duplicate [NotificationName] '{0}' found on: {1}. Stable names must be unique for outbox serialization.",
-                    "CQRSharp.Generators",
-                    DiagnosticSeverity.Error,
-                    true),
-                Location.None,
-                group.Key,
-                types));
-        }
+        var objectModels = new Dictionary<string, OutboxObjectModel>(StringComparer.Ordinal);
+        var collectionElements = new Dictionary<string, OutboxValueModel>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+            CollectHelpers(entry.Root, objectModels, collectionElements);
 
-        var stableNotifications = stableNotificationsWithPotentialDuplicates
-            .GroupBy(n => n.StableName, StringComparer.Ordinal)
-            .Select(g => g.First())
-            .OrderBy(n => n.StableName, StringComparer.Ordinal)
-            .ThenBy(n => n.TypeName, StringComparer.Ordinal)
-            .ToArray();
-
-        return stableNotifications;
-    }
-
-    private static bool TryCreateStableNotificationInfo(
-        INamedTypeSymbol notificationType,
-        string stableName,
-        string typeName,
-        INamedTypeSymbol? guidSymbol,
-        INamedTypeSymbol? dateTimeSymbol,
-        INamedTypeSymbol? dateTimeOffsetSymbol,
-        INamedTypeSymbol? nullableSymbol,
-        INamedTypeSymbol? jsonPropertyNameAttributeSymbol,
-        INamedTypeSymbol? jsonIgnoreAttributeSymbol,
-        SourceProductionContext context,
-        out StableNotificationInfo info)
-    {
-        info = null!;
-
-        var properties = notificationType.GetMembers()
-            .OfType<IPropertySymbol>()
-            .Where(p =>
-                !p.IsStatic &&
-                !p.IsIndexer &&
-                p.GetMethod is not null &&
-                IsAccessibleFromGeneratedCode(p.GetMethod) &&
-                p.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
-            .Where(p =>
-                jsonIgnoreAttributeSymbol is null ||
-                !p.GetAttributes().Any(a => a.AttributeClass is not null &&
-                                            SymbolEqualityComparer.Default.Equals(a.AttributeClass, jsonIgnoreAttributeSymbol)))
-            .OrderBy(p => p.Name, StringComparer.Ordinal)
-            .ToArray();
-
-        var propertyInfos = new OutboxPropertyInfo[properties.Length];
-        var typeInfoErrors = new StringBuilder();
-
-        for (var i = 0; i < properties.Length; i++)
-        {
-            var property = properties[i];
-
-            var jsonName = GetJsonPropertyName(property, jsonPropertyNameAttributeSymbol);
-            var localName = "__" + property.Name;
-            var propertyTypeName = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-            if (!TryGetOutboxJsonValueKind(
-                    property.Type,
-                    guidSymbol,
-                    dateTimeSymbol,
-                    dateTimeOffsetSymbol,
-                    nullableSymbol,
-                    out var kind,
-                    out var isNullableValueType,
-                    out var isNullableReferenceType,
-                    out var enumUnderlyingTypeName))
-            {
-                typeInfoErrors.Append($"Unsupported property '{property.Name}' of type '{propertyTypeName}'. ");
-                continue;
-            }
-
-            var canInitialize = property.SetMethod is not null && IsAccessibleFromGeneratedCode(property.SetMethod);
-
-            propertyInfos[i] = new OutboxPropertyInfo(
-                property.Name,
-                jsonName,
-                localName,
-                propertyTypeName,
-                kind,
-                isNullableValueType,
-                isNullableReferenceType,
-                enumUnderlyingTypeName,
-                false,
-                canInitialize);
-        }
-
-        if (typeInfoErrors.Length > 0)
-        {
-            var location = notificationType.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(
-                OutboxNotificationNotAotJsonSerializableDiagnostic,
-                location,
-                typeName,
-                typeInfoErrors.ToString().Trim()));
-            return false;
-        }
-
-        // Select a constructor: prefer parameterless if it can initialize all properties; otherwise pick a unique eligible parameterized constructor.
-        var parameterlessCtor = notificationType.InstanceConstructors.FirstOrDefault(c =>
-            c.Parameters.Length == 0 &&
-            IsAccessibleFromGeneratedCode(c));
-
-        IMethodSymbol? selectedCtor = null;
-        int[]? ctorPropertyIndices = null;
-
-        static bool HasNonInitializableProperties(OutboxPropertyInfo[] infos)
-            => infos.Any(p => p is { CanInitialize: false });
-
-        if (parameterlessCtor is not null && !HasNonInitializableProperties(propertyInfos))
-        {
-            selectedCtor = parameterlessCtor;
-            ctorPropertyIndices = Array.Empty<int>();
-        }
-        else
-        {
-            var candidates = notificationType.InstanceConstructors
-                .Where(c => c.Parameters.Length > 0 && IsAccessibleFromGeneratedCode(c))
-                .Select(c => (Ctor: c, Map: TryMapConstructor(notificationType, propertyInfos, c, out var map) ? map : null))
-                .Where(x => x.Map is not null)
-                .Select(x => (x.Ctor, Map: x.Map!))
-                .OrderByDescending(x => x.Ctor.Parameters.Length)
-                .ToArray();
-
-            if (candidates.Length == 0)
-            {
-                var location = notificationType.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-                context.ReportDiagnostic(Diagnostic.Create(
-                    OutboxNotificationNotAotJsonSerializableDiagnostic,
-                    location,
-                    typeName,
-                    "No accessible parameterless constructor and no accessible constructor with parameters matching its serializable properties."));
-                return false;
-            }
-
-            var bestParamCount = candidates[0].Ctor.Parameters.Length;
-            var best = candidates.Where(c => c.Ctor.Parameters.Length == bestParamCount).ToArray();
-            if (best.Length != 1)
-            {
-                var location = notificationType.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-                context.ReportDiagnostic(Diagnostic.Create(
-                    OutboxNotificationNotAotJsonSerializableDiagnostic,
-                    location,
-                    typeName,
-                    "Multiple eligible constructors found. Ensure the notification has a single unambiguous constructor for deserialization (or add a parameterless constructor)."));
-                return false;
-            }
-
-            selectedCtor = best[0].Ctor;
-            ctorPropertyIndices = best[0].Map;
-        }
-
-        if (selectedCtor is null || ctorPropertyIndices is null)
-            return false;
-
-        // Mark constructor parameter properties.
-        var ctorLocalNames = new string[ctorPropertyIndices.Length];
-        for (var p = 0; p < ctorPropertyIndices.Length; p++)
-        {
-            var index = ctorPropertyIndices[p];
-            var existing = propertyInfos[index];
-            propertyInfos[index] = new OutboxPropertyInfo(
-                existing.PropertyName,
-                existing.JsonName,
-                existing.LocalName,
-                existing.TypeName,
-                existing.ValueKind,
-                existing.IsNullableValueType,
-                existing.IsNullableReferenceType,
-                existing.EnumUnderlyingTypeName,
-                true,
-                existing.CanInitialize);
-            ctorLocalNames[p] = existing.LocalName;
-        }
-
-        // Validate that every non-initializable property is supplied by the constructor.
-        foreach (var prop in propertyInfos)
-        {
-            if (prop.CanInitialize) continue;
-            if (prop.IsConstructorParameter) continue;
-
-            var location = notificationType.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(
-                OutboxNotificationNotAotJsonSerializableDiagnostic,
-                location,
-                typeName,
-                $"Property '{prop.PropertyName}' is not settable and is not provided by the selected constructor."));
-            return false;
-        }
-
-        var methodSuffix = CreateStableNameIdentifierSuffix(stableName);
-        var serializeMethodName = "Serialize_" + methodSuffix;
-        var deserializeMethodName = "Deserialize_" + methodSuffix;
-
-        var constructorExpression = selectedCtor.Parameters.Length == 0
-            ? $"new {typeName}()"
-            : $"new {typeName}({string.Join(", ", ctorLocalNames)})";
-
-        info = new StableNotificationInfo(
-            stableName,
-            typeName,
-            deserializeMethodName,
-            serializeMethodName,
-            constructorExpression,
-            propertyInfos,
-            ctorLocalNames);
-
-        return true;
-    }
-
-    private static bool TryMapConstructor(
-        INamedTypeSymbol notificationType,
-        OutboxPropertyInfo[] properties,
-        IMethodSymbol ctor,
-        out int[] propertyIndices)
-    {
-        propertyIndices = Array.Empty<int>();
-
-        if (ctor.Parameters.Length == 0) return false;
-
-        // Map by parameter name -> property jsonName or property name (case-insensitive).
-        var map = new int[ctor.Parameters.Length];
-
-        for (var i = 0; i < ctor.Parameters.Length; i++)
-        {
-            var param = ctor.Parameters[i];
-            var paramTypeName = param.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (paramTypeName.EndsWith("?", StringComparison.Ordinal))
-                paramTypeName = paramTypeName.Substring(0, paramTypeName.Length - 1);
-
-            var found = -1;
-            for (var p = 0; p < properties.Length; p++)
-            {
-                var prop = properties[p];
-                if (!string.Equals(prop.JsonName, param.Name, StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(prop.PropertyName, param.Name, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var propertyTypeName = prop.TypeName;
-                if (propertyTypeName.EndsWith("?", StringComparison.Ordinal))
-                    propertyTypeName = propertyTypeName.Substring(0, propertyTypeName.Length - 1);
-
-                if (!string.Equals(propertyTypeName, paramTypeName, StringComparison.Ordinal))
-                    continue;
-
-                found = p;
-                break;
-            }
-
-            if (found < 0)
-                return false;
-
-            map[i] = found;
-        }
-
-        // Ensure uniqueness: no two parameters bind to the same property.
-        if (map.Distinct().Count() != map.Length) return false;
-
-        propertyIndices = map;
-        return true;
-    }
-
-    private static bool TryGetOutboxJsonValueKind(
-        ITypeSymbol typeSymbol,
-        INamedTypeSymbol? guidSymbol,
-        INamedTypeSymbol? dateTimeSymbol,
-        INamedTypeSymbol? dateTimeOffsetSymbol,
-        INamedTypeSymbol? nullableSymbol,
-        out OutboxJsonValueKind kind,
-        out bool isNullableValueType,
-        out bool isNullableReferenceType,
-        out string? enumUnderlyingTypeName)
-    {
-        enumUnderlyingTypeName = null;
-        isNullableValueType = false;
-        isNullableReferenceType = false;
-
-        // Unwrap Nullable<T> for value types.
-        if (nullableSymbol is not null &&
-            typeSymbol is INamedTypeSymbol named &&
-            named.IsGenericType &&
-            SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, nullableSymbol) &&
-            named.TypeArguments.Length == 1)
-        {
-            isNullableValueType = true;
-            typeSymbol = named.TypeArguments[0];
-        }
-
-        if (typeSymbol.SpecialType == SpecialType.System_String)
-        {
-            kind = OutboxJsonValueKind.String;
-            isNullableReferenceType = typeSymbol.NullableAnnotation == NullableAnnotation.Annotated;
-            return true;
-        }
-
-        if (guidSymbol is not null && SymbolEqualityComparer.Default.Equals(typeSymbol, guidSymbol))
-        {
-            kind = OutboxJsonValueKind.Guid;
-            return true;
-        }
-
-        if (dateTimeSymbol is not null && SymbolEqualityComparer.Default.Equals(typeSymbol, dateTimeSymbol))
-        {
-            kind = OutboxJsonValueKind.DateTime;
-            return true;
-        }
-
-        if (dateTimeOffsetSymbol is not null && SymbolEqualityComparer.Default.Equals(typeSymbol, dateTimeOffsetSymbol))
-        {
-            kind = OutboxJsonValueKind.DateTimeOffset;
-            return true;
-        }
-
-        switch (typeSymbol.SpecialType)
-        {
-            case SpecialType.System_Boolean:
-                kind = OutboxJsonValueKind.Boolean;
-                return true;
-            case SpecialType.System_Int32:
-                kind = OutboxJsonValueKind.Int32;
-                return true;
-            case SpecialType.System_Int64:
-                kind = OutboxJsonValueKind.Int64;
-                return true;
-            case SpecialType.System_Double:
-                kind = OutboxJsonValueKind.Double;
-                return true;
-            case SpecialType.System_Decimal:
-                kind = OutboxJsonValueKind.Decimal;
-                return true;
-        }
-
-        if (typeSymbol.TypeKind == TypeKind.Enum && typeSymbol is INamedTypeSymbol enumType)
-        {
-            kind = OutboxJsonValueKind.Enum;
-            enumUnderlyingTypeName = enumType.EnumUnderlyingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            return enumUnderlyingTypeName is not null;
-        }
-
-        kind = default;
-        return false;
-    }
-
-    private static string GetJsonPropertyName(IPropertySymbol property, INamedTypeSymbol? jsonPropertyNameAttributeSymbol)
-    {
-        if (jsonPropertyNameAttributeSymbol is not null)
-        {
-            var attr = property.GetAttributes().FirstOrDefault(a =>
-                a.AttributeClass is not null &&
-                SymbolEqualityComparer.Default.Equals(a.AttributeClass, jsonPropertyNameAttributeSymbol));
-            if (attr is not null)
-            {
-                var arg = attr.ConstructorArguments.FirstOrDefault();
-                if (arg.Value is string name && !string.IsNullOrWhiteSpace(name))
-                    return name;
-            }
-        }
-
-        return ToCamelCase(property.Name);
-    }
-
-    private static string ToCamelCase(string name)
-    {
-        if (string.IsNullOrEmpty(name)) return name;
-        if (!char.IsUpper(name[0])) return name;
-
-        var chars = name.ToCharArray();
-
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (i == 1 && !char.IsUpper(chars[i]))
-                break;
-
-            var hasNext = i + 1 < chars.Length;
-            if (i > 0 && hasNext && !char.IsUpper(chars[i + 1]))
-                break;
-
-            chars[i] = char.ToLowerInvariant(chars[i]);
-        }
-
-        return new string(chars);
-    }
-
-    private static string CreateStableNameIdentifierSuffix(string stableName)
-    {
-        var hash = StableNameHash(stableName);
-
-        var sb = new StringBuilder();
-        sb.Append("N_");
-
-        var maxLen = Math.Min(stableName.Length, 40);
-        for (var i = 0; i < maxLen; i++)
-        {
-            var c = stableName[i];
-            if ((c >= 'a' && c <= 'z') ||
-                (c >= 'A' && c <= 'Z') ||
-                (c >= '0' && c <= '9') ||
-                c == '_')
-                sb.Append(c);
-            else
-                sb.Append('_');
-        }
-
-        sb.Append('_');
-        sb.Append(hash.ToString("X8"));
-        return sb.ToString();
-    }
-
-    private static uint StableNameHash(string stableName)
-    {
-        // FNV-1a 32-bit
-        unchecked
-        {
-            var hash = 2166136261u;
-            for (var i = 0; i < stableName.Length; i++)
-            {
-                hash ^= stableName[i];
-                hash *= 16777619u;
-            }
-
-            return hash;
-        }
-    }
-
-    private static string GenerateOutboxNotificationSerializer(StableNotificationInfo[] stableNotifications)
-    {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated />");
         sb.AppendLine("#nullable enable");
+        sb.AppendLine("#pragma warning disable CS8600, CS8601, CS8602, CS8603, CS8604, CS8618, CS8619, CS8625");
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Buffers;");
         sb.AppendLine("using System.Text.Json;");
@@ -534,21 +52,24 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("namespace CQRSharp.Core.Serialization.Generated");
         sb.AppendLine("{");
+        EmitSummary(sb, "    ", "Source-generated, AOT-safe (reflection-free) serializer for outbox notifications that carry a stable <c>[NotificationName]</c>.");
         sb.AppendLine("    internal sealed class GeneratedOutboxNotificationSerializer : INotificationSerializer, IStableNotificationNameProvider");
         sb.AppendLine("    {");
+        EmitSummary(sb, "        ", "Serializes the notification to its stable JSON byte representation.");
         sb.AppendLine("        public byte[] Serialize(INotification notification)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notification);");
         sb.AppendLine();
         sb.AppendLine("            return notification switch");
         sb.AppendLine("            {");
-        foreach (var notification in stableNotifications)
-            sb.AppendLine($"                {notification.TypeName} n => {notification.SerializeMethodName}(n),");
+        foreach (var entry in entries)
+            sb.AppendLine($"                {entry.TypeName} n => {entry.SerializeMethodName}(n),");
         sb.AppendLine(
             "                _ => throw new InvalidOperationException($\"Notification type '{notification.GetType().FullName}' is not registered for outbox serialization. Add [NotificationName] or register a custom INotificationSerializer.\")");
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Deserializes a payload back into its notification type, identified by stable name; returns null when the name is unknown.");
         sb.AppendLine("        public INotification? Deserialize(string notificationName, byte[] payload)");
         sb.AppendLine("        {");
         sb.AppendLine("            // A null result means the notification name is unknown. A corrupt payload for a KNOWN");
@@ -559,23 +80,24 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("            return notificationName switch");
         sb.AppendLine("            {");
-        foreach (var notification in stableNotifications)
+        foreach (var entry in entries)
         {
-            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, true);
-            sb.AppendLine(
-                $"                {nameLiteral} => {notification.DeserializeMethodName}(payload),");
+            var nameLiteral = SymbolDisplay.FormatLiteral(entry.StableName, true);
+            sb.AppendLine($"                {nameLiteral} => {entry.DeserializeMethodName}(payload),");
         }
 
         sb.AppendLine("                _ => null");
         sb.AppendLine("            };");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Gets the stable name for the notification type, falling back to its full type name.");
         sb.AppendLine("        public string GetNotificationName(Type notificationType)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notificationType);");
         sb.AppendLine("            return GetStableName(notificationType) ?? notificationType.FullName ?? notificationType.Name;");
         sb.AppendLine("        }");
         sb.AppendLine();
+        EmitSummary(sb, "        ", "Attempts to get the stable <c>[NotificationName]</c> for the notification type.");
         sb.AppendLine("        public bool TryGetStableName(Type notificationType, out string stableName)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notificationType);");
@@ -585,48 +107,24 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine();
         sb.AppendLine("        private static string? GetStableName(Type notificationType)");
         sb.AppendLine("        {");
-        foreach (var notification in stableNotifications)
+        foreach (var entry in entries)
         {
-            var nameLiteral = SymbolDisplay.FormatLiteral(notification.StableName, true);
-            sb.AppendLine($"            if (notificationType == typeof({notification.TypeName})) return {nameLiteral};");
+            var nameLiteral = SymbolDisplay.FormatLiteral(entry.StableName, true);
+            sb.AppendLine($"            if (notificationType == typeof({entry.TypeName})) return {nameLiteral};");
         }
 
         sb.AppendLine("            return null;");
         sb.AppendLine("        }");
         sb.AppendLine();
 
-        foreach (var notification in stableNotifications)
+        foreach (var entry in entries)
         {
-            sb.AppendLine($"        private static byte[] {notification.SerializeMethodName}({notification.TypeName} notification)");
+            sb.AppendLine($"        private static byte[] {entry.SerializeMethodName}({entry.TypeName} notification)");
             sb.AppendLine("        {");
             sb.AppendLine("            var buffer = new ArrayBufferWriter<byte>();");
             sb.AppendLine("            using (var writer = new Utf8JsonWriter(buffer))");
             sb.AppendLine("            {");
-            sb.AppendLine("                writer.WriteStartObject();");
-
-            foreach (var prop in notification.Properties)
-            {
-                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, true);
-                var access = $"notification.{prop.PropertyName}";
-
-                if (prop.IsNullableValueType)
-                {
-                    sb.AppendLine($"                if ({access}.HasValue)");
-                    sb.AppendLine("                {");
-                    GenerateWriteNonNullValue(sb, prop, jsonNameLiteral, $"{access}.Value");
-                    sb.AppendLine("                }");
-                    sb.AppendLine("                else");
-                    sb.AppendLine("                {");
-                    sb.AppendLine($"                    writer.WriteNull({jsonNameLiteral});");
-                    sb.AppendLine("                }");
-                }
-                else
-                {
-                    GenerateWriteNonNullValue(sb, prop, jsonNameLiteral, access);
-                }
-            }
-
-            sb.AppendLine("                writer.WriteEndObject();");
+            sb.AppendLine($"                WriteObj_{entry.Root.HelperId}(writer, notification);");
             sb.AppendLine("            }");
             sb.AppendLine();
             sb.AppendLine("            var result = new byte[buffer.WrittenCount];");
@@ -634,72 +132,29 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine("            return result;");
             sb.AppendLine("        }");
             sb.AppendLine();
-
-            sb.AppendLine($"        private static {notification.TypeName} {notification.DeserializeMethodName}(byte[] payload)");
+            sb.AppendLine($"        private static {entry.TypeName} {entry.DeserializeMethodName}(byte[] payload)");
             sb.AppendLine("        {");
-
-            foreach (var prop in notification.Properties)
-                GenerateLocalDeclaration(sb, prop);
-
-            sb.AppendLine();
             sb.AppendLine("            var reader = new Utf8JsonReader(payload, isFinalBlock: true, state: default);");
             sb.AppendLine("            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)");
             sb.AppendLine("                throw new JsonException(\"Expected start of JSON object.\");");
-            sb.AppendLine();
-            sb.AppendLine("            while (reader.Read())");
-            sb.AppendLine("            {");
-            sb.AppendLine("                if (reader.TokenType == JsonTokenType.EndObject) break;");
-            sb.AppendLine("                if (reader.TokenType != JsonTokenType.PropertyName) { reader.Skip(); continue; }");
-            sb.AppendLine();
-            sb.AppendLine("                var propName = reader.GetString();");
-            sb.AppendLine("                if (!reader.Read()) break;");
-            sb.AppendLine();
-            sb.AppendLine("                switch (propName)");
-            sb.AppendLine("                {");
-
-            foreach (var prop in notification.Properties)
-            {
-                var jsonNameLiteral = SymbolDisplay.FormatLiteral(prop.JsonName, true);
-                var propertyNameLiteral = SymbolDisplay.FormatLiteral(prop.PropertyName, true);
-
-                sb.AppendLine($"                    case {jsonNameLiteral}:");
-                if (!string.Equals(prop.JsonName, prop.PropertyName, StringComparison.Ordinal))
-                    sb.AppendLine($"                    case {propertyNameLiteral}:");
-
-                GenerateReadAssignment(sb, prop);
-                sb.AppendLine("                        break;");
-            }
-
-            sb.AppendLine("                    default:");
-            sb.AppendLine("                        reader.Skip();");
-            sb.AppendLine("                        break;");
-            sb.AppendLine("                }");
-            sb.AppendLine("            }");
-            sb.AppendLine();
-
-            var initAssignments = notification.Properties
-                .Where(p => p.CanInitialize && !p.IsConstructorParameter)
-                .Select(p => $"{p.PropertyName} = {p.LocalName}")
-                .ToArray();
-
-            if (initAssignments.Length == 0)
-            {
-                sb.AppendLine($"            return {notification.ConstructorExpression};");
-            }
-            else
-            {
-                sb.AppendLine($"            return {notification.ConstructorExpression}");
-                sb.AppendLine("            {");
-                for (var i = 0; i < initAssignments.Length; i++)
-                {
-                    var comma = i == initAssignments.Length - 1 ? string.Empty : ",";
-                    sb.AppendLine($"                {initAssignments[i]}{comma}");
-                }
-
-                sb.AppendLine("            };");
-            }
-
+            sb.AppendLine($"            return ReadObj_{entry.Root.HelperId}(ref reader);");
             sb.AppendLine("        }");
+            sb.AppendLine();
+        }
+
+        foreach (var obj in objectModels.Values.OrderBy(o => o.HelperId, StringComparer.Ordinal))
+        {
+            GenerateWriteObject(sb, obj);
+            sb.AppendLine();
+            GenerateReadObject(sb, obj);
+            sb.AppendLine();
+        }
+
+        foreach (var element in collectionElements.Values.OrderBy(CollectionHelperId, StringComparer.Ordinal))
+        {
+            GenerateWriteCollection(sb, element);
+            sb.AppendLine();
+            GenerateReadCollection(sb, element);
             sb.AppendLine();
         }
 
@@ -708,247 +163,280 @@ public sealed partial class CqrsSourceGenerator
         return sb.ToString();
     }
 
-    private static void GenerateLocalDeclaration(StringBuilder sb, OutboxPropertyInfo prop)
-    {
-        var typeName = prop.TypeName;
-        var local = prop.LocalName;
+    private sealed record OutboxEmitEntry(
+        string TypeName,
+        string StableName,
+        OutboxObjectModel Root,
+        string SerializeMethodName,
+        string DeserializeMethodName);
 
-        if (prop.ValueKind == OutboxJsonValueKind.String)
+    private static void CollectHelpers(
+        OutboxObjectModel obj,
+        Dictionary<string, OutboxObjectModel> objectModels,
+        Dictionary<string, OutboxValueModel> collectionElements)
+    {
+        if (objectModels.ContainsKey(obj.HelperId)) return;
+        objectModels.Add(obj.HelperId, obj);
+        foreach (var member in obj.Members)
+            CollectFromValue(member.Value, objectModels, collectionElements);
+    }
+
+    private static void CollectFromValue(
+        OutboxValueModel value,
+        Dictionary<string, OutboxObjectModel> objectModels,
+        Dictionary<string, OutboxValueModel> collectionElements)
+    {
+        switch (value.Kind)
         {
-            var defaultValue = prop.IsNullableReferenceType ? "null" : "string.Empty";
-            sb.AppendLine($"            {typeName} {local} = {defaultValue};");
+            case OutboxValueKind.Object:
+                CollectHelpers(value.ObjectModel!, objectModels, collectionElements);
+                break;
+            case OutboxValueKind.Collection:
+                collectionElements[CollectionHelperId(value.Element!)] = value.Element!;
+                CollectFromValue(value.Element!, objectModels, collectionElements);
+                break;
+        }
+    }
+
+    private static string CollectionHelperId(OutboxValueModel element) =>
+        CreateIdentifierSuffix(element.LocalTypeName, "C_");
+
+    private static void GenerateWriteObject(StringBuilder sb, OutboxObjectModel obj)
+    {
+        sb.AppendLine($"        private static void WriteObj_{obj.HelperId}(Utf8JsonWriter writer, {obj.TypeName} value)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            writer.WriteStartObject();");
+        foreach (var member in obj.Members)
+        {
+            var jsonNameLiteral = SymbolDisplay.FormatLiteral(member.JsonName, true);
+            sb.AppendLine($"            writer.WritePropertyName({jsonNameLiteral});");
+            AppendWriteValue(sb, "            ", member.Value, $"value.{member.PropertyName}");
+        }
+
+        sb.AppendLine("            writer.WriteEndObject();");
+        sb.AppendLine("        }");
+    }
+
+    private static void GenerateReadObject(StringBuilder sb, OutboxObjectModel obj)
+    {
+        sb.AppendLine($"        private static {obj.TypeName} ReadObj_{obj.HelperId}(ref Utf8JsonReader reader)");
+        sb.AppendLine("        {");
+        foreach (var member in obj.Members)
+            sb.AppendLine($"            {member.Value.LocalTypeName} {member.LocalName} = {DefaultExpression(member.Value)};");
+
+        sb.AppendLine();
+        sb.AppendLine("            while (reader.Read())");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (reader.TokenType == JsonTokenType.EndObject) break;");
+        sb.AppendLine("                if (reader.TokenType != JsonTokenType.PropertyName) { reader.Skip(); continue; }");
+        sb.AppendLine();
+        sb.AppendLine("                var propName = reader.GetString();");
+        sb.AppendLine("                if (!reader.Read()) break;");
+        sb.AppendLine();
+        sb.AppendLine("                switch (propName)");
+        sb.AppendLine("                {");
+        foreach (var member in obj.Members)
+        {
+            var jsonNameLiteral = SymbolDisplay.FormatLiteral(member.JsonName, true);
+            var propertyNameLiteral = SymbolDisplay.FormatLiteral(member.PropertyName, true);
+
+            sb.AppendLine($"                    case {jsonNameLiteral}:");
+            if (!string.Equals(member.JsonName, member.PropertyName, StringComparison.Ordinal))
+                sb.AppendLine($"                    case {propertyNameLiteral}:");
+
+            sb.AppendLine($"                        {member.LocalName} = {ReadValueExpression(member.Value)};");
+            sb.AppendLine("                        break;");
+        }
+
+        sb.AppendLine("                    default:");
+        sb.AppendLine("                        reader.Skip();");
+        sb.AppendLine("                        break;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+
+        var initAssignments = obj.Members
+            .Where(m => m.CanInitialize && !m.IsConstructorParameter)
+            .Select(m => $"{m.PropertyName} = {m.LocalName}")
+            .ToArray();
+
+        if (initAssignments.Length == 0)
+        {
+            sb.AppendLine($"            return {obj.ConstructorExpression};");
+        }
+        else
+        {
+            sb.AppendLine($"            return {obj.ConstructorExpression}");
+            sb.AppendLine("            {");
+            for (var i = 0; i < initAssignments.Length; i++)
+            {
+                var comma = i == initAssignments.Length - 1 ? string.Empty : ",";
+                sb.AppendLine($"                {initAssignments[i]}{comma}");
+            }
+
+            sb.AppendLine("            };");
+        }
+
+        sb.AppendLine("        }");
+    }
+
+    private static void GenerateWriteCollection(StringBuilder sb, OutboxValueModel element)
+    {
+        var id = CollectionHelperId(element);
+        sb.AppendLine($"        private static void WriteColl_{id}(Utf8JsonWriter writer, System.Collections.Generic.IEnumerable<{element.LocalTypeName}> value)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            writer.WriteStartArray();");
+        sb.AppendLine("            foreach (var item in value)");
+        sb.AppendLine("            {");
+        AppendWriteValue(sb, "                ", element, "item");
+        sb.AppendLine("            }");
+        sb.AppendLine("            writer.WriteEndArray();");
+        sb.AppendLine("        }");
+    }
+
+    private static void GenerateReadCollection(StringBuilder sb, OutboxValueModel element)
+    {
+        var id = CollectionHelperId(element);
+        sb.AppendLine($"        private static System.Collections.Generic.List<{element.LocalTypeName}> ReadColl_{id}(ref Utf8JsonReader reader)");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            var items = new System.Collections.Generic.List<{element.LocalTypeName}>();");
+        sb.AppendLine("            while (reader.Read())");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (reader.TokenType == JsonTokenType.EndArray) break;");
+        sb.AppendLine($"                {element.LocalTypeName} item = {ReadValueExpression(element)};");
+        sb.AppendLine("                items.Add(item);");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return items;");
+        sb.AppendLine("        }");
+    }
+
+    private static void AppendWriteValue(StringBuilder sb, string indent, OutboxValueModel value, string valueExpr)
+    {
+        if (value.IsNullableValueType)
+        {
+            sb.AppendLine($"{indent}if (({valueExpr}).HasValue)");
+            sb.AppendLine($"{indent}{{");
+            AppendWriteNonNullValue(sb, indent + "    ", value, $"({valueExpr}).Value");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine($"{indent}else");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    writer.WriteNullValue();");
+            sb.AppendLine($"{indent}}}");
             return;
         }
 
-        sb.AppendLine($"            {typeName} {local} = default;");
+        AppendWriteNonNullValue(sb, indent, value, valueExpr);
     }
 
-    private static void GenerateWriteNonNullValue(StringBuilder sb, OutboxPropertyInfo prop, string jsonNameLiteral, string valueExpression)
+    private static void AppendWriteNonNullValue(StringBuilder sb, string indent, OutboxValueModel value, string valueExpr)
     {
-        switch (prop.ValueKind)
+        switch (value.Kind)
         {
-            case OutboxJsonValueKind.String:
-                sb.AppendLine($"                writer.WriteString({jsonNameLiteral}, {valueExpression});");
+            case OutboxValueKind.Scalar:
+                sb.AppendLine($"{indent}{ScalarWriteStatement(value.ScalarKind, valueExpr)}");
                 return;
-            case OutboxJsonValueKind.Guid:
-                sb.AppendLine($"                writer.WriteString({jsonNameLiteral}, {valueExpression});");
+            case OutboxValueKind.Enum:
+                sb.AppendLine($"{indent}writer.WriteNumberValue(({value.EnumUnderlyingTypeName}){valueExpr});");
                 return;
-            case OutboxJsonValueKind.DateTime:
-                sb.AppendLine($"                writer.WriteString({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.DateTimeOffset:
-                sb.AppendLine($"                writer.WriteString({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Boolean:
-                sb.AppendLine($"                writer.WriteBoolean({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Int32:
-                sb.AppendLine($"                writer.WriteNumber({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Int64:
-                sb.AppendLine($"                writer.WriteNumber({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Double:
-                sb.AppendLine($"                writer.WriteNumber({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Decimal:
-                sb.AppendLine($"                writer.WriteNumber({jsonNameLiteral}, {valueExpression});");
-                return;
-            case OutboxJsonValueKind.Enum:
-                var enumUnderlying = prop.EnumUnderlyingTypeName ?? "global::System.Int32";
-                sb.AppendLine($"                writer.WriteNumber({jsonNameLiteral}, ({enumUnderlying}){valueExpression});");
-                return;
-            default:
-                sb.AppendLine($"                throw new NotSupportedException(\"Unsupported outbox JSON value kind for '{prop.PropertyName}'.\");");
-                return;
-        }
-    }
-
-    private static void GenerateReadAssignment(StringBuilder sb, OutboxPropertyInfo prop)
-    {
-        var local = prop.LocalName;
-
-        switch (prop.ValueKind)
-        {
-            case OutboxJsonValueKind.String:
-                if (prop.IsNullableReferenceType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetString();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? string.Empty : (reader.GetString() ?? string.Empty);");
-                return;
-
-            case OutboxJsonValueKind.Guid:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetGuid();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetGuid();");
-                return;
-
-            case OutboxJsonValueKind.DateTime:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetDateTime();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetDateTime();");
-                return;
-
-            case OutboxJsonValueKind.DateTimeOffset:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetDateTimeOffset();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetDateTimeOffset();");
-                return;
-
-            case OutboxJsonValueKind.Boolean:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetBoolean();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetBoolean();");
-                return;
-
-            case OutboxJsonValueKind.Int32:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetInt32();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetInt32();");
-                return;
-
-            case OutboxJsonValueKind.Int64:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetInt64();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetInt64();");
-                return;
-
-            case OutboxJsonValueKind.Double:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetDouble();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetDouble();");
-                return;
-
-            case OutboxJsonValueKind.Decimal:
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : reader.GetDecimal();");
-                else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : reader.GetDecimal();");
-                return;
-
-            case OutboxJsonValueKind.Enum:
-                var enumUnderlying = prop.EnumUnderlyingTypeName ?? "global::System.Int32";
-                var readMethod = enumUnderlying switch
+            case OutboxValueKind.Object:
+                if (value.IsReferenceType)
                 {
-                    "global::System.Byte" => "GetByte",
-                    "global::System.SByte" => "GetSByte",
-                    "global::System.Int16" => "GetInt16",
-                    "global::System.UInt16" => "GetUInt16",
-                    "global::System.Int32" => "GetInt32",
-                    "global::System.UInt32" => "GetUInt32",
-                    "global::System.Int64" => "GetInt64",
-                    "global::System.UInt64" => "GetUInt64",
-                    _ => "GetInt32"
-                };
-
-                if (prop.IsNullableValueType)
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? null : ({GetNonNullableTypeName(prop)})reader.{readMethod}();");
+                    sb.AppendLine($"{indent}if ({valueExpr} is null) writer.WriteNullValue();");
+                    sb.AppendLine($"{indent}else WriteObj_{value.ObjectModel!.HelperId}(writer, {valueExpr});");
+                }
                 else
-                    sb.AppendLine($"                        {local} = reader.TokenType == JsonTokenType.Null ? default : ({prop.TypeName})reader.{readMethod}();");
-                return;
+                {
+                    sb.AppendLine($"{indent}WriteObj_{value.ObjectModel!.HelperId}(writer, {valueExpr});");
+                }
 
+                return;
+            case OutboxValueKind.Collection:
+                sb.AppendLine($"{indent}if ({valueExpr} is null) writer.WriteNullValue();");
+                sb.AppendLine($"{indent}else WriteColl_{CollectionHelperId(value.Element!)}(writer, {valueExpr});");
+                return;
+        }
+    }
+
+    private static string ScalarWriteStatement(OutboxScalarKind kind, string valueExpr) =>
+        kind switch
+        {
+            OutboxScalarKind.String => $"writer.WriteStringValue({valueExpr});",
+            OutboxScalarKind.Guid => $"writer.WriteStringValue({valueExpr});",
+            OutboxScalarKind.DateTime => $"writer.WriteStringValue({valueExpr});",
+            OutboxScalarKind.DateTimeOffset => $"writer.WriteStringValue({valueExpr});",
+            OutboxScalarKind.TimeSpan => $"writer.WriteStringValue({valueExpr}.ToString(\"c\", System.Globalization.CultureInfo.InvariantCulture));",
+            OutboxScalarKind.Boolean => $"writer.WriteBooleanValue({valueExpr});",
+            _ => $"writer.WriteNumberValue({valueExpr});"
+        };
+
+    private static string DefaultExpression(OutboxValueModel value)
+    {
+        if (value.Kind == OutboxValueKind.Scalar && value.ScalarKind == OutboxScalarKind.String)
+            return value.IsNullableReferenceType ? "null" : "string.Empty";
+
+        return $"default({value.LocalTypeName})";
+    }
+
+    private static string ReadValueExpression(OutboxValueModel value)
+    {
+        var read = NonNullReadExpression(value);
+        return $"reader.TokenType == JsonTokenType.Null ? {DefaultExpression(value)} : {read}";
+    }
+
+    private static string NonNullReadExpression(OutboxValueModel value)
+    {
+        switch (value.Kind)
+        {
+            case OutboxValueKind.Scalar:
+                if (value.ScalarKind == OutboxScalarKind.String)
+                    return value.IsNullableReferenceType ? "reader.GetString()" : "(reader.GetString() ?? string.Empty)";
+                if (value.ScalarKind == OutboxScalarKind.TimeSpan)
+                    return "System.TimeSpan.ParseExact(reader.GetString() ?? \"00:00:00\", \"c\", System.Globalization.CultureInfo.InvariantCulture)";
+                return ScalarReadExpression(value.ScalarKind);
+            case OutboxValueKind.Enum:
+                return $"({value.NonNullableTypeName})reader.{EnumReaderMethod(value.EnumUnderlyingTypeName)}()";
+            case OutboxValueKind.Object:
+                return $"ReadObj_{value.ObjectModel!.HelperId}(ref reader)";
+            case OutboxValueKind.Collection:
+                var read = $"ReadColl_{CollectionHelperId(value.Element!)}(ref reader)";
+                return value.CollectionIsArray ? read + ".ToArray()" : read;
             default:
-                sb.AppendLine($"                        throw new NotSupportedException(\"Unsupported outbox JSON value kind for '{prop.PropertyName}'.\");");
-                return;
+                return "default";
         }
     }
 
-    private static string GetNonNullableTypeName(OutboxPropertyInfo prop)
-    {
-        if (!prop.IsNullableValueType) return prop.TypeName;
-
-        const string prefix = "global::System.Nullable<";
-        if (prop.TypeName.StartsWith(prefix, StringComparison.Ordinal) && prop.TypeName.EndsWith(">", StringComparison.Ordinal))
-            return prop.TypeName.Substring(prefix.Length, prop.TypeName.Length - prefix.Length - 1);
-
-        return prop.TypeName.TrimEnd('?');
-    }
-
-    private enum OutboxJsonValueKind
-    {
-        String,
-        Guid,
-        Boolean,
-        Int32,
-        Int64,
-        Double,
-        Decimal,
-        DateTime,
-        DateTimeOffset,
-        Enum
-    }
-
-    private sealed class OutboxPropertyInfo
-    {
-        public OutboxPropertyInfo(
-            string propertyName,
-            string jsonName,
-            string localName,
-            string typeName,
-            OutboxJsonValueKind valueKind,
-            bool isNullableValueType,
-            bool isNullableReferenceType,
-            string? enumUnderlyingTypeName,
-            bool isConstructorParameter,
-            bool canInitialize)
+    private static string ScalarReadExpression(OutboxScalarKind kind) =>
+        kind switch
         {
-            PropertyName = propertyName;
-            JsonName = jsonName;
-            LocalName = localName;
-            TypeName = typeName;
-            ValueKind = valueKind;
-            IsNullableValueType = isNullableValueType;
-            IsNullableReferenceType = isNullableReferenceType;
-            EnumUnderlyingTypeName = enumUnderlyingTypeName;
-            IsConstructorParameter = isConstructorParameter;
-            CanInitialize = canInitialize;
-        }
+            OutboxScalarKind.Guid => "reader.GetGuid()",
+            OutboxScalarKind.DateTime => "reader.GetDateTime()",
+            OutboxScalarKind.DateTimeOffset => "reader.GetDateTimeOffset()",
+            OutboxScalarKind.Boolean => "reader.GetBoolean()",
+            OutboxScalarKind.Byte => "reader.GetByte()",
+            OutboxScalarKind.SByte => "reader.GetSByte()",
+            OutboxScalarKind.Int16 => "reader.GetInt16()",
+            OutboxScalarKind.UInt16 => "reader.GetUInt16()",
+            OutboxScalarKind.Int32 => "reader.GetInt32()",
+            OutboxScalarKind.UInt32 => "reader.GetUInt32()",
+            OutboxScalarKind.Int64 => "reader.GetInt64()",
+            OutboxScalarKind.UInt64 => "reader.GetUInt64()",
+            OutboxScalarKind.Single => "reader.GetSingle()",
+            OutboxScalarKind.Double => "reader.GetDouble()",
+            OutboxScalarKind.Decimal => "reader.GetDecimal()",
+            _ => "reader.GetInt32()"
+        };
 
-        public string PropertyName { get; }
-        public string JsonName { get; }
-        public string LocalName { get; }
-        public string TypeName { get; }
-        public OutboxJsonValueKind ValueKind { get; }
-        public bool IsNullableValueType { get; }
-        public bool IsNullableReferenceType { get; }
-        public string? EnumUnderlyingTypeName { get; }
-        public bool IsConstructorParameter { get; }
-        public bool CanInitialize { get; }
-    }
-
-    private sealed class StableNotificationInfo
-    {
-        public StableNotificationInfo(
-            string stableName,
-            string typeName,
-            string deserializeMethodName,
-            string serializeMethodName,
-            string constructorExpression,
-            OutboxPropertyInfo[] properties,
-            string[] constructorLocalNames)
+    private static string EnumReaderMethod(string? enumUnderlyingTypeName) =>
+        enumUnderlyingTypeName switch
         {
-            StableName = stableName;
-            TypeName = typeName;
-            DeserializeMethodName = deserializeMethodName;
-            SerializeMethodName = serializeMethodName;
-            ConstructorExpression = constructorExpression;
-            Properties = properties;
-            ConstructorLocalNames = constructorLocalNames;
-        }
-
-        public string StableName { get; }
-        public string TypeName { get; }
-        public string DeserializeMethodName { get; }
-        public string SerializeMethodName { get; }
-        public string ConstructorExpression { get; }
-        public OutboxPropertyInfo[] Properties { get; }
-        public string[] ConstructorLocalNames { get; }
-    }
+            "global::System.Byte" => "GetByte",
+            "global::System.SByte" => "GetSByte",
+            "global::System.Int16" => "GetInt16",
+            "global::System.UInt16" => "GetUInt16",
+            "global::System.Int32" => "GetInt32",
+            "global::System.UInt32" => "GetUInt32",
+            "global::System.Int64" => "GetInt64",
+            "global::System.UInt64" => "GetUInt64",
+            _ => "GetInt32"
+        };
 }

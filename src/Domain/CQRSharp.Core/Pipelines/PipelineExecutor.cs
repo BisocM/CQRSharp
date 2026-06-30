@@ -53,7 +53,7 @@ public sealed class PipelineExecutor(
     private readonly IServiceProvider _services = serviceProvider;
 
     /// <summary>
-    ///     Executes a query. When <see cref="RunMode.Async" /> is configured the work is handed to the background
+    ///     Executes a query. When <see cref="RunMode.Queued" /> is configured the work is handed to the background
     ///     task queue and the returned task completes when the queued work finishes; otherwise it runs inline.
     ///     In both cases the request context is initialized, the behavior pipeline is chained, and the final
     ///     query handler is invoked.
@@ -67,7 +67,7 @@ public sealed class PipelineExecutor(
         TRequest query, CancellationToken ct)
         where TRequest : IQuery<TResult>
     {
-        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
+        if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
         {
             // Capture the caller's trace context so the queued execution's spans link back to the originating request.
             var parentContext = Activity.Current?.Context ?? default;
@@ -89,7 +89,7 @@ public sealed class PipelineExecutor(
     }
 
     /// <summary>
-    ///     Executes a command. When <see cref="RunMode.Async" /> is configured the work is handed to the background
+    ///     Executes a command. When <see cref="RunMode.Queued" /> is configured the work is handed to the background
     ///     task queue and the returned task completes when the queued work finishes; otherwise it runs inline.
     ///     In both cases the request context is initialized, the behavior pipeline is chained, and the final
     ///     command handler is invoked.
@@ -102,7 +102,7 @@ public sealed class PipelineExecutor(
         TRequest command, CancellationToken ct)
         where TRequest : ICommand
     {
-        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
+        if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
         {
             // Capture the caller's trace context so the queued execution's spans link back to the originating request.
             var parentContext = Activity.Current?.Context ?? default;
@@ -129,8 +129,8 @@ public sealed class PipelineExecutor(
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (_dispatcherOptions.Value.RunMode == RunMode.Async)
-            throw new InvalidOperationException("RunMode.Async is not supported for streaming requests.");
+        if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
+            throw new InvalidOperationException("RunMode.Queued is not supported for streaming requests.");
 
         return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
             ? ExecuteStreamInNewScope<TRequest, TItem>(request, ct)
@@ -289,6 +289,8 @@ public sealed class PipelineExecutor(
         CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TItem>
     {
+        // Fresh per-resolution array (Microsoft DI); the in-place filter/sort below is concurrency-safe — see the note
+        // in ExecutePipelineAsync.
         var resolved = services.GetServices<IStreamPipelineBehavior<TRequest, TItem>>();
         var behaviors = resolved as IStreamPipelineBehavior<TRequest, TItem>[] ?? resolved.ToArray();
 
@@ -368,6 +370,9 @@ public sealed class PipelineExecutor(
         IServiceProvider services,
         CancellationToken cancellationToken) where TRequest : IRequest
     {
+        // GetServices returns a freshly-allocated array per resolution (Microsoft DI), so the in-place exemption
+        // filter and priority sort below are concurrency-safe: each dispatch owns its array and never mutates a shared
+        // or cached collection. (Verified by the hot-path contention stress tests.) Do not change this to a cached array.
         var resolved = services.GetServices<IPipelineBehavior<TRequest, TResult>>();
         var behaviors = resolved as IPipelineBehavior<TRequest, TResult>[] ?? resolved.ToArray();
 

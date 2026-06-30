@@ -8,17 +8,15 @@ namespace CQRSharp.Core.Options;
 public sealed class DispatcherOptions
 {
     /// <summary>
-    ///     The run mode for command execution.
-    ///     If set to <see cref="Enums.RunMode.Async" />, commands will be executed asynchronously - meaning that concurrency
-    ///     is allowed, and command execution is non-blocking.
-    ///     If set to <see cref="Enums.RunMode.Sync" />, commands will be executed synchronously - meaning that commands will
-    ///     be
-    ///     executed in the order they are received.
+    ///     Controls where a dispatched command or query executes. <see cref="Enums.RunMode.Inline" /> (the default) runs
+    ///     the handler inline on the caller's asynchronous flow; <see cref="Enums.RunMode.Queued" /> funnels the dispatch
+    ///     through the shared background task queue for centralized throttling and back-pressure. Both modes return the
+    ///     handler's result to the caller — the difference is scheduling, not fire-and-forget.
     /// </summary>
     /// <remarks>
-    ///     The default value is <see cref="Enums.RunMode.Sync" />.
+    ///     The default value is <see cref="Enums.RunMode.Inline" />.
     /// </remarks>
-    public RunMode RunMode { get; set; } = RunMode.Sync;
+    public RunMode RunMode { get; set; } = RunMode.Inline;
 
     /// <summary>
     ///     Controls whether request execution runs within the current DI scope (default)
@@ -29,13 +27,4 @@ public sealed class DispatcherOptions
     ///     allowing nested sends/publishes to share scoped services (DbContext/UnitOfWork/etc.).
     /// </remarks>
     public ExecutionScopeMode ScopeMode { get; set; } = ExecutionScopeMode.Current;
-
-    /// <summary>
-    ///     Controls how a notification is dispatched to its multiple handlers.
-    /// </summary>
-    /// <remarks>
-    ///     The default is <see cref="PublishStrategy.ParallelWhenAllAggregate" />, which runs handlers concurrently and
-    ///     surfaces every failure.
-    /// </remarks>
-    public PublishStrategy PublishStrategy { get; set; } = PublishStrategy.ParallelWhenAllAggregate;
 }

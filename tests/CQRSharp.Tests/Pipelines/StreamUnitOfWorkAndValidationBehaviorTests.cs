@@ -34,7 +34,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
 {
     // ---- Stream Unit of Work ---------------------------------------------
 
-    private readonly Mock<ILogger<StreamUnitOfWorkBehavior<ITransactionalRequest, int>>> _mockLogger = new();
+    private readonly Mock<ILogger<StreamUnitOfWorkBehavior<ITransactionalCommand, int>>> _mockLogger = new();
     private readonly Mock<IOutbox> _mockOutbox = new();
     private readonly Mock<IUnitOfWork> _mockUoW = new();
 
@@ -44,7 +44,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
     public StreamUnitOfWorkAndValidationBehaviorTests()
         => _mockOutbox.Setup(o => o.Drain()).Returns(Array.Empty<INotification>());
 
-    private StreamUnitOfWorkBehavior<ITransactionalRequest, int> CreateUoWBehavior()
+    private StreamUnitOfWorkBehavior<ITransactionalCommand, int> CreateUoWBehavior()
         => new(_mockLogger.Object, _mockUoW.Object, _mockOutbox.Object, _options);
 
     private static async IAsyncEnumerable<int> Range(params int[] items)
@@ -123,7 +123,7 @@ public sealed class StreamUnitOfWorkAndValidationBehaviorTests
     public async Task StreamUoW_NonTransactionalRequest_BypassesUoW()
     {
         // The behavior is generic over IRequest; a NonTransactionalCommand is neither
-        // ITransactionalRequest nor ITransactionalQuery, so the UoW logic is bypassed entirely.
+        // ITransactionalCommand nor ITransactionalQuery, so the UoW logic is bypassed entirely.
         var behavior = new StreamUnitOfWorkBehavior<NonTransactionalCommand, int>(
             new Mock<ILogger<StreamUnitOfWorkBehavior<NonTransactionalCommand, int>>>().Object,
             _mockUoW.Object,

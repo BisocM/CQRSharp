@@ -57,9 +57,11 @@
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <!-- Referenced both as an analyzer (so it runs on this project) and for compile (so the incremental-caching
+             test can drive the generator directly via CSharpGeneratorDriver). -->
         <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false"/>
+                          ReferenceOutputAssembly="true"/>
         <ProjectReference Include="..\..\src\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
         <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
         <ProjectReference Include="..\CQRSharp.Testing.Outbox\CQRSharp.Testing.Outbox.csproj"/>

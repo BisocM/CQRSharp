@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -18,35 +20,79 @@ namespace CQRSharp.Generators.CqrsAotHintGenerator;
 [Generator]
 public sealed class CqrsAotHintGenerator : IIncrementalGenerator
 {
+    private sealed record AotRequest(string RequestName, string ResultName);
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Discover all class symbols in the compilation.
-        var provider = context.SyntaxProvider
+        // Project concrete requests and open-generic behaviors into small equatable records in the transform, so this
+        // generator caches per-changed-file instead of regenerating on every keystroke (and holds no symbols).
+        var requests = context.SyntaxProvider
             .CreateSyntaxProvider(
                 static (node, _) => node is ClassDeclarationSyntax,
-                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(symbol => symbol is not null);
+                static (ctx, ct) => ExtractRequest(ctx, ct))
+            .Where(static r => r is not null)
+            .Select(static (r, _) => r!)
+            .Collect();
 
-        // Combine the compilation with the collected symbols.
-        var compilationAndTypes = context.CompilationProvider.Combine(provider.Collect());
+        var behaviors = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => node is ClassDeclarationSyntax,
+                static (ctx, ct) => ExtractOpenGenericBehavior(ctx, ct))
+            .Where(static b => b is not null)
+            .Select(static (b, _) => b!)
+            .Collect();
 
-        // Register the source output step.
-        context.RegisterSourceOutput(compilationAndTypes, (spc, source) =>
+        context.RegisterSourceOutput(requests.Combine(behaviors), static (spc, source) =>
         {
-            var (compilation, types) = source;
-            var sourceCode = GenerateAotHints(compilation, types!);
+            var (requestModels, behaviorNames) = source;
+            var sourceCode = GenerateAotHints(requestModels, behaviorNames);
             spc.AddSource("CqrsAotHints.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
         });
     }
 
-    /// <summary>
-    ///     Generates the source code containing the AOT hints.
-    /// </summary>
-    /// <param name="compilation">The current Roslyn compilation.</param>
-    /// <param name="types">All class symbols discovered in the compilation.</param>
-    /// <returns>A string containing the generated C# code.</returns>
-    private string GenerateAotHints(Compilation compilation, ImmutableArray<INamedTypeSymbol> types)
+    private static AotRequest? ExtractRequest(GeneratorSyntaxContext ctx, CancellationToken ct)
+    {
+        if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node, ct) is not INamedTypeSymbol type) return null;
+        if (type is not { IsAbstract: false, IsGenericType: false } || !IsAccessibleFromGeneratedCode(type)) return null;
+
+        var known = CqrsKnownSymbols.For(ctx.SemanticModel.Compilation);
+        var iCommandSymbol = known.ICommand;
+        var iQuerySymbol = known.IQuery;
+        var commandResultSymbol = known.CommandResult;
+        if (iCommandSymbol is null || iQuerySymbol is null || commandResultSymbol is null) return null;
+
+        var isCommand = type.AllInterfaces.Contains(iCommandSymbol, SymbolEqualityComparer.Default);
+        var queryInterface = type.AllInterfaces.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iQuerySymbol));
+        if (!isCommand && queryInterface is null) return null;
+
+        var requestName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var resultName = (queryInterface?.TypeArguments[0] ?? commandResultSymbol).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        return new AotRequest(requestName, resultName);
+    }
+
+    private static string? ExtractOpenGenericBehavior(GeneratorSyntaxContext ctx, CancellationToken ct)
+    {
+        if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node, ct) is not INamedTypeSymbol type) return null;
+        if (type is not { IsAbstract: false, IsGenericType: true } || !IsAccessibleFromGeneratedCode(type)) return null;
+
+        var pipelineBehaviorSymbol = CqrsKnownSymbols.For(ctx.SemanticModel.Compilation).IPipelineBehavior;
+        if (pipelineBehaviorSymbol is null) return null;
+        if (!type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, pipelineBehaviorSymbol)))
+            return null;
+
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Split('<')[0];
+    }
+
+    private static bool IsAccessibleFromGeneratedCode(INamedTypeSymbol typeSymbol)
+    {
+        for (var current = typeSymbol; current is not null; current = current.ContainingType)
+            if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
+                return false;
+        return true;
+    }
+
+    private static string GenerateAotHints(ImmutableArray<AotRequest> requests, ImmutableArray<string> openGenericBehaviors)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -63,57 +109,10 @@ public sealed class CqrsAotHintGenerator : IIncrementalGenerator
         sb.AppendLine("        internal static void Initialize()");
         sb.AppendLine("        {");
 
-        // --- Get all necessary CQRS type symbols from the compilation ---
-        var known = CqrsKnownSymbols.For(compilation);
-        var iCommandSymbol = known.ICommand;
-        var iQuerySymbol = known.IQuery;
-        var pipelineBehaviorSymbol = known.IPipelineBehavior;
-        var commandResultSymbol = known.CommandResult;
-
-        // If core types aren't available, we can't generate hints.
-        if (iCommandSymbol is null || iQuerySymbol is null || pipelineBehaviorSymbol is null || commandResultSymbol is null)
-        {
-            sb.AppendLine("        }");
-            sb.AppendLine("    }");
-            sb.AppendLine("}");
-            return sb.ToString();
-        }
-
-        // --- Find all concrete ICommand and IQuery implementations ---
-        static bool IsAccessibleFromGeneratedCode(INamedTypeSymbol typeSymbol)
-        {
-            for (var current = typeSymbol; current is not null; current = current.ContainingType)
-                if (current.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
-                    return false;
-
-            return true;
-        }
-
-        var requestSymbols = types
-            .Where(c => c is { IsAbstract: false, IsGenericType: false } &&
-                        IsAccessibleFromGeneratedCode(c) &&
-                        (c.AllInterfaces.Contains(iCommandSymbol, SymbolEqualityComparer.Default) ||
-                         c.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iQuerySymbol))))
-            .ToList();
-
-        // --- Find all open generic pipeline behaviors ---
-        var openGenericBehaviors = types
-            .Where(c => c is { IsAbstract: false, IsGenericType: true } &&
-                        IsAccessibleFromGeneratedCode(c) &&
-                        c.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, pipelineBehaviorSymbol)))
-            .ToList();
-
-        // --- Generate typeof() for each Request <> Behavior combination ---
         sb.AppendLine("            // Preserving Pipeline Behavior instantiations:");
-        foreach (var request in requestSymbols)
-        {
-            var requestName = request.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var queryInterface = request.AllInterfaces.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iQuerySymbol));
-            var resultName = (queryInterface?.TypeArguments[0] ?? commandResultSymbol).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
-            foreach (var behaviorName in openGenericBehaviors.Select(behavior => behavior.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Split('<')[0]))
-                sb.AppendLine($"            _ = typeof({behaviorName}<{requestName}, {resultName}>);");
-        }
+        foreach (var request in requests)
+        foreach (var behaviorName in openGenericBehaviors)
+            sb.AppendLine($"            _ = typeof({behaviorName}<{request.RequestName}, {request.ResultName}>);");
 
         sb.AppendLine("        }");
         sb.AppendLine("    }");

@@ -58,19 +58,8 @@ public static class DependencyInjectionExtensions
 
         services.Configure<DispatcherOptions>(opts => configureDispatcher?.Invoke(opts));
 
-        OutboxOptions? outboxProbe = null;
-        if (configureOutbox is not null)
-        {
-            outboxProbe = new OutboxOptions();
-            configureOutbox(outboxProbe);
-
-            var outboxMode = outboxProbe.Mode;
-            services.Configure<OutboxOptions>(opts => { opts.Mode = outboxMode; });
-        }
-        else
-        {
-            services.Configure<OutboxOptions>(_ => { });
-        }
+        // Register the outbox configuration faithfully (every property, not just Mode).
+        services.Configure<OutboxOptions>(opts => configureOutbox?.Invoke(opts));
 
         // The single clock seam: every time-dependent component reads "now" through TimeProvider, so behavior is
         // deterministic under test (via FakeTimeProvider) and overridable by consumers. Defaults to the system clock;
@@ -106,9 +95,13 @@ public static class DependencyInjectionExtensions
             .ValidateOnStart();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CqrsStartupValidator>());
 
-        if (outboxProbe is not null)
-            if (outboxProbe.Mode != OutboxMode.Disabled)
-                services.AddOutboxProcessor();
+        // Register the outbox processor only when the outbox is actually enabled. The mode is read from a throwaway
+        // copy so the decision can be made at registration time; the real options were configured above. With the
+        // honest default (OutboxMode.Disabled) this means no configuration ⇒ no processor, matching the stated default.
+        var effectiveOutbox = new OutboxOptions();
+        configureOutbox?.Invoke(effectiveOutbox);
+        if (effectiveOutbox.Mode != OutboxMode.Disabled)
+            services.AddOutboxProcessor();
 
         return services;
     }
@@ -140,9 +133,10 @@ public static class DependencyInjectionExtensions
     /// <summary>
     ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />. The store is NOT
     ///     durable — messages live in process memory and are lost on restart — so it is intended for development,
-    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). The outbox
-    ///     still needs the source-generated notification serializer and an outbox-enabled <c>AddCqrs</c> for the
-    ///     processor to actually run.
+    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). Prefer enabling
+    ///     the outbox through the fluent builder (<c>UseOutbox</c> with <c>o.UseInMemoryStore()</c>), which selects the
+    ///     mode, registers this store, and runs the processor in one step; call this primitive directly only to wire a
+    ///     store outside the builder.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory store options.</param>
@@ -167,7 +161,9 @@ public static class DependencyInjectionExtensions
     ///     Registers the in-process in-memory idempotency store as the <see cref="IIdempotencyStore" />, so requests
     ///     implementing <c>IIdempotentRequest</c> are deduplicated. The store is NOT durable — claims live in process
     ///     memory and are lost on restart — so it deduplicates only within a single process lifetime; use a database-
-    ///     or Redis-backed store for cross-process at-most-once semantics.
+    ///     or Redis-backed store for cross-process at-most-once semantics. Prefer enabling idempotency through the fluent
+    ///     builder (<c>UseIdempotency</c> with <c>i.UseInMemoryStore()</c>), which turns on the behavior and registers
+    ///     this store together; call this primitive directly only to wire a store outside the builder.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory idempotency store options.</param>

@@ -4,7 +4,7 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
 
 public sealed partial class CqrsSourceGenerator
 {
-    private readonly struct GeneratorConfig
+    private readonly record struct GeneratorConfig
     {
         public GeneratorConfig(bool suppressMissingRequestHandlerDiagnostics)
         {

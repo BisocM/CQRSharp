@@ -9,8 +9,8 @@ namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
 ///     request id, or a deterministic hash of the meaningful inputs). A duplicate (a request whose key was already
 ///     claimed and not released) is rejected with a
 ///     <see cref="CQRSharp.Abstractions.Models.Idempotency.DuplicateRequestException" />. Idempotency is enforced via a
-///     consumer-provided <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" />, registered with
-///     <c>AddIdempotency()</c>.
+///     consumer-provided <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" />, enabled with
+///     <c>UseIdempotency(...)</c> on the CQRSharp builder.
 /// </remarks>
 public interface IIdempotentRequest : IRequest
 {

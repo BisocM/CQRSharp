@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 3.1.0. Documentation refinements across the contracts; no breaking API changes.
+            Version 4.0.0. Renames ITransactionalRequest to ITransactionalCommand (breaking). Streaming contracts (IStreamRequest/IStreamRequestHandler/StreamRequestBase) now compile on the netstandard2.0 target.
         </PackageReleaseNotes>
     </PropertyGroup>
 

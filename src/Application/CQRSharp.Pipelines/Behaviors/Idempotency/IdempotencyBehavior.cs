@@ -19,7 +19,7 @@ namespace CQRSharp.Pipelines.Behaviors.Idempotency;
 /// <typeparam name="TResult">The result type.</typeparam>
 public sealed class IdempotencyBehavior<TRequest, TResult>(
     ILogger<IdempotencyBehavior<TRequest, TResult>> logger,
-    IIdempotencyStore store) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
+    IIdempotencyStore store) : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior, ICqrsIdempotencyBehaviorMarker
     where TRequest : IRequest
 {
     /// <inheritdoc />

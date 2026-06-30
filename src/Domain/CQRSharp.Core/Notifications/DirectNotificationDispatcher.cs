@@ -27,8 +27,9 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     public DirectNotificationDispatcher(IServiceProvider services)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
-        _publishStrategy = services.GetService<IOptions<DispatcherOptions>>()?.Value.PublishStrategy
-                           ?? PublishStrategy.ParallelWhenAllAggregate;
+        // Default to Sequential when options are absent — the safe choice, since handlers share this dispatch scope.
+        _publishStrategy = services.GetService<IOptions<NotificationOptions>>()?.Value.PublishStrategy
+                           ?? PublishStrategy.Sequential;
     }
 
     /// <inheritdoc />
@@ -49,6 +50,8 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     {
         ArgumentNullException.ThrowIfNull(notification);
 
+        // GetServices returns a freshly-allocated array per resolution (Microsoft DI), so the in-place priority sort
+        // below is concurrency-safe and never mutates a shared/cached collection.
         var resolvedBehaviors = _services.GetServices<INotificationPipelineBehavior<TNotification>>();
         var behaviors = resolvedBehaviors as INotificationPipelineBehavior<TNotification>[] ?? resolvedBehaviors.ToArray();
         var behaviorCount = behaviors.Length;

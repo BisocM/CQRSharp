@@ -13,10 +13,11 @@ namespace CQRSharp.Tests.Core;
 /// </summary>
 public class NotificationFaultTests
 {
-    [Fact(DisplayName = "Multiple handler faults are surfaced together as an AggregateException")]
+    [Fact(DisplayName = "Multiple handler faults are surfaced together as an AggregateException (parallel strategy)")]
     public async Task Publish_MultipleFaults_SurfacesAll()
     {
         var services = new ServiceCollection();
+        services.Configure<NotificationOptions>(o => o.PublishStrategy = PublishStrategy.ParallelWhenAllAggregate);
         services.AddSingleton<INotificationHandler<FaultNotification>, SyncThrowHandler>();
         services.AddSingleton<INotificationHandler<FaultNotification>, AsyncThrowHandler>();
         using var provider = services.BuildServiceProvider();
@@ -29,11 +30,12 @@ public class NotificationFaultTests
             .Should().BeEquivalentTo("A", "B");
     }
 
-    [Fact(DisplayName = "A synchronously-throwing handler does not abandon sibling handlers")]
+    [Fact(DisplayName = "A synchronously-throwing handler does not abandon sibling handlers (parallel strategy)")]
     public async Task Publish_SyncThrow_StillRunsSiblings()
     {
         var flag = new FlagHandler();
         var services = new ServiceCollection();
+        services.Configure<NotificationOptions>(o => o.PublishStrategy = PublishStrategy.ParallelWhenAllAggregate);
         services.AddSingleton<INotificationHandler<FaultNotification>, SyncThrowHandler>();
         services.AddSingleton<INotificationHandler<FaultNotification>>(flag);
         using var provider = services.BuildServiceProvider();
@@ -50,7 +52,7 @@ public class NotificationFaultTests
     {
         var flag = new FlagHandler();
         var services = new ServiceCollection();
-        services.Configure<DispatcherOptions>(o => o.PublishStrategy = PublishStrategy.Sequential);
+        services.Configure<NotificationOptions>(o => o.PublishStrategy = PublishStrategy.Sequential);
         services.AddSingleton<INotificationHandler<FaultNotification>, SyncThrowHandler>();
         services.AddSingleton<INotificationHandler<FaultNotification>>(flag);
         using var provider = services.BuildServiceProvider();

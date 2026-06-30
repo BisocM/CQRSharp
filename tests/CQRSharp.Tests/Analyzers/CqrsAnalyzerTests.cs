@@ -351,4 +351,65 @@ public class CqrsAnalyzerTests
         var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
         diagnostics.Should().NotContain(d => d.Id == "CQRA005");
     }
+
+    [Fact(DisplayName = "CQRA008: closed-generic behavior exemption suggests the open-generic form")]
+    public async Task CQRA008_FlagsClosedGenericExemption()
+    {
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp.Abstractions.Interfaces.Context;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp.Core.Pipelines;
+
+                              public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
+                                  where TRequest : IRequest
+                              {
+                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                      => next(cancellationToken);
+                              }
+
+                              public sealed class MyRequest : ICommand
+                              {
+                                  public IRequestContext? Context { get; set; }
+                                  public RequestMetadata? Metadata { get; set; }
+                              }
+
+                              [PipelineExemption(typeof(MyBehavior<MyRequest, int>))]
+                              public sealed class SomeRequest { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
+        diagnostics.Should().ContainSingle(d => d.Id == "CQRA008" && d.Severity == DiagnosticSeverity.Info);
+    }
+
+    [Fact(DisplayName = "CQRA008: open-generic behavior exemption is not flagged")]
+    public async Task CQRA008_DoesNotFlagOpenGenericExemption()
+    {
+        const string source = """
+                              using System;
+                              using System.Threading;
+                              using System.Threading.Tasks;
+                              using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp.Core.Pipelines;
+
+                              public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
+                                  where TRequest : IRequest
+                              {
+                                  public Task<TResult> Handle(TRequest request, Func<CancellationToken, Task<TResult>> next, CancellationToken cancellationToken)
+                                      => next(cancellationToken);
+                              }
+
+                              [PipelineExemption(typeof(MyBehavior<,>))]
+                              public sealed class SomeRequest { }
+                              """;
+
+        var diagnostics = await AnalyzeAsync(source, new PipelineExemptionAnalyzer());
+        diagnostics.Should().NotContain(d => d.Id == "CQRA008");
+    }
 }

@@ -25,7 +25,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
         <Description>The CQRSharp runtime: the ICqrsDispatcher facade, pipeline execution, notification publishing, background task queue and transactional outbox processing, distributed-tracing hooks, health checks, and the source-generated, Native-AOT-friendly handler registries.</Description>
         <PackageReleaseNotes>
-            Version 3.1.0. Adds in-memory outbox and idempotency stores, a fail-fast startup validator, an order-insensitive fluent builder, and a unified TimeProvider clock seam.
+            Version 4.0.0. Renames RunMode.Sync/Async to Inline/Queued and moves PublishStrategy to NotificationOptions (default Sequential); the outbox is now off by default; adds CQRCONF005/006 startup checks for idempotency/retry markers with no registered behavior.
         </PackageReleaseNotes>
     </PropertyGroup>
 
@@ -43,6 +43,11 @@
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+        <!-- The fluent builder (CQRSharp.Pipelines) reads/applies the internal state of the Core store-builders
+             (OutboxStoreBuilder/IdempotencyStoreBuilder) when wiring UseOutbox/UseIdempotency. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Pipelines</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
 

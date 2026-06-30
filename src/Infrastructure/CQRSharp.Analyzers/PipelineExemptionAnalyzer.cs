@@ -15,7 +15,7 @@ namespace CQRSharp.Analyzers;
 public sealed class PipelineExemptionAnalyzer : DiagnosticAnalyzer
 {
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(CqrsDiagnostics.PipelineExemptionNotBehavior);
+        ImmutableArray.Create(CqrsDiagnostics.PipelineExemptionNotBehavior, CqrsDiagnostics.PipelineExemptionClosedGeneric);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -53,9 +53,22 @@ public sealed class PipelineExemptionAnalyzer : DiagnosticAnalyzer
             // typeof(Behavior<,>) yields an UNBOUND generic whose AllInterfaces is empty; check its definition so an
             // open-generic behavior exemption (the idiomatic way to exempt a generic behavior) is recognized.
             var exemptedDefinition = exempted.IsUnboundGenericType ? exempted.OriginalDefinition : exempted;
-            if (ImplementsBehavior(exemptedDefinition, behavior, streamBehavior)) continue;
+            if (!ImplementsBehavior(exemptedDefinition, behavior, streamBehavior))
+            {
+                ctx.ReportDiagnostic(Diagnostic.Create(CqrsDiagnostics.PipelineExemptionNotBehavior, typeOf.GetLocation(), exempted.Name));
+                continue;
+            }
 
-            ctx.ReportDiagnostic(Diagnostic.Create(CqrsDiagnostics.PipelineExemptionNotBehavior, typeOf.GetLocation(), exempted.Name));
+            // CQRA008: a valid behavior exemption that names a CLOSED constructed generic (e.g.
+            // typeof(Logging<Ping, CommandResult>)). Suggest the open-generic shorthand typeof(Logging<,>), which
+            // exempts the behavior for every request the behavior is closed over.
+            if (exempted.IsGenericType && !exempted.IsUnboundGenericType)
+            {
+                var openForm = exempted.Name + "<" + new string(',', exempted.TypeArguments.Length - 1) + ">";
+                var closedForm = exempted.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+                ctx.ReportDiagnostic(Diagnostic.Create(
+                    CqrsDiagnostics.PipelineExemptionClosedGeneric, typeOf.GetLocation(), closedForm, openForm));
+            }
         }
     }
 

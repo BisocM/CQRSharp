@@ -1,3 +1,4 @@
+using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
@@ -5,6 +6,7 @@ using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
+using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Diagnostics;
@@ -55,8 +57,9 @@ public static class CqrsConfigurationInspector
                     CqrsBindingIssueSeverity.Error,
                     "CQRCONF001",
                     $"Outbox mode is '{outbox.Mode}' but the following required outbox service(s) are not registered: " +
-                    $"{string.Join(", ", missing)}. The outbox processor will never deliver notifications. Register them, " +
-                    "or call AddInMemoryOutboxStore() for development, or set the outbox mode to Disabled."));
+                    $"{string.Join(", ", missing)}. The outbox processor will never deliver notifications. Enable the " +
+                    "outbox through the builder — UseOutbox(o => o.UseInMemoryStore()) for development, or a durable store " +
+                    "such as o.UseRedis(...) / o.UseEntityFrameworkCore<TContext>() — or leave it off (outbox mode Disabled)."));
         }
 
         // CQRCONF002: Transactional mode only routes a notification through the outbox while a unit-of-work
@@ -99,6 +102,30 @@ public static class CqrsConfigurationInspector
                 "No IRequestRegistry is registered although CQRSharp request bindings exist. The source-generated " +
                 "registrations were not applied: call AddCqrsGenerated(...) instead of AddCqrs(...), and ensure it runs " +
                 "before requests are dispatched."));
+
+        // CQRCONF005 / CQRCONF006: a request opts into idempotency/retries via a marker interface, but the behavior
+        // that honors it is not wired into the request's pipeline, so the marker silently has no effect.
+        foreach (var binding in requestBindings)
+        {
+            var wired = binding.Pipeline.Concat(binding.ExemptedPipeline);
+
+            if (typeof(IIdempotentRequest).IsAssignableFrom(binding.RequestType) &&
+                !wired.Any(b => typeof(ICqrsIdempotencyBehaviorMarker).IsAssignableFrom(b.BehaviorType)))
+                issues.Add(new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Warning,
+                    "CQRCONF005",
+                    $"Request '{binding.RequestType.FullName}' implements IIdempotentRequest, but no idempotency behavior " +
+                    "is registered, so the marker has no effect (duplicate requests are NOT rejected). Enable it with " +
+                    "UseIdempotency(...)."));
+
+            if (typeof(IRetryableRequest).IsAssignableFrom(binding.RequestType) &&
+                !wired.Any(b => typeof(ICqrsResilienceBehaviorMarker).IsAssignableFrom(b.BehaviorType)))
+                issues.Add(new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Warning,
+                    "CQRCONF006",
+                    $"Request '{binding.RequestType.FullName}' implements IRetryableRequest, but no resilience behavior " +
+                    "is registered, so the marker has no effect (failures are NOT retried). Enable it with UseResilience(...)."));
+        }
 
         return issues;
     }

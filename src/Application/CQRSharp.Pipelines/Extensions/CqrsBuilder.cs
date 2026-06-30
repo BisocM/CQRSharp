@@ -15,20 +15,19 @@ namespace CQRSharp.Pipelines.Extensions;
 ///     called in never changes what the build does. It is sealed and field-access-only so it stays AOT-clean.
 /// </summary>
 /// <remarks>
-///     The type and its <see cref="Build" /> entry point are public so the source-generated fluent overload (emitted
-///     into the consumer assembly) can construct it with <c>useGenerated</c> forced on and drive the build. No other
-///     internals are exposed.
+///     The type and its <see cref="Build" /> entry point are public so the source-generated entry point
+///     <c>AddCqrsGenerated(Action&lt;ICqrsBuilder&gt;)</c> (emitted into the consumer assembly) can construct it and
+///     drive the build before applying the generated registrations. No other internals are exposed.
 /// </remarks>
 public sealed class CqrsBuilder : ICqrsBuilder
 {
     private readonly CqrsPipelinePackOptions _pack = new();
 
     private Action<BackgroundTaskQueueOptions>? _configureQueue;
-    private Action<OutboxOptions>? _configureOutbox;
     private Action<DispatcherOptions>? _configureDispatcher;
+    private Action<NotificationOptions>? _configureNotifications;
 
     private bool _validateOnStart;
-    private bool _useGenerated;
 
     // The pack is only registered if at least one pack-related verb was used; this flag tracks that so a builder
     // that configures nothing pack-related does not pull in the (idempotent, but still unnecessary) pack marker.
@@ -36,40 +35,18 @@ public sealed class CqrsBuilder : ICqrsBuilder
 
     private Func<IServiceProvider, TimeProvider>? _timeProviderFactory;
 
-    private bool _useInMemoryOutbox;
-    private Action<InMemoryOutboxStoreOptions>? _configureInMemoryOutbox;
+    private OutboxStoreBuilder? _outbox;
+    private IdempotencyStoreBuilder? _idempotency;
 
-    private bool _useInMemoryIdempotency;
-    private Action<InMemoryIdempotencyStoreOptions>? _configureInMemoryIdempotency;
-
-    private bool _useIdempotency;
-
-    /// <summary>
-    ///     Creates a builder over <paramref name="services" />. <paramref name="useGenerated" /> forces the
-    ///     "apply generated registrations" intent on from the start; the generated entry point passes <c>true</c> here.
-    /// </summary>
-    public CqrsBuilder(IServiceCollection services, bool useGenerated = false)
+    /// <summary>Creates a builder over <paramref name="services" />.</summary>
+    public CqrsBuilder(IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         Services = services;
-        _useGenerated = useGenerated;
     }
-
-    /// <summary>
-    ///     True when <see cref="UseGenerated" /> was called (or the builder was constructed with <c>useGenerated</c>).
-    ///     The generated entry point reads this to decide whether to apply the generated registrations.
-    /// </summary>
-    public bool ShouldUseGenerated => _useGenerated;
 
     /// <inheritdoc />
     public IServiceCollection Services { get; }
-
-    /// <inheritdoc />
-    public ICqrsBuilder UseGenerated()
-    {
-        _useGenerated = true;
-        return this;
-    }
 
     /// <inheritdoc />
     public ICqrsBuilder ConfigureQueue(Action<BackgroundTaskQueueOptions> configure)
@@ -80,18 +57,18 @@ public sealed class CqrsBuilder : ICqrsBuilder
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder ConfigureOutbox(Action<OutboxOptions> configure)
-    {
-        ArgumentNullException.ThrowIfNull(configure);
-        _configureOutbox = configure;
-        return this;
-    }
-
-    /// <inheritdoc />
     public ICqrsBuilder ConfigureDispatcher(Action<DispatcherOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
         _configureDispatcher = configure;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public ICqrsBuilder ConfigureNotifications(Action<NotificationOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        _configureNotifications = configure;
         return this;
     }
 
@@ -178,9 +155,19 @@ public sealed class CqrsBuilder : ICqrsBuilder
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder UseIdempotency()
+    public ICqrsBuilder UseOutbox(Action<OutboxStoreBuilder> configure)
     {
-        _useIdempotency = true;
+        ArgumentNullException.ThrowIfNull(configure);
+        _outbox = new OutboxStoreBuilder();
+        configure(_outbox);
+        return this;
+    }
+
+    /// <inheritdoc />
+    public ICqrsBuilder UseIdempotency(Action<IdempotencyStoreBuilder>? configure = null)
+    {
+        _idempotency = new IdempotencyStoreBuilder();
+        configure?.Invoke(_idempotency);
         return this;
     }
 
@@ -200,40 +187,30 @@ public sealed class CqrsBuilder : ICqrsBuilder
         return this;
     }
 
-    /// <inheritdoc />
-    public ICqrsBuilder UseInMemoryOutbox(Action<InMemoryOutboxStoreOptions>? configure = null)
-    {
-        _useInMemoryOutbox = true;
-        _configureInMemoryOutbox = configure;
-        return this;
-    }
-
-    /// <inheritdoc />
-    public ICqrsBuilder UseInMemoryIdempotency(Action<InMemoryIdempotencyStoreOptions>? configure = null)
-    {
-        _useInMemoryIdempotency = true;
-        _configureInMemoryIdempotency = configure;
-        return this;
-    }
-
     /// <summary>
     ///     Applies the accumulated intent in one fixed canonical sequence, independent of the order the verbs were
     ///     called: core <c>AddCqrs</c> first, then the authoritative <see cref="TimeProvider" /> override, then the
-    ///     in-memory outbox store, then the merged pipeline pack. Generated registrations are NOT applied here — the
-    ///     generated entry point owns that step so it can order it correctly against the generated dispatchers'
-    ///     <c>RemoveAll</c>-authoritative wiring.
+    ///     outbox store/processor and the idempotency behavior/store, then the merged pipeline pack. Generated
+    ///     registrations are NOT applied here — the generated entry point owns that step so it can order it correctly
+    ///     against the generated dispatchers' <c>RemoveAll</c>-authoritative wiring.
     /// </summary>
     public IServiceCollection Build()
     {
-        // 1) Core services. A disabled validator maps to the Off policy; otherwise leave the AddCqrs default
-        //    (ThrowOnError) so enabling it is just "don't turn it off".
+        // 1) Core services. The outbox mode comes from UseOutbox (off — Disabled — when it was not used), and AddCqrs
+        //    registers the outbox processor host service off that mode. A disabled validator maps to the Off policy;
+        //    otherwise leave the AddCqrs default (ThrowOnError) so enabling it is just "don't turn it off".
         Services.AddCqrs(
             _configureQueue,
-            _configureOutbox,
+            _outbox is not null ? OutboxModeConfigurator : null,
             _configureDispatcher,
             _validateOnStart
                 ? null
                 : opts => opts.Policy = CqrsValidationPolicy.Off);
+
+        // 1b) Notification dispatch options (publish strategy). Applied directly; the Options default (Sequential) is
+        //     used when this verb was not called.
+        if (_configureNotifications is not null)
+            Services.Configure(_configureNotifications);
 
         // 2) Authoritative clock seam. AddCqrs only TryAdds TimeProvider.System, so without this a consumer override
         //    would lose to whatever ran first; RemoveAll + AddSingleton makes the chosen provider win regardless of
@@ -244,16 +221,16 @@ public sealed class CqrsBuilder : ICqrsBuilder
             Services.AddSingleton(_timeProviderFactory);
         }
 
-        // 3) In-memory stores, if requested.
-        if (_useInMemoryOutbox)
-            Services.AddInMemoryOutboxStore(_configureInMemoryOutbox);
+        // 3) Outbox store + processor options (the processor host service was registered by AddCqrs off the mode set
+        //    in step 1). Defaults to the in-memory store when no integration store was chosen.
+        _outbox?.Apply(Services);
 
-        if (_useInMemoryIdempotency)
-            Services.AddInMemoryIdempotencyStore(_configureInMemoryIdempotency);
-
-        // 4) Idempotency behavior, if requested (not part of the pack's option surface).
-        if (_useIdempotency)
+        // 4) Idempotency behavior + store (defaults to the in-memory store when none was chosen).
+        if (_idempotency is not null)
+        {
             Services.AddIdempotency();
+            _idempotency.Apply(Services);
+        }
 
         // 5) The merged pipeline pack. Registered only when a pack-related verb was used; the pack's marker keeps it
         //    idempotent against any earlier AddCqrsPipelinePack call.
@@ -262,6 +239,9 @@ public sealed class CqrsBuilder : ICqrsBuilder
 
         return Services;
     }
+
+    // Applies the outbox mode selected by UseOutbox into OutboxOptions so AddCqrs registers the processor accordingly.
+    private void OutboxModeConfigurator(OutboxOptions options) => options.Mode = _outbox!.Mode;
 
     // Copies the accumulator into the pack options the registration call hands us. Done as a method (not a captured
     // lambda over the accumulator directly) so the single canonical pack is applied verbatim.

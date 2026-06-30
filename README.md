@@ -21,10 +21,10 @@ For more information, see the [CQRSharp project page](https://bisocm.org/project
 - **Attribute-driven** — define commands, queries, streaming requests, and notifications with simple marker interfaces and handlers.
 - **One façade** — dispatch everything through `ICqrsDispatcher` (`Send` / `Stream` / `Publish`).
 - **Build-time analyzers** — catch missing handlers, the wrong dispatch method, and mis-wired pipeline exemptions as you type (CQRA diagnostics), with code fixes.
-- **Opt-in pipeline behaviors** — validation, resilience/retries, timeouts, rate limiting, idempotency, unit-of-work, and logging via `AddCqrsPipelinePack`, composed order-insensitively through the fluent `AddCqrsGenerated(b => ...)` builder.
+- **Opt-in pipeline behaviors** — validation, resilience/retries, timeouts, rate limiting, idempotency, unit-of-work, and logging, composed order-insensitively through the fluent `AddCqrsGenerated(b => ...)` builder (`UseValidation()`, `UseResilience(...)`, `UseOutbox(...)`, `UseIdempotency(...)`, …).
 - **Reliable messaging** — a background task queue and a transactional outbox with at-least-once delivery and distributed-tracing propagation.
 - **Batteries-included persistence** — drop-in in-memory, Redis (`CQRSharp.Redis`), and EF Core (`CQRSharp.EntityFrameworkCore`) stores for both the outbox and request idempotency; no hand-written atomic-claim code required.
-- **Fail-fast configuration** — a startup validator surfaces silent mis-wiring (an outbox with no store, a non-transactional unit of work, outbox-bypassing notifications) as loud errors at host start instead of at first request.
+- **Fail-fast configuration** — a startup validator surfaces silent mis-wiring (an outbox with no store, a non-transactional unit of work, outbox-bypassing notifications, or an `IIdempotentRequest`/`IRetryableRequest` marker whose behavior was never enabled) as loud errors at host start instead of at first request.
 - **Introspection** — a diagnostics API and health checks that describe exactly how each request is bound.
 
 ---
@@ -97,13 +97,14 @@ store is reported at startup rather than at first request:
 ```csharp
 services.AddCqrsGenerated(builder => builder
     .UseValidation()
-    .UseInMemoryOutbox()   // dev/test; swap for AddRedisOutboxStore(...) or AddEntityFrameworkCoreOutboxStore<TContext>(...)
+    .UseOutbox(o => o.UseInMemoryStore())   // dev/test; swap the store for o.UseRedis(...) or o.UseEntityFrameworkCore<TContext>()
     .ValidateOnStart());
 ```
 
-For durable persistence, register a store from an integration package — `AddRedisOutboxStore` /
-`AddRedisIdempotencyStore`, or `AddEntityFrameworkCoreOutboxStore<TContext>` /
-`AddEntityFrameworkCoreIdempotencyStore<TContext>`.
+The outbox and idempotency are each enabled in one cohesive step that selects the mode and registers the store, e.g.
+`UseOutbox(o => o.Transactional().UseEntityFrameworkCore<MyDbContext>())` or `UseIdempotency(i => i.UseRedis(connectionString))`.
+For durable persistence, add the integration package for your backing store (`CQRSharp.Redis` or
+`CQRSharp.EntityFrameworkCore`) and choose its store verb inside `UseOutbox` / `UseIdempotency`.
 
 ---
 

@@ -27,6 +27,15 @@ internal static class CqrsDiagnostics
         true,
         "PipelineExemption only suppresses types that implement IPipelineBehavior<,> or IStreamPipelineBehavior<,>.");
 
+    public static readonly DiagnosticDescriptor PipelineExemptionClosedGeneric = new(
+        "CQRA008",
+        "PipelineExemption can use the open-generic form",
+        "'{0}' is a closed generic; use the open-generic form 'typeof({1})' — it exempts the behavior for every request and is the idiomatic shorthand",
+        Category,
+        DiagnosticSeverity.Info,
+        true,
+        "A generic pipeline behavior is registered as an open generic and closed per request, so spelling out the type arguments in [PipelineExemption] is unnecessary; typeof(Behavior<,>) is the simpler, more robust form.");
+
     // The following are Warning/Info (not Error): the analyzer cannot be certain the code is broken because handlers
     // may be registered another way (manual DI), and a notification with no subscriber is legal.
 

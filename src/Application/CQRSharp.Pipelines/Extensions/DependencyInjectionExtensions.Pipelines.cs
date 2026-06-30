@@ -14,12 +14,15 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CQRSharp.Pipelines.Extensions;
 
-public static class DependencyInjectionExtensions
+// The optional-behavior registration extensions are internal: the fluent builder (UseLogging/UseValidation/UseResilience/
+// UseTimeout/UseRateLimiting/UseUnitOfWork/UseExceptionHandling/UseIdempotency/UsePipelinePack) is the single public lane
+// for enabling pipeline behaviors. The builder, in the same assembly, calls these to do the actual registration.
+internal static class DependencyInjectionExtensions
 {
     /// <summary>
     ///     Registers request-level exception hook support.
     /// </summary>
-    public static IServiceCollection AddExceptionHandling(this IServiceCollection services)
+    internal static IServiceCollection AddExceptionHandling(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamExceptionHandlingBehavior<,>));
@@ -34,7 +37,7 @@ public static class DependencyInjectionExtensions
     ///     The caller must also register an
     ///     <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" /> implementation.
     /// </remarks>
-    public static IServiceCollection AddIdempotency(this IServiceCollection services)
+    internal static IServiceCollection AddIdempotency(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
         return services;
@@ -44,7 +47,7 @@ public static class DependencyInjectionExtensions
     ///     Registers the logging behavior, which logs the start, completion (with elapsed time), and failure of each
     ///     request and streaming request. Opt-in (off by default); runs outermost.
     /// </summary>
-    public static IServiceCollection AddLoggingBehavior(this IServiceCollection services)
+    internal static IServiceCollection AddLoggingBehavior(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
@@ -54,7 +57,7 @@ public static class DependencyInjectionExtensions
     /// <summary>
     ///     Registers the resilience pipeline behavior in the service collection.
     /// </summary>
-    public static IServiceCollection AddResilienceBehavior(
+    internal static IServiceCollection AddResilienceBehavior(
         this IServiceCollection services,
         Action<ResilienceOptions> configureOptions)
     {
@@ -76,7 +79,7 @@ public static class DependencyInjectionExtensions
     /// <summary>
     ///     Registers the timeout pipeline behavior in the service collection.
     /// </summary>
-    public static IServiceCollection AddTimeoutBehavior(
+    internal static IServiceCollection AddTimeoutBehavior(
         this IServiceCollection services,
         Action<TimeoutOptions> configureOptions)
     {
@@ -98,7 +101,7 @@ public static class DependencyInjectionExtensions
     ///     Registers the validation pipeline behavior in the service collection.
     ///     This behavior executes all registered <c>IRequestValidator&lt;TRequest&gt;</c> implementations for a request.
     /// </summary>
-    public static IServiceCollection AddValidationBehavior(this IServiceCollection services)
+    internal static IServiceCollection AddValidationBehavior(this IServiceCollection services)
     {
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamValidationBehavior<,>));
@@ -108,21 +111,22 @@ public static class DependencyInjectionExtensions
     /// <summary>
     ///     Registers the rate limiting pipeline behavior in the dependency injection container.
     /// </summary>
-    public static IServiceCollection AddRateLimiting(
+    internal static IServiceCollection AddRateLimiting(
         this IServiceCollection services,
         Action<RateLimiterOptions> configureOptions)
     {
         if (configureOptions == null)
             throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
 
-        services.Configure<RateLimiterOptions>(options =>
-        {
-            configureOptions.Invoke(options);
-
-            if (options.MaxTokens <= 0 || options.ReplenishRatePerSecond <= 0 || options.MaxEntries <= 0)
-                throw new ArgumentException(
-                    $"Rate limiting configuration is invalid. {nameof(options.MaxTokens)}, {nameof(options.ReplenishRatePerSecond)}, and {nameof(options.MaxEntries)} must be greater than zero.");
-        });
+        // Validate on start (consistent with the resilience/timeout behaviors) rather than throwing inside the
+        // Configure delegate, so an invalid configuration fails fast and predictably at host startup with an
+        // OptionsValidationException — not lazily, the first time the options happen to be resolved.
+        services.AddOptions<RateLimiterOptions>()
+            .Configure(configureOptions.Invoke)
+            .Validate(o => o.MaxTokens > 0, "RateLimiterOptions.MaxTokens must be greater than zero.")
+            .Validate(o => o.ReplenishRatePerSecond > 0, "RateLimiterOptions.ReplenishRatePerSecond must be greater than zero.")
+            .Validate(o => o.MaxEntries > 0, "RateLimiterOptions.MaxEntries must be greater than zero.")
+            .ValidateOnStart();
 
         services.AddSingleton<RateLimiter>();
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>));
@@ -145,7 +149,7 @@ public static class DependencyInjectionExtensions
     ///     new MyEfCoreUnitOfWork(sp.GetRequiredService&lt;MyDbContext&gt;()));
     /// </code>
     /// </example>
-    public static IServiceCollection AddUnitOfWorkBehavior<TUnitOfWork>(
+    internal static IServiceCollection AddUnitOfWorkBehavior<TUnitOfWork>(
         this IServiceCollection services,
         Func<IServiceProvider, TUnitOfWork> implementationFactory,
         Action<UnitOfWorkOptions>? configureOptions = null)
@@ -165,7 +169,7 @@ public static class DependencyInjectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddUnitOfWorkBehavior(
+    internal static IServiceCollection AddUnitOfWorkBehavior(
         this IServiceCollection services,
         Func<IServiceProvider, IUnitOfWork> implementationFactory,
         Action<UnitOfWorkOptions>? configureOptions = null)
@@ -182,7 +186,7 @@ public static class DependencyInjectionExtensions
     ///     Idempotent: a second call with the same service collection is a no-op (guarded by a registered marker), so
     ///     the pack cannot stack duplicate behaviors.
     /// </summary>
-    public static IServiceCollection AddCqrsPipelinePack(
+    internal static IServiceCollection AddCqrsPipelinePack(
         this IServiceCollection services,
         Action<CqrsPipelinePackOptions>? configure = null)
     {

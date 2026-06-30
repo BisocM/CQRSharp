@@ -33,7 +33,7 @@ public class PublishStrategyTests
         params INotificationHandler<StrategyNotification>[] handlers)
     {
         var services = new ServiceCollection();
-        services.Configure<DispatcherOptions>(o => o.PublishStrategy = strategy);
+        services.Configure<NotificationOptions>(o => o.PublishStrategy = strategy);
         foreach (var handler in handlers)
             services.AddSingleton(handler);
         var provider = services.BuildServiceProvider();

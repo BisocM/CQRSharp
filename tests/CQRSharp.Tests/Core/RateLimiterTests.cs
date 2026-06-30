@@ -229,16 +229,18 @@ public class RateLimitingBehaviorTests
         _output.WriteLine("[PASS] Invalid options correctly cause constructor failure.");
     }
 
-    [Fact(DisplayName = "DI registration: invalid options throw during resolution")]
-    public void AddRateLimiting_InvalidOptions_ThrowsDuringResolution()
+    [Fact(DisplayName = "DI registration: invalid options fail options validation on resolution")]
+    public void AddRateLimiting_InvalidOptions_FailsValidationOnResolution()
     {
         var services = new ServiceCollection();
         services.AddRateLimiting(options => options.MaxEntries = 0);
 
         using var provider = services.BuildServiceProvider();
 
+        // The behavior now validates through the options system (Validate + ValidateOnStart) rather than throwing
+        // inside the Configure delegate, so resolving the options surfaces an OptionsValidationException.
         var act = () => provider.GetRequiredService<RateLimiter>();
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("*Rate limiting configuration is invalid*");
+        act.Should().Throw<OptionsValidationException>()
+            .WithMessage("*MaxEntries must be greater than zero*");
     }
 }

@@ -34,8 +34,12 @@ public class Program
                 // store); ValidateOnStart() keeps the fail-fast startup validator active.
                 services.AddCqrsGenerated(b => b
                     .ConfigureQueue(opts => opts.EnableMetrics = true)
-                    .ConfigureOutbox(opts => opts.Mode = OutboxMode.Transactional)
-                    .UseInMemoryOutbox()
+                    // One cohesive verb: transactional mode + in-memory store + processor tuning, instead of a mode
+                    // flag plus a separately-registered store plus a raw services.Configure<OutboxProcessorOptions>.
+                    .UseOutbox(o => o
+                        .Transactional()
+                        .UseInMemoryStore()
+                        .ConfigureProcessor(p => p.PollingInterval = TimeSpan.FromMilliseconds(100)))
                     .UseUnitOfWork(provider => new InMemoryUnitOfWork(
                         provider.GetRequiredService<ILogger<InMemoryUnitOfWork>>(),
                         provider))
@@ -64,8 +68,6 @@ public class Program
                 services.AddScoped<SampleScopedMarker>();
 
                 services.AddSingleton<CustomInMemoryUserStore>();
-
-                services.Configure<OutboxProcessorOptions>(opts => opts.PollingInterval = TimeSpan.FromMilliseconds(100));
 
                 services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingPipelineBehavior<,>));
                 services.AddTransient(typeof(INotificationPipelineBehavior<>), typeof(NotificationLoggingBehavior<>));
