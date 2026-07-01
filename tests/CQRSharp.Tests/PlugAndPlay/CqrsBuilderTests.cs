@@ -135,6 +135,40 @@ public sealed class CqrsBuilderTests
     }
 
     [Fact]
+    public void UseTimeProvider_factory_that_resolves_TimeProvider_fails_fast_instead_of_hanging()
+    {
+        // A factory that resolves TimeProvider from the provider is self-referential: the factory IS the TimeProvider
+        // registration, so sp.GetService<TimeProvider>() re-enters it. Before the guard this recursed until the DI
+        // container deadlocked (a latent production hang; the ?? TimeProvider.System fallback is unreachable dead code).
+        // It must now fail fast with a clear error on first resolution.
+        var services = new ServiceCollection();
+        services.AddCqrsGenerated(b => b
+            .UseTimeProvider(sp => sp.GetService<TimeProvider>() ?? TimeProvider.System));
+
+        using var provider = services.BuildServiceProvider();
+
+        var resolve = () => provider.GetRequiredService<TimeProvider>();
+
+        resolve.Should().Throw<InvalidOperationException>("the self-referential factory must fail fast, not deadlock")
+            .WithMessage("*resolves TimeProvider from the service*");
+    }
+
+    [Fact]
+    public void UseTimeProvider_factory_resolving_a_distinct_clock_type_still_works()
+    {
+        // The guard must not break the legitimate factory pattern: resolving a DIFFERENT clock type from the provider.
+        var clock = new FakeTimeProvider();
+        var services = new ServiceCollection();
+        services.AddSingleton(clock); // registered under FakeTimeProvider, so RemoveAll<TimeProvider> leaves it intact
+        services.AddCqrsGenerated(b => b
+            .UseTimeProvider(sp => sp.GetRequiredService<FakeTimeProvider>()));
+
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<TimeProvider>().Should().BeSameAs(clock);
+    }
+
+    [Fact]
     public async Task Generated_fluent_overload_resolves_a_working_dispatcher()
     {
         var services = new ServiceCollection();

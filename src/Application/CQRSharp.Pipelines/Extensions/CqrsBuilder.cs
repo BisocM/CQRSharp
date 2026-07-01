@@ -102,6 +102,38 @@ public sealed class CqrsBuilder : ICqrsBuilder
         return this;
     }
 
+    // A UseTimeProvider factory is registered AS the TimeProvider service, so a factory that resolves TimeProvider from
+    // the provider (e.g. sp.GetService<TimeProvider>()) re-enters itself and recurses until the container deadlocks.
+    // This sentinel + wrapper turn that misconfiguration into a fast, clear failure on first resolution. Thread-static
+    // because singleton resolution is synchronous on one thread; the nested resolution re-enters on that same thread.
+    [ThreadStatic] private static bool _resolvingTimeProvider;
+
+    private const string SelfReferentialTimeProviderMessage =
+        "The Func<IServiceProvider, TimeProvider> passed to UseTimeProvider resolves TimeProvider from the service " +
+        "provider (e.g. sp.GetService<TimeProvider>()). That factory is itself the TimeProvider registration, so " +
+        "resolving TimeProvider inside it recurses until the container deadlocks. Return a concrete TimeProvider instead " +
+        "(TimeProvider.System, a FakeTimeProvider, or your own clock). To make CQRSharp defer to a TimeProvider your " +
+        "host already registered, don't call UseTimeProvider at all: AddCqrs registers TimeProvider.System with TryAdd, " +
+        "so an existing registration wins.";
+
+    private static TimeProvider ResolveTimeProviderGuarded(Func<IServiceProvider, TimeProvider> factory, IServiceProvider sp)
+    {
+        if (_resolvingTimeProvider)
+            throw new InvalidOperationException(SelfReferentialTimeProviderMessage);
+
+        _resolvingTimeProvider = true;
+        try
+        {
+            return factory(sp) ?? throw new InvalidOperationException(
+                "The Func<IServiceProvider, TimeProvider> passed to UseTimeProvider returned null. Return a non-null " +
+                "TimeProvider (e.g. TimeProvider.System or your own clock).");
+        }
+        finally
+        {
+            _resolvingTimeProvider = false;
+        }
+    }
+
     /// <inheritdoc />
     public ICqrsBuilder UsePipelinePack(Action<CqrsPipelinePackOptions>? configure = null)
     {
@@ -222,8 +254,11 @@ public sealed class CqrsBuilder : ICqrsBuilder
         //    where UseTimeProvider appeared in the chain.
         if (_timeProviderFactory is not null)
         {
+            var factory = _timeProviderFactory;
             Services.RemoveAll<TimeProvider>();
-            Services.AddSingleton(_timeProviderFactory);
+            // Register the factory guarded: a self-referential factory (one that resolves TimeProvider from the
+            // provider) fails fast with a clear message on first resolution instead of deadlocking the container.
+            Services.AddSingleton<TimeProvider>(sp => ResolveTimeProviderGuarded(factory, sp));
         }
 
         // 3) Outbox store + processor options (the processor host service was registered by AddCqrs off the mode set

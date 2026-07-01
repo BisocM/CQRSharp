@@ -2,6 +2,20 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.2.1]
+
+### Fixed
+
+- **`UseTimeProvider(factory)` self-reference no longer hangs the host.** A factory passed to
+  `UseTimeProvider(Func<IServiceProvider, TimeProvider>)` that resolves `TimeProvider` from the provider — e.g.
+  `sp => sp.GetService<TimeProvider>() ?? TimeProvider.System` — is self-referential: that factory *is* the
+  `TimeProvider` registration, so resolving `TimeProvider` inside it recursed until the DI container deadlocked (the
+  `?? TimeProvider.System` fallback is unreachable dead code). It only surfaced when something first resolved the clock,
+  so unit tests that inject a clock directly never caught it. The factory is now guarded and **fails fast with a clear
+  `InvalidOperationException`** on first resolution instead of deadlocking. Note: to make CQRSharp defer to a
+  `TimeProvider` your host already registered, don't call `UseTimeProvider` at all — `AddCqrs` registers
+  `TimeProvider.System` with `TryAdd`, so an existing registration wins.
+
 ## [4.2.0]
 
 ### Changed

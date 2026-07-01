@@ -26,7 +26,7 @@
         <Title>Optional Pipeline Behaviors for CQRSharp</Title>
         <Description>Optional, opt-in pipeline behaviors for CQRSharp — validation, unit of work, resilience/retries, timeouts, rate limiting, idempotency, and logging — plus a one-call pipeline-pack registration for sensible defaults.</Description>
         <PackageReleaseNotes>
-            Version 4.2.0. No functional changes in this package.
+            Version 4.2.1. Fixes a latent hang: a UseTimeProvider(factory) whose factory resolves TimeProvider from the service provider (e.g. sp.GetService&lt;TimeProvider&gt;()) is a self-referential registration — that factory IS the TimeProvider registration, so resolving TimeProvider inside it recursed until the DI container deadlocked. It only surfaced when something first resolved the clock, so tests injecting a clock directly never caught it. The factory is now guarded and fails fast with a clear message instead. To make CQRSharp defer to a TimeProvider your host already registered, don't call UseTimeProvider at all: AddCqrs registers TimeProvider.System with TryAdd, so an existing registration wins.
         </PackageReleaseNotes>
     </PropertyGroup>
 

@@ -29,7 +29,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 4.2.0. IPostHandlerAttribute.OnAfterHandle now takes a RequestOutcome (breaking) — the value the handler returned, or the exception it threw — and the dispatcher invokes it on both the success and exception paths. The 4.1.0 opt-in types IPostHandlerOutcomeAware and OutcomeAwarePostHandlerAttribute are removed (folded into IPostHandlerAttribute). Migration: add a RequestOutcome parameter to your OnAfterHandle implementations.
+            Version 4.2.1. No functional changes in this package.
         </PackageReleaseNotes>
     </PropertyGroup>
 

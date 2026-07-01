@@ -66,6 +66,12 @@ public interface ICqrsBuilder
     /// <summary>
     ///     Sets the authoritative <see cref="TimeProvider" /> via a factory resolved from the service provider.
     ///     Order-insensitive and last-writer-wins, exactly as <see cref="UseTimeProvider(TimeProvider)" />.
+    ///     The factory must return a concrete provider — resolve a <em>distinct</em> clock type or return
+    ///     <see cref="TimeProvider.System" />. It must not resolve <see cref="TimeProvider" /> itself
+    ///     (<c>sp.GetService&lt;TimeProvider&gt;()</c>): that factory is this very registration, so resolving it recurses
+    ///     until the container deadlocks (guarded — it throws a clear error instead). To defer to a
+    ///     <see cref="TimeProvider" /> your host already registered, don't call this at all: AddCqrs registers
+    ///     <see cref="TimeProvider.System" /> with TryAdd, so an existing registration wins.
     /// </summary>
     ICqrsBuilder UseTimeProvider(Func<IServiceProvider, TimeProvider> factory);
 

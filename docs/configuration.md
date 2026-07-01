@@ -207,8 +207,17 @@ timestamps deterministically testable. Override the authoritative provider with 
 
 ```csharp
 .UseTimeProvider(myFakeTimeProvider)                       // an instance
-.UseTimeProvider(sp => sp.GetRequiredService<MyClock>())   // a factory
+.UseTimeProvider(sp => sp.GetRequiredService<MyClock>())   // a factory (resolve a *distinct* clock type)
 ```
+
+> **The factory must return a concrete provider** — resolve a *distinct* clock type (as above) or return
+> `TimeProvider.System`. It must **not** resolve `TimeProvider` itself (`sp.GetService<TimeProvider>()`): that factory
+> *is* the `TimeProvider` registration, so resolving it re-enters the factory and recurses until the container
+> deadlocks. CQRSharp guards against this and throws a clear error instead of hanging, but the factory is still wrong.
+>
+> You usually don't need `UseTimeProvider` at all to use a custom clock: `AddCqrs` registers `TimeProvider.System`
+> with `TryAdd`, so a `TimeProvider` your host registered already wins. Reach for `UseTimeProvider` only to *force* a
+> specific provider — it removes any prior registration.
 
 In tests, register a `FakeTimeProvider` and advance it to exercise time-dependent behavior without real
 delays. See [Testing](testing.md).

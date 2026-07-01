@@ -25,7 +25,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications.</Title>
         <Description>The CQRSharp runtime: the ICqrsDispatcher facade, pipeline execution, notification publishing, background task queue and transactional outbox processing, distributed-tracing hooks, health checks, and the source-generated, Native-AOT-friendly handler registries.</Description>
         <PackageReleaseNotes>
-            Version 4.2.0. Post-handlers are now uniformly outcome-aware (breaking): IPostHandlerAttribute.OnAfterHandle takes the request's RequestOutcome — the value the handler returned or the exception it threw — and runs on BOTH the success and exception paths (previously success only). This replaces 4.1.0's opt-in IPostHandlerOutcomeAware / OutcomeAwarePostHandlerAttribute (both removed): there is no longer an outcome-blind post-handler. Migration: add a RequestOutcome parameter to your OnAfterHandle implementations and read outcome.Result / outcome.Exception to classify on what happened.
+            Version 4.2.1. No functional changes in this package.
         </PackageReleaseNotes>
     </PropertyGroup>
 
