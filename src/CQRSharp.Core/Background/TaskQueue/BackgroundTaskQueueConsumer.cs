@@ -229,10 +229,24 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     ///     The primary shutdown logic is now handled in the finally block of <see cref="ExecuteAsync" />.
     /// </summary>
     /// <param name="cancellationToken">A token to signal that the shutdown process should no longer be graceful.</param>
-    public override Task StopAsync(CancellationToken cancellationToken)
+    public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Consumer stopping. Graceful shutdown initiated.");
-        // The base method triggers cancellation on the token passed to ExecuteAsync.
-        return base.StopAsync(cancellationToken);
+
+        // The base method triggers cancellation on the token passed to ExecuteAsync and waits for it to finish.
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+
+        // The host has stopped being patient: do not leave in-flight work running past its forced shutdown.
+        if (cancellationToken.IsCancellationRequested)
+            _workCancellation.Cancel();
+
+        // ExecuteAsync's own shutdown normally did both of these already (they are idempotent). But it is not
+        // guaranteed to have run at all: since .NET 10 a BackgroundService schedules ExecuteAsync on the thread pool,
+        // so a host that stops during startup cancels it before its first line. Without this the queue would keep
+        // accepting work that nothing will ever execute, and every caller awaiting it would hang.
+        _taskQueue.CompleteAdding();
+        var abandoned = _taskQueue.CancelPending();
+        if (abandoned > 0)
+            _logger.LogWarning("Cancelled {Count} queued background task(s) that did not get to run before shutdown.", abandoned);
     }
 }

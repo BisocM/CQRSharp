@@ -79,6 +79,7 @@ jobs:
           dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build
           --logger "trx" --results-directory ${{ env.TEST_RESULTS }}
           --collect "XPlat Code Coverage"
+          --blame-hang-timeout 5m --blame-hang-dump-type none
 
       - name: Coverage summary
         if: always()

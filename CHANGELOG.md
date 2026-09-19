@@ -108,6 +108,9 @@ the EF Core idempotency store, and legal user code the generator turned into a b
   backlog that is still queued** inside the same budget; what the budget does not cover is cancelled rather than left
   pending, so a caller awaiting a queued item never hangs. `BackgroundTaskQueueOptions.DrainOnShutdown = false` restores
   cancel-the-backlog-immediately.
+  A host that stops *during startup* closes the queue too: since .NET 10 a `BackgroundService` schedules its
+  `ExecuteAsync` rather than running it inline, so the consumer's loop — and the shutdown in its `finally` — might never
+  run, which left the queue accepting work nothing would ever execute.
 - **Legacy module surface removed — breaking for hand-written modules.** `HandlerInvokerDelegate` and the boxed
   `object`-returning invokers are gone; `ICqrsModule.HandlerInvokers` / `IHandlerRegistry.TryGetInvoker` carry the typed
   delegates the generator emits.

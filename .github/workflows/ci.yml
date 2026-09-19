@@ -52,7 +52,7 @@ jobs:
       # Service containers are Linux-only, so there is no Redis here: the Redis contract tests skip (they run in the
       # validate job). Everything else - including the EF Core stores on SQLite - runs on every OS.
       - name: Test (net8.0, net9.0, net10.0)
-        run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx" --results-directory artifacts/test-results
+        run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx" --results-directory artifacts/test-results --blame-hang-timeout 5m --blame-hang-dump-type none
 
       - name: Upload test results
         if: always()
