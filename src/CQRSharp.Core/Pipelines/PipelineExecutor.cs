@@ -39,6 +39,8 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
     // The per-provider plan cache (a singleton). An executor built by hand without it — unit tests — gets a private one.
     private readonly RequestPlanCache _plans;
 
+    private readonly TimeProvider _timeProvider;
+
     // Resolved once: with the outbox disabled (the default) the request path never touches the outbox services.
     private readonly bool _outboxEnabled;
 
@@ -61,6 +63,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         _plans = serviceProvider.GetService<RequestPlanCache>()
                  ?? new RequestPlanCache(serviceProvider, requestRegistry, handlerRegistry, contextFactoryRegistry);
         _outboxEnabled = IsOutboxEnabled(serviceProvider.GetService<IOptions<OutboxOptions>>());
+        _timeProvider = serviceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
     }
 
     // The DI path: an executor is created per scope (per web request), so everything that is the same for every scope
@@ -76,6 +79,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         _scopeFactory = shared.ScopeFactory;
         _plans = shared.Plans;
         _outboxEnabled = shared.OutboxEnabled;
+        _timeProvider = shared.TimeProvider;
         Shared = shared;
     }
 
@@ -310,7 +314,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
 
     // Command/query variant of the context initialization below, driven by the cached plan: no registry lookups, and the
     // built-in default context is constructed directly rather than through a transient factory resolved from DI.
-    private static ValueTask InitializeRequestContext<TRequest, TResult>(
+    private ValueTask InitializeRequestContext<TRequest, TResult>(
         RequestPlan<TRequest, TResult> plan,
         TRequest request,
         IServiceProvider services,
@@ -324,7 +328,8 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
 
         if (plan.UsesDefaultContextFactory)
         {
-            request.Context = new RequestContextBase();
+            // Exactly what the built-in factory does, minus the DI resolution: stamped from the application's clock.
+            request.Context = new RequestContextBase(_timeProvider.GetUtcNow().UtcDateTime);
             return default;
         }
 

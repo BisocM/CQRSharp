@@ -22,8 +22,12 @@ internal sealed class PipelineExecutorShared(
     IOptions<OutboxOptions> outboxOptions,
     IBackgroundTaskManager backgroundTaskManager,
     RequestPlanCache plans,
-    IServiceProvider rootProvider)
+    IServiceProvider rootProvider,
+    TimeProvider? timeProvider = null)
 {
+    /// <summary>The application's clock: every time read on the dispatch path goes through it.</summary>
+    public TimeProvider TimeProvider { get; } = timeProvider ?? TimeProvider.System;
+
     private Modules.ModuleRouteTable? _routeTable;
 
     /// <summary>

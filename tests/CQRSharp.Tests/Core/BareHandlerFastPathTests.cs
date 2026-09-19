@@ -61,6 +61,19 @@ public sealed class BareHandlerFastPathTests
         result.Should().BeNull();
     }
 
+    [Fact(DisplayName = "The request context is stamped from the application's TimeProvider, not the system clock")]
+    public async Task Context_timestamp_follows_the_time_provider()
+    {
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(new DateTimeOffset(2031, 5, 4, 3, 2, 1, TimeSpan.Zero));
+        await using var provider = Build(services => services.AddSingleton<TimeProvider>(clock));
+        await using var scope = provider.CreateAsyncScope();
+        var query = new FastQuery { Mode = FastMode.Value };
+
+        await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Send(query);
+
+        query.Context!.CreatedAt.Should().Be(clock.GetUtcNow().UtcDateTime);
+    }
+
     [Fact(DisplayName = "Registering a lifecycle subscriber turns the notifications back on for that request")]
     public async Task Subscriber_re_enables_lifecycle_notifications()
     {

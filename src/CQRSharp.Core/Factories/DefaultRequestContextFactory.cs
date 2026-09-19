@@ -1,5 +1,3 @@
-using CQRSharp;
-
 namespace CQRSharp;
 
 /// <summary>
@@ -9,9 +7,23 @@ namespace CQRSharp;
 /// </summary>
 public class DefaultRequestContextFactory : IRequestContextFactory
 {
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>Creates the factory over the system clock.</summary>
+    public DefaultRequestContextFactory() : this(null)
+    {
+    }
+
+    /// <summary>Creates the factory over the application's clock.</summary>
+    /// <param name="timeProvider">The clock contexts are stamped with; the system clock when <c>null</c>.</param>
+    public DefaultRequestContextFactory(TimeProvider? timeProvider)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
     /// <inheritdoc />
     public RequestContextBase CreateContext(IRequest request)
     {
-        return new RequestContextBase();
+        return new RequestContextBase(_timeProvider.GetUtcNow().UtcDateTime);
     }
 }
