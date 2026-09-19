@@ -31,6 +31,19 @@ interfaces and handlers, and dispatch everything through a single façade — `I
 
 ---
 
+## Namespaces
+
+Two namespaces cover everything you write:
+
+- **`CQRSharp`** — requests and their base classes, handler interfaces, `CommandResult`, notifications (yours and
+  the lifecycle ones), request context, interceptors, validators, `ICqrsDispatcher`, `AddCqrsGenerated` and its options.
+- **`CQRSharp.Pipelines`** — the fluent builder and its option types, the behavior contracts (`IPipelineBehavior<,>`
+  and friends), and the contracts you implement to plug in infrastructure (`IUnitOfWork`, `IIdempotencyStore`,
+  `IOutboxStore`).
+
+With the `CQRSharp` meta-package and `ImplicitUsings` both are global usings, so most files need no `using` at all.
+Runtime internals live deeper (`CQRSharp.Core.*`) and are only needed when you extend the framework itself.
+
 ## Packages
 
 | Package | Purpose |

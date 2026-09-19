@@ -48,6 +48,13 @@ public interface IIdempotencyStore
 }
 ```
 
+A claim is kept only by a request that **completed**. It is released — so the caller can retry with the same key —
+when the request throws, is cancelled, or is a command that *returns* a failed `CommandResult`. **Streaming requests**
+are covered too: the key is claimed when enumeration starts and kept only if the stream runs to completion; a stream
+that faults, or that its consumer abandons early, releases it. The built-in stores release a claim only while they
+still own it, so a request that outlived its own retention window cannot delete the claim of the request that
+replaced it.
+
 `IdempotencyStoreBuilder` offers `UseInMemoryStore(configure?)`, `UseRedis(...)`,
 `UseEntityFrameworkCore<TContext>()`, and the `UseStore(Action<IServiceCollection>)` hook for a custom
 store. A bare `UseIdempotency()` uses the in-memory store.

@@ -41,8 +41,12 @@ Two operational notes for the Redis outbox:
   `BatchSize × your slowest handler`. Too short, and a second instance reclaims — and re-delivers — the
   tail of a batch that is still being worked through.
 - **Redis Cluster.** The store's Lua scripts touch several keys under `KeyPrefix` atomically, so on a
-  cluster those keys must share a hash slot: give the prefix a hash tag, e.g.
-  `o.KeyPrefix = "{cqrsharp:outbox}:"`. The default prefix has none and targets standalone / sentinel Redis.
+  cluster those keys must share a hash slot. The default prefix, `{cqrsharp:outbox}:`, carries a hash tag for
+  exactly that reason; a custom prefix must keep one (`{...}`). Upgrading from 4.x, where the default was
+  `cqrsharp:outbox:`: set that value explicitly to keep draining messages already stored under it.
+- **One connection.** The outbox and idempotency stores share a single `IConnectionMultiplexer`. Passing two
+  different connection strings is rejected at registration; to use two servers, register the multiplexers
+  yourself and pass them to `UseRedis(IConnectionMultiplexer)`.
 
 ## Entity Framework Core
 
@@ -68,9 +72,10 @@ entities per the package's model setup.
 The idempotency store is deliberately the opposite: it resolves a **fresh `DbContext` per claim/release**
 (through a DI scope), so a claim never joins — or flushes — the unit of work of the request it guards.
 
-> **Retention.** Neither store deletes finalized rows: processed/dead-lettered outbox messages and expired
-> idempotency keys stay in their tables. Schedule a purge that suits your audit needs, e.g.
-> `ExecuteDeleteAsync` over `ProcessedAt` / `ExpiresAt`.
+> **Retention.** Both stores keep their tables bounded on their own, piggybacking on normal operation (no
+> extra job): processed outbox messages are deleted after `EfCoreOutboxStoreOptions.ProcessedRetention`
+> (default 7 days; `null` keeps them forever; **dead-lettered messages are never purged**), at most once per
+> `PurgeInterval`, and expired idempotency keys are swept from the claim path.
 
 > **Not Native-AOT compatible.** EF Core uses runtime query compilation, so the EF integration is marked
 > `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]` and is **not** AOT- or full-trim-safe. If you

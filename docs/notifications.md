@@ -82,7 +82,10 @@ See [Configuration](configuration.md#notificationoptions) for `ConfigureNotifica
 ## Lifecycle notifications
 
 The dispatcher automatically publishes notifications around every request it processes, so you can
-observe command/query/stream execution by simply handling them — no interception required:
+observe command/query/stream execution by simply handling them — no interception required. They are
+pay-for-use: a lifecycle notification is only constructed and published when the container has a handler or
+a notification behavior registered for it, so an application that subscribes to none pays nothing per request.
+Registering a subscriber is all it takes to turn them on.
 
 | Notification | Published | Key members |
 | --- | --- | --- |

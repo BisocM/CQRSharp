@@ -98,6 +98,20 @@ The behavior adapts to which interface your UoW implements:
   transactional requests (within `ExecutionScopeMode.Current`) share one transaction. Savepoints let a
   handler create nested recovery points within a single transaction.
 
+## What counts as failure
+
+A transactional request is rolled back when it **throws** — and also when a command **returns** a failed
+`CommandResult` (`IsSuccess == false`, e.g. `CommandResult.FromError("insufficient funds")`). A command that reports
+failure should not commit its writes or announce events for work it says did not happen, so the unit of work rolls
+back (an implicit one simply never calls `SaveChangesAsync`), the notifications the command published are discarded,
+and the failed result is returned to the caller unchanged — no exception is thrown.
+
+If a handler deliberately persists state *before* returning a failure (recording a failed login attempt, say), opt out:
+
+```csharp
+.UseUnitOfWork<EfCoreUnitOfWork>(factory, o => o.RollbackOnFailedResult = false)
+```
+
 ## Isolation levels
 
 The isolation level for a request is resolved in order:

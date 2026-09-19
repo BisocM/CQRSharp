@@ -2,6 +2,167 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.0.0]
+
+Three things: the authoring surface is **two namespaces** instead of a dozen, a request dispatch costs about what a
+MediatR dispatch does (it was ~6x slower), and an audit of the runtime, the behaviors, both persistence integrations and
+the generator closed several ways a notification could be silently lost or delivered twice, a release-blocking DI bug in
+the EF Core idempotency store, and legal user code the generator turned into a broken build.
+
+### Migrating from 4.x
+
+1. **Usings.** Replace every `using CQRSharp.Abstractions.*;` / `using CQRSharp.Core.*;` that names the authoring surface
+   with `using CQRSharp;`, and add `using CQRSharp.Pipelines;` where you configure the builder, write a behavior, or
+   implement a store / unit of work. With the `CQRSharp` meta-package and `ImplicitUsings` you need neither. Runtime
+   internals (`CQRSharp.Core.Pipelines`, `.Modules`, `.Diagnostics`, `.Background.*`, …) did not move.
+2. **Redis outbox.** The default `KeyPrefix` changed; set `o.KeyPrefix = "cqrsharp:outbox:"` to keep draining messages
+   a 4.x deployment stored (see below).
+3. **Failed results.** A handler that *returns* `CommandResult.FromError(...)` now rolls back its unit of work. If you
+   rely on persisting state before returning a failure, set `UnitOfWorkOptions.RollbackOnFailedResult = false`.
+4. Custom `ICqrsModule` / `IHandlerRegistry` / `IContextFactoryRegistry` implementations keep compiling: the new
+   members are default-implemented.
+
+### Changed
+
+- **Namespaces — breaking.** The consumer-facing surface is flattened to **`CQRSharp`** (requests and base classes,
+  handler interfaces, `CommandResult`, notifications and the lifecycle notification types, request context and its
+  factories, `RequestMetadata`, interceptor contracts, validators, exception hooks, the idempotency / retry /
+  transactional markers, `ICqrsDispatcher`, `AddCqrs` / `AddCqrsGenerated` and their options) and
+  **`CQRSharp.Pipelines`** (`ICqrsBuilder` and the behavior option types, `IPipelineBehavior` /
+  `IStreamPipelineBehavior` / `INotificationPipelineBehavior` and their delegates, `IUnitOfWork`, `IIdempotencyStore`,
+  `IOutbox` / `IOutboxStore` / `OutboxMessage`, `INotificationSerializer`, the store builders,
+  `RateLimitExceededException`). Only namespaces moved: assemblies, package ids and folders are unchanged. The
+  `[Obsolete]` `IRateLimitedContext` alias under `CQRSharp.Pipelines.Behaviors.RateLimiting.Context` is removed.
+- **Dispatch performance.** Measured with `benchmarks/CQRSharp.Benchmarks` (trivial handlers, .NET 8): a request went
+  from ~465 ns / 768 B to ~80 ns / 152 B, a notification publish from ~92 ns to ~60 ns, and a dispatch from a fresh DI
+  scope from ~483 ns to ~270 ns. None of the old cost was reflection; it was work done unconditionally per dispatch.
+  - A **request plan** per request type per provider caches the registry lookups and sorted interceptors, and records
+    whether the provider has *any* pipeline behavior or lifecycle-notification subscriber registered for the request.
+    Stages with nothing registered are skipped rather than resolved-and-found-empty. **Lifecycle notifications are
+    therefore only published when something subscribes to them** (a handler or notification behavior for that
+    notification type); a replaced `INotificationDispatcher`, or a container that cannot answer registration queries,
+    keeps the always-publish behavior.
+  - When nothing brackets the handler, `Send` returns the handler's own task — no state machines, no closures. A
+    synchronous throw still surfaces through the task and the null-result contract is still enforced.
+  - The generator emits **typed handler invokers** (no boxing) and **exact-type route tables** in place of a
+    type-pattern switch, which was linear in the number of request types; routes are merged into one frozen table per
+    provider. A request is matched by its exact runtime type.
+  - Creating a DI scope no longer rebuilds a dictionary of every request type; `ICqrsDispatcher` resolves its
+    sub-dispatchers lazily, and `IPipelineExecutor` / `IRequestDispatcher` / `IStreamRequestDispatcher` are registered
+    transient (the scoped `ICqrsDispatcher` keeps the instance it resolves).
+- **A command that returns a failed `CommandResult` is a failure — breaking.** The unit of work rolls back (or, for an
+  implicit one, does not save) and drops the notifications the command published; the request-level outbox flush
+  abandons them; and the idempotency claim is released, so the caller's retry is no longer rejected as a duplicate for
+  the whole retention window. `UnitOfWorkOptions.RollbackOnFailedResult = false` restores commit-on-failed-result.
+
+- **The outbox can no longer silently drop a notification — breaking.** In `OutboxMode.Enabled` every durable
+  (`[NotificationName]`) notification was buffered in the scoped `IOutbox`, but only a *transactional* unit-of-work ever
+  drained that buffer. A notification published by a plain command, by a request with no unit-of-work behavior, or
+  straight from a controller / hosted service was discarded when the scope ended — no store write, no handler call, no
+  error. The request now owns the buffer: whatever a unit of work has not already persisted atomically is **stored when
+  the request succeeds**, and a publish from **outside any request is written straight to the `IOutboxStore`**. The same
+  applies in `Transactional` mode when the transaction is one your own code started.
+- **A failed request's notifications are discarded.** A handler (or pre-handler) that throws no longer leaves what it
+  published in the scoped outbox, where a retry attempt would persist it twice (`UseResilience` + `UseUnitOfWork`) or the
+  next command in the same scope would commit it for work that never happened. A rolled-back unit of work drops them too.
+- **Request lifecycle contract — breaking for subscribers.** Once `*Initiated` is published a request now *always*
+  reaches a terminal notification: a throwing **pre-handler** produces `CommandFailed` / `QueryFailed` /
+  `StreamFailed` and runs the outcome-aware post-handlers (it used to produce neither). A faulting `*Failed` subscriber
+  can no longer replace the handler's exception. **Streams** now honour the 4.2.0 post-handler contract — a faulted
+  stream reaches `OnAfterHandle` with `RequestOutcome.Threw` — and mark their tracing activity as failed.
+- **Retry semantics.** `UseResilience` treated *every* `OperationCanceledException` as caller cancellation, so the classic
+  transient fault — an `HttpClient` timeout surfacing as `TaskCanceledException` — was never retried. Only a cancellation
+  of the caller's own token is terminal now. A `DuplicateRequestException` is terminal too (it used to be retried through
+  the whole back-off schedule). `UseTimeout` no longer reports a caller cancellation that races the deadline as a
+  `TimeoutException`.
+- **Queue shutdown honours `ShutdownTimeout`.** In-flight background work items were handed the host's stopping token,
+  so they were cancelled the instant shutdown began — the opposite of the documented grace period. They now keep running
+  for `ShutdownTimeout` and are cancelled only when it elapses.
+- **Redis outbox — breaking defaults.** The default `KeyPrefix` is `{cqrsharp:outbox}:` (was `cqrsharp:outbox:`): the
+  hash tag keeps every key the Lua scripts touch in one slot, so the store works on Redis Cluster. *Messages a 4.x
+  deployment stored under the old prefix are not seen* — drain the outbox before upgrading or set the old prefix
+  explicitly. The default `VisibilityTimeout` is 5 minutes (was 30 s): one lease covers a whole sequentially processed
+  batch, so 30 s let a second instance re-deliver the tail of a batch that was still being worked through.
+- **Repository layout.** Projects live flat under `src/` (the `Domain` / `Application` / `Infrastructure` /
+  `Integrations` / `Presentation` layer folders are gone) and the samples moved to `samples/`. Package ids, assembly
+  names and namespaces are unchanged.
+
+### Fixed
+
+- **`CQRSharp.EntityFrameworkCore`: the idempotency store was a singleton injected with the scoped `DbContext`.** Under
+  scope validation (the ASP.NET Core Development default) the host failed to start; otherwise one root context served —
+  and tracked every claim for — the whole process. The store now resolves a fresh context per operation, which also
+  means a claim or release can never flush your own pending changes.
+- **Outbox processor.** A notification handler's own `OperationCanceledException` (an HTTP timeout) escaped the
+  `BackgroundService`, which stops the host by default, and — the attempt never having been recorded — did so again on
+  every lease expiry without ever dead-lettering the message. It is now an ordinary failed attempt. Each message is also
+  dispatched in **its own DI scope**, so one handler's half-tracked `DbContext` state cannot be committed by the next
+  handler or break the store's bookkeeping for the rest of the batch.
+- **Unit of work.** Rollback used the caller's (typically already cancelled) token, leaving the transaction open for
+  every later request in the scope; it now uses `CancellationToken.None`. The streaming unit of work did not roll back
+  when the outbox save or the commit failed, and its tracing span ended before the stream was enumerated.
+- **EF Core stores** detach an entity whose save failed, so a stale row no longer poisons every later write on that
+  context. **Redis outbox:** a late mark can no longer flip a dead-lettered message to processed (or back), and the
+  never-read, never-expiring `done` set — one id per message, forever — is gone.
+- **Idempotency release is owner-checked** in the Redis store (per-claim token, compare-and-delete) and the EF Core store:
+  a claimant whose claim expired mid-flight and was taken over can no longer delete its successor's live claim.
+- **The EF Core tables no longer grow without bound.** Processed outbox messages are purged after
+  `EfCoreOutboxStoreOptions.ProcessedRetention` (default 7 days; dead-lettered messages are kept; `null` keeps
+  everything) and expired idempotency keys are swept — both opportunistically, from the stores' normal operation.
+- **Streaming requests get idempotency enforcement.** Only the command/query behavior was ever registered, so an
+  `IIdempotentRequest` stream was silently unprotected. `StreamIdempotencyBehavior` keeps the claim only if the stream
+  runs to completion.
+- **`CQRSharp.Redis`** rejects two different connection strings instead of silently using the first for both stores.
+- **In-memory stores.** Two pollers could both claim a message whose lease had expired; processed outbox messages and
+  expired idempotency claims were never evicted (contrary to the docs).
+- **Registration is idempotent.** Calling `AddCqrsGenerated(...)` twice on one collection — a library's own wiring plus
+  its host's — registered behaviors and handlers twice: every idempotent request was rejected as its own duplicate and
+  notifications were handled twice.
+- **Metrics:** `cqrsharp.queue.items.current` drifted upward on every `DropNewest` eviction.
+- **`NotificationDispatcher`** cached "has a stable name" in a process-wide static, so two hosts in one process (tests,
+  multi-tenant) shared the first host's answer.
+
+#### Source generator and analyzers
+
+- A **`partial` handler or request** declared across files produced duplicate candidates: a false CQRGEN004 "multiple
+  handlers", duplicate dispatcher arms (CS8510) or a false duplicate-name CQRGEN002.
+- An **array result type** (`QueryBase<UserDto[]>`, `byte[]`) was treated as inaccessible and its binding silently
+  dropped — dispatch threw "no handler" at runtime. Constructed generics are now checked through their type arguments,
+  and `file`-local types are reported instead of emitted.
+- **AOT hints** closed every open-generic behavior over every request without checking constraints, so a
+  `where TRequest : ICommand` behavior next to any query broke the build (CS0311). Hints are emitted only for pairs that
+  satisfy the constraints; record requests and `ICommand<TResult>` are now covered.
+- The generated stream dispatcher relied on the consumer's implicit usings (`ImplicitUsings` disabled ⇒ CS1061).
+- The **outbox serializer** ignored inherited properties (an abstract `DomainEvent`'s `EventId` came back `default`) and
+  read every enum with `GetInt32`, so a `long`/`uint`/`ulong`-backed value outside the `int` range made its message
+  undeliverable.
+- **Interceptor attributes** were rebuilt from constructor arguments only: named arguments were dropped, `params`/array
+  arguments became `null`, and strings, chars and non-`int` numerics rendered as invalid or wrong code.
+- A handler for a **base notification type** (`INotificationHandler<INotification>`) next to a derived one emitted a
+  subsumed switch arm (CS8510); so did a **concrete request deriving from another concrete request**.
+- **CQRA003 / CQRA001** ignored `IResultCommandHandler<,>`, so a same-project value-returning command was reported as
+  having no handler.
+
+### Added
+
+- `IQueueMetricsReporter.ItemEvictedNewest()` (default-implemented, so existing reporters keep compiling).
+- `OutboxMessageFactory` — the one place a buffered notification becomes an `OutboxMessage`.
+- `ICqrsModule.TypedHandlerInvokers` / `RequestRoutes` / `UntypedRequestRoutes`, `IHandlerRegistry.TryGetTypedInvoker`,
+  `IContextFactoryRegistry.TryGetResolver`, and the `RequestRoute` delegates — all default-implemented.
+- `UnitOfWorkOptions.RollbackOnFailedResult`, `EfCoreOutboxStoreOptions.ProcessedRetention` / `PurgeInterval`,
+  `StreamIdempotencyBehavior`.
+- `benchmarks/CQRSharp.Benchmarks` — BenchmarkDotNet dispatch comparison against MediatR and Mediator.
+- A pull-request CI workflow (build with warnings as errors + the test suite), so a change is validated before the
+  release pipeline sees it.
+
+### Known limitations
+
+- **Redis Cluster:** a *custom* outbox `KeyPrefix` must keep a hash tag (`{...}`) for the store to work on a cluster.
+- Queued-but-not-yet-started background work is cancelled at shutdown rather than drained; only in-flight work gets the
+  `ShutdownTimeout` grace period.
+- `RequestContextBase.CreatedAt` still reads the system clock directly (it lives in the netstandard2.0 contracts
+  assembly) rather than going through `TimeProvider`.
+
 ## [4.2.1]
 
 ### Fixed
