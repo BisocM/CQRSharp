@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        Packs templates/cqrsharp as the CQRSharp.Templates template package:
+            dotnet new install CQRSharp.Templates
+            dotnet new cqrsharp -n MyApp
+        Nothing here is compiled; the template's own files ship verbatim as content.
+    -->
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <PackageType>Template</PackageType>
+        <PackageId>CQRSharp.Templates</PackageId>
+        <Title>CQRSharp Templates</Title>
+        <Description>Project templates for CQRSharp, the source-generated, Native-AOT-safe CQRS framework. `dotnet new cqrsharp` scaffolds a working app: AddCqrsGenerated, one query and its handler, dispatched end to end.</Description>
+        <PackageTags>CQRS;Mediator;dotnet-new;templates;AOT;SourceGenerator</PackageTags>
+        <PackageReleaseNotes>See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md</PackageReleaseNotes>
+
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <IncludeContentInPack>true</IncludeContentInPack>
+        <ContentTargetFolders>content</ContentTargetFolders>
+        <EnableDefaultItems>false</EnableDefaultItems>
+        <NoDefaultExcludes>true</NoDefaultExcludes>
+        <IncludeSymbols>false</IncludeSymbols>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <!-- NU5128: a template package has no lib/ folder by design. -->
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Content Include="cqrsharp\**\*" Exclude="cqrsharp\**\bin\**;cqrsharp\**\obj\**"/>
+    </ItemGroup>
+
+</Project>
