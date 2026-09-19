@@ -34,7 +34,10 @@ reflection-based JSON. The libraries build under the .NET AOT analyzers with war
 | The source generator's output | ✅ |
 | `CQRSharp.Pipelines` behaviors | ✅ |
 | `CQRSharp.Redis` stores | ✅ |
+| `CQRSharp.AspNetCore` (result / ProblemDetails mapping) | ✅ — see [ASP.NET Core](aspnetcore.md#native-aot) |
+| Idempotency result replay (`ReplayResultsWith`) | ✅ with a source-generated `JsonSerializerContext` that lists your result types |
 | `CQRSharp.EntityFrameworkCore` stores | ❌ — EF Core uses runtime query compilation (`[RequiresDynamicCode]`) |
+| `CQRSharp.FluentValidation` | ❌ — FluentValidation builds its rules from expression trees; use native `IRequestValidator<T>`s under AOT |
 | A custom serializer using reflection-based `JsonSerializer` | ❌ |
 | A custom store/behavior that uses reflection or `MakeGenericType` | ❌ (your code) |
 
