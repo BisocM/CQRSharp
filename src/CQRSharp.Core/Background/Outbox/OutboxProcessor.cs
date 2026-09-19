@@ -111,6 +111,7 @@ internal sealed class OutboxProcessor : BackgroundService
 
                 // Restore the originating request's trace context so the outbox dispatch links to the same trace.
                 using var activity = StartOutboxActivity(message);
+                var startedAt = _timeProvider.GetTimestamp();
 
                 try
                 {
@@ -119,6 +120,7 @@ internal sealed class OutboxProcessor : BackgroundService
                     if (await RenewIfNeededAsync(outboxStore, claim, claimedAt, stoppingToken).ConfigureAwait(false) is not { } current)
                     {
                         _logger.LogInformation("Lost the claim on outbox message {MessageId} before dispatch; another processor owns it.", message.Id);
+                        RecordOutcome(message, "claim_lost", startedAt);
                         continue;
                     }
 
@@ -136,6 +138,7 @@ internal sealed class OutboxProcessor : BackgroundService
                             "Failed to deserialize notification {NotificationType} (ID: {MessageId}). Marked as failed.",
                             message.NotificationType,
                             message.Id);
+                        RecordOutcome(message, "dead_letter", startedAt);
                         continue;
                     }
 
@@ -146,15 +149,21 @@ internal sealed class OutboxProcessor : BackgroundService
                     }
 
                     if (await outboxStore.MarkAsProcessedAsync(claim, stoppingToken).ConfigureAwait(false))
+                    {
                         _logger.LogInformation(
                             "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
                             message.NotificationType, message.Id);
+                        RecordOutcome(message, "processed", startedAt);
+                    }
                     else
+                    {
                         // Delivered, but the lease ran out during dispatch and someone else holds the message now: this is
                         // the at-least-once case. The other processor's outcome stands; ours must not overwrite it.
                         _logger.LogWarning(
                             "Dispatched notification {NotificationType} (ID: {MessageId}) but its claim had been lost; it may be delivered again.",
                             message.NotificationType, message.Id);
+                        RecordOutcome(message, "claim_lost", startedAt);
+                    }
                 }
                 catch (JsonException jsonEx)
                 {
@@ -162,6 +171,7 @@ internal sealed class OutboxProcessor : BackgroundService
                     // the real cause rather than wasting retries. (Unknown types deserialize to null and are handled above.)
                     _logger.LogError(jsonEx, "Corrupt payload for notification {NotificationType} (ID: {MessageId}); marking as failed.",
                         message.NotificationType, message.Id);
+                    RecordOutcome(message, "dead_letter", startedAt);
                     try
                     {
                         await outboxStore.MarkAsFailedAsync(claim, jsonEx.ToString(), stoppingToken).ConfigureAwait(false);
@@ -183,6 +193,7 @@ internal sealed class OutboxProcessor : BackgroundService
                     try
                     {
                         var attempt = message.AttemptCount + 1;
+                        RecordOutcome(message, attempt >= _options.MaxRetryAttempts ? "dead_letter" : "retry", startedAt);
                         if (attempt >= _options.MaxRetryAttempts)
                         {
                             if (await outboxStore.MarkAsFailedAsync(claim, ex.ToString(), stoppingToken).ConfigureAwait(false))
@@ -211,6 +222,12 @@ internal sealed class OutboxProcessor : BackgroundService
             await ReleaseRemainingAsync(outboxStore, outboxMessages, index).ConfigureAwait(false);
             throw;
         }
+    }
+
+    private void RecordOutcome(OutboxMessage message, string outcome, long startedAt)
+    {
+        if (CqrsMetrics.OutboxMessages.Enabled || CqrsMetrics.OutboxDispatchDuration.Enabled)
+            CqrsMetrics.RecordOutbox(message.NotificationType, outcome, _timeProvider.GetElapsedTime(startedAt));
     }
 
     // Renews once half of the lease the message was claimed with has elapsed; a short batch never pays for a renewal.

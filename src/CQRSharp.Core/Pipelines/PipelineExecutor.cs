@@ -209,9 +209,10 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
     {
         var activity = CqrsActivitySource.StartRequest(activityName, typeof(TRequest));
 
-        // Untraced with the outbox off (the defaults) there is nothing to settle when the request ends, so nothing needs
-        // to wrap the pipeline: hand back its task directly. Only an asynchronously hydrated context needs an await.
-        if (activity is null && !_outboxEnabled)
+        // Untraced, unmetered and with the outbox off (the defaults) there is nothing to settle when the request ends, so
+        // nothing needs to wrap the pipeline: hand back its task directly. Only an asynchronously hydrated context needs
+        // an await.
+        if (activity is null && !_outboxEnabled && !CqrsMetrics.RequestDuration.Enabled)
             try
             {
                 var plan = _plans.Get<TRequest, TResult>();
@@ -225,7 +226,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
                 return Task.FromException<TResult>(ex);
             }
 
-        return ExecuteSettledAsync<TRequest, TResult>(activity, request, provider, ct);
+        return ExecuteSettledAsync<TRequest, TResult>(activity, activityName, request, provider, ct);
     }
 
     private async Task<TResult> AwaitContextThenExecuteAsync<TRequest, TResult>(
@@ -243,6 +244,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
     // The traced and/or outbox-owning path: the activity status and the outbox buffer are settled when the request ends.
     private async Task<TResult> ExecuteSettledAsync<TRequest, TResult>(
         Activity? startedActivity,
+        string activityName,
         TRequest request,
         IServiceProvider provider,
         CancellationToken ct)
@@ -254,6 +256,9 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         // persisted on success and discarded on failure, so a buffered notification is never silently dropped.
         var outboxScope = _outboxEnabled ? RequestOutboxScope.Begin(provider) : null;
         var outboxSettled = false;
+        var metered = CqrsMetrics.RequestDuration.Enabled;
+        var startedAt = metered ? _timeProvider.GetTimestamp() : 0L;
+        var kind = ReferenceEquals(activityName, CommandActivityName) ? "command" : "query";
         try
         {
             var plan = _plans.Get<TRequest, TResult>();
@@ -272,12 +277,18 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
             }
 
             activity?.SetStatus(ActivityStatusCode.Ok);
+            if (metered)
+                CqrsMetrics.RecordRequest(typeof(TRequest), kind, result is not CommandResult { IsSuccess: false }, _timeProvider.GetElapsedTime(startedAt));
+
             return result;
         }
         catch (Exception ex)
         {
             if (!outboxSettled) outboxScope?.Abandon();
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            if (metered)
+                CqrsMetrics.RecordRequest(typeof(TRequest), kind, false, _timeProvider.GetElapsedTime(startedAt));
+
             throw;
         }
     }

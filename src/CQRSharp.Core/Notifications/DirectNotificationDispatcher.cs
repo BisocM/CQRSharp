@@ -47,6 +47,10 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
     {
         ArgumentNullException.ThrowIfNull(notification);
 
+        if (Diagnostics.CqrsMetrics.NotificationsPublished.Enabled)
+            Diagnostics.CqrsMetrics.NotificationsPublished.Add(
+                1, new KeyValuePair<string, object?>("cqrsharp.notification.type", typeof(TNotification).Name));
+
         // GetServices returns a freshly-allocated array per resolution (Microsoft DI), so the in-place priority sort
         // below is concurrency-safe and never mutates a shared/cached collection.
         var resolvedBehaviors = _services.GetServices<INotificationPipelineBehavior<TNotification>>();

@@ -17,7 +17,7 @@ public sealed partial class PipelineExecutor
     private IAsyncEnumerable<TItem>? TryExecuteBareStream<TRequest, TItem>(TRequest request, CancellationToken ct)
         where TRequest : IStreamRequest<TItem>
     {
-        if (_outboxEnabled || CqrsActivitySource.Instance.HasListeners()) return null;
+        if (_outboxEnabled || CqrsActivitySource.Instance.HasListeners() || CqrsMetrics.RequestDuration.Enabled) return null;
 
         try
         {
@@ -100,6 +100,9 @@ public sealed partial class PipelineExecutor
         // when it faults or the consumer stops enumerating early (the finally below runs on iterator disposal too).
         var outboxScope = _outboxEnabled ? RequestOutboxScope.Begin(provider) : null;
         var outboxSettled = false;
+        var metered = CqrsMetrics.RequestDuration.Enabled;
+        var startedAt = metered ? _timeProvider.GetTimestamp() : 0L;
+        var succeeded = false;
         try
         {
             IAsyncEnumerable<TItem> pipeline;
@@ -151,10 +154,15 @@ public sealed partial class PipelineExecutor
                 await completedScope.CompleteAsync(cancellationToken).ConfigureAwait(false);
 
             activity?.SetStatus(ActivityStatusCode.Ok);
+            succeeded = true;
         }
         finally
         {
             if (!outboxSettled) outboxScope?.Abandon();
+
+            // A stream the consumer abandons early is recorded as a failure: it did not run to completion.
+            if (metered)
+                CqrsMetrics.RecordRequest(typeof(TRequest), "stream", succeeded, _timeProvider.GetElapsedTime(startedAt));
         }
     }
 

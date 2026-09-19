@@ -10,7 +10,7 @@ internal static class PipelineTelemetry
     /// <summary>
     ///     A single ActivitySource for all CQRSharp pipeline operations.
     /// </summary>
-    private static readonly ActivitySource Source = new("CQRSharp.Pipelines");
+    private static readonly ActivitySource Source = new(Core.Diagnostics.CqrsTelemetry.PipelinesActivitySourceName);
 
     /// <summary>
     ///     Starts a new activity for a pipeline operation and adds standard tags.

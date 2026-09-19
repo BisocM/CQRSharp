@@ -13,7 +13,7 @@ namespace CQRSharp.Core.Background.TaskQueue.Telemetry;
 /// </remarks>
 public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
 {
-    private const string MeterName = "CQRSharp.Core.BackgroundTasks";
+    private const string MeterName = Diagnostics.CqrsTelemetry.BackgroundTasksMeterName;
     private const string MeterVersion = "1.0.0";
 
     private readonly ObservableGauge<long> _currentGauge;
