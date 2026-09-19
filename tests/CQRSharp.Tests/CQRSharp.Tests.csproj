@@ -70,6 +70,7 @@
         <ProjectReference Include="..\CQRSharp.Tests.ExternalModule\CQRSharp.Tests.ExternalModule.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.FluentValidation\CQRSharp.FluentValidation.csproj"/>
     </ItemGroup>
 
     <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator
