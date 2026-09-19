@@ -35,7 +35,7 @@ the EF Core idempotency store, and legal user code the generator turned into a b
   `[Obsolete]` `IRateLimitedContext` alias under `CQRSharp.Pipelines.Behaviors.RateLimiting.Context` is removed.
 - **Dispatch performance.** Measured with `benchmarks/CQRSharp.Benchmarks` (trivial handlers, .NET 8): a request went
   from ~465 ns / 768 B to ~80 ns / 152 B, a notification publish from ~92 ns to ~60 ns, and a dispatch from a fresh DI
-  scope from ~483 ns to ~270 ns. None of the old cost was reflection; it was work done unconditionally per dispatch.
+  scope from ~483 ns to ~215 ns. None of the old cost was reflection; it was work done unconditionally per dispatch.
   - A **request plan** per request type per provider caches the registry lookups and sorted interceptors, and records
     whether the provider has *any* pipeline behavior or lifecycle-notification subscriber registered for the request.
     Stages with nothing registered are skipped rather than resolved-and-found-empty. **Lifecycle notifications are

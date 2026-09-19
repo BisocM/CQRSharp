@@ -146,9 +146,9 @@ Apache-2.0 release.
 | Notification | CQRSharp | 60.52 ns | 0.79× | 80 B |
 | Notification | MediatR 12.5 | 76.33 ns | 1.00× | 312 B |
 | Notification | Mediator 3.0 (source-gen) | 41.78 ns | 0.55× | 24 B |
-| Request in a new DI scope | CQRSharp | 255.45 ns | 1.87× | 720 B |
-| Request in a new DI scope | MediatR 12.5 | 136.93 ns | 1.00× | 568 B |
-| Request in a new DI scope | Mediator 3.0 (source-gen) | 169.52 ns | 1.24× | 536 B |
+| Request in a new DI scope | CQRSharp | 215.0 ns | 1.56× | 720 B |
+| Request in a new DI scope | MediatR 12.5 | 138.3 ns | 1.00× | 568 B |
+| Request in a new DI scope | Mediator 3.0 (source-gen) | 171.4 ns | 1.24× | 536 B |
 
 <sub>BenchmarkDotNet v0.15.8, Windows 11 (10.0.22631.5039/23H2/2023Update/SunValley3); AMD Ryzen 9 7950X3D 4.20GHz; .NET 8.0.26</sub>
 
@@ -156,8 +156,8 @@ How to read it: **in-scope dispatch is on par with MediatR** (and publishes noti
 about half as much; **Mediator is the fastest of the three** and the one to pick if raw in-process throughput is the goal.
 The last row is what a web request actually pays — a fresh DI scope, the dispatcher resolved from it, one dispatch — and
 there CQRSharp is the slowest: `ICqrsDispatcher` is deliberately *scoped* (so a singleton cannot capture one and
-dispatch from the root provider), and each dispatch also creates a request context. It is ~120 ns, next to a handler
-that does any I/O it is noise, but it is the honest number.
+dispatch from the root provider), and MS DI charges the first scoped resolution in a scope for its resolved-services
+cache. It is ~75 ns; next to a handler that does any I/O it is noise, but it is the honest number.
 
 Two design points make the in-scope numbers possible without giving anything up: lifecycle notifications and pipeline
 stages are **pay-for-use** (nothing is resolved or published for a stage the container has no registration for), and

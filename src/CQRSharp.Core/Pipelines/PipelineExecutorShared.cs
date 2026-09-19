@@ -33,6 +33,38 @@ internal sealed class PipelineExecutorShared(
     /// </summary>
     public Modules.ModuleRouteTable? RouteTable => _routeTable ??= rootProvider.GetService<Modules.ModuleRouteTable>();
 
+    private bool? _usesDefaultRequestWiring;
+
+    /// <summary>
+    ///     Whether <see cref="IRequestDispatcher" /> and <see cref="IPipelineExecutor" /> are the built-in registrations.
+    ///     When they are, the façade builds the pair directly from this singleton — one container lookup per scope instead
+    ///     of three. Probed once, from a throwaway scope; any replacement (a decorator, a test double) turns it off and the
+    ///     façade goes back to resolving through the container, so a custom registration is always honoured.
+    /// </summary>
+    public bool UsesDefaultRequestWiring
+    {
+        get
+        {
+            if (_usesDefaultRequestWiring is { } known) return known;
+
+            bool isDefault;
+            try
+            {
+                using var scope = ScopeFactory.CreateScope();
+                isDefault = RouteTable is not null &&
+                            scope.ServiceProvider.GetService<IRequestDispatcher>()
+                                is Modules.CompositeRequestDispatcher { Executor: PipelineExecutor { Shared: not null } };
+            }
+            catch
+            {
+                isDefault = false;
+            }
+
+            _usesDefaultRequestWiring = isDefault;
+            return isDefault;
+        }
+    }
+
     public IServiceScopeFactory ScopeFactory { get; } = scopeFactory;
     public IRequestRegistry RequestRegistry { get; } = requestRegistry;
     public IHandlerRegistry HandlerRegistry { get; } = handlerRegistry;

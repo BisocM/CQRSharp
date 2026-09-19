@@ -162,6 +162,9 @@ internal sealed class ModuleRouteTable
 /// </summary>
 internal sealed class CompositeRequestDispatcher(ModuleRouteTable table, IPipelineExecutor pipelineExecutor) : IRequestDispatcher
 {
+    /// <summary>The executor this dispatcher routes into (lets the wiring probe recognise the default composition).</summary>
+    internal IPipelineExecutor Executor => pipelineExecutor;
+
     // Only for modules that expose no routes: their own dispatcher, created on first use in this scope.
     private Dictionary<ICqrsModule, IRequestDispatcher>? _moduleDispatchers;
 

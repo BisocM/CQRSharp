@@ -1,4 +1,5 @@
 using CQRSharp.Pipelines;
+using CQRSharp.Core.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -75,6 +76,35 @@ public sealed class BareHandlerFastPathTests
         await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Send(new FastQuery { Mode = FastMode.Value });
 
         seen.Should().Equal("initiated", "completed");
+    }
+
+    [Fact(DisplayName = "A replaced IRequestDispatcher is honoured: the direct-construction shortcut only applies to the built-in wiring")]
+    public async Task Replaced_request_dispatcher_is_used()
+    {
+        var calls = new List<string>();
+        await using var provider = Build(services =>
+        {
+            services.AddSingleton(calls);
+            services.AddTransient<IRequestDispatcher, RecordingRequestDispatcher>();
+        });
+        await using var scope = provider.CreateAsyncScope();
+
+        var act = () => scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Send(new FastQuery { Mode = FastMode.Value });
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        calls.Should().Equal(nameof(FastQuery));
+    }
+
+    private sealed class RecordingRequestDispatcher(List<string> calls) : IRequestDispatcher
+    {
+        public Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
+        {
+            calls.Add(request.GetType().Name);
+            throw new NotSupportedException("custom dispatcher reached");
+        }
+
+        public Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
     }
 
     // Private, so the generator does not auto-register them: an assembly-wide subscriber would switch the fast path off

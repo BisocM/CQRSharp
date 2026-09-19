@@ -42,6 +42,6 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.22631.5039/23H2/2023Update/SunValley3)
 | Notification | CQRSharp | 60.52 ns | 0.79× | 80 B |
 | Notification | MediatR 12.5 | 76.33 ns | 1.00× | 312 B |
 | Notification | Mediator 3.0 (source-gen) | 41.78 ns | 0.55× | 24 B |
-| Request in a new DI scope | CQRSharp | 255.45 ns | 1.87× | 720 B |
-| Request in a new DI scope | MediatR 12.5 | 136.93 ns | 1.00× | 568 B |
-| Request in a new DI scope | Mediator 3.0 (source-gen) | 169.52 ns | 1.24× | 536 B |
+| Request in a new DI scope | CQRSharp | 215.0 ns | 1.56× | 720 B |
+| Request in a new DI scope | MediatR 12.5 | 138.3 ns | 1.00× | 568 B |
+| Request in a new DI scope | Mediator 3.0 (source-gen) | 171.4 ns | 1.24× | 536 B |

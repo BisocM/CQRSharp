@@ -1,4 +1,3 @@
-using CQRSharp;
 using CQRSharp.Pipelines;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
@@ -27,8 +26,17 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         _services = services ?? throw new ArgumentNullException(nameof(services));
     }
 
-    private IRequestDispatcher Requests
-        => _requestDispatcher ??= _services!.GetRequiredService<IRequestDispatcher>();
+    private IRequestDispatcher Requests => _requestDispatcher ??= CreateRequestDispatcher();
+
+    // With the built-in registrations in place, the dispatcher and its executor are built straight from the provider-wide
+    // singleton: one container lookup for the scope's first Send instead of three. Anything custom is resolved normally.
+    private IRequestDispatcher CreateRequestDispatcher()
+    {
+        var shared = _services!.GetService<PipelineExecutorShared>();
+        return shared is { UsesDefaultRequestWiring: true }
+            ? new Core.Modules.CompositeRequestDispatcher(shared.RouteTable!, new PipelineExecutor(_services!, shared))
+            : _services!.GetRequiredService<IRequestDispatcher>();
+    }
 
     private IStreamRequestDispatcher Streams
         => _streamRequestDispatcher ??= _services!.GetRequiredService<IStreamRequestDispatcher>();
