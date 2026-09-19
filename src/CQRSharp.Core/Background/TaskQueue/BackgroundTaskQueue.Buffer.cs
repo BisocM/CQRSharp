@@ -84,7 +84,7 @@ internal sealed partial class BackgroundTaskQueue
         _completion.Cancel();
     }
 
-    private void DrainAndCancelPending()
+    private int DrainAndCancelPending()
     {
         QueueEntry[] pending;
         int pendingCount;
@@ -92,7 +92,7 @@ internal sealed partial class BackgroundTaskQueue
         lock (_gate)
         {
             pendingCount = _count;
-            if (pendingCount == 0) return;
+            if (pendingCount == 0) return 0;
 
             pending = new QueueEntry[pendingCount];
             for (var i = 0; i < pendingCount; i++)
@@ -115,6 +115,8 @@ internal sealed partial class BackgroundTaskQueue
         // cancelled token rather than _shutdownToken (which may not be cancelled yet on an explicit Dispose).
         for (var i = 0; i < pendingCount; i++)
             pending[i].Cancel(_completion.Token);
+
+        return pendingCount;
     }
 
     private void EnqueueLocked(QueueEntry entry)

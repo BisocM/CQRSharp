@@ -18,4 +18,13 @@ internal interface IBackgroundTaskQueue
     ///     Dequeues the next work item, waiting asynchronously until one is available.
     /// </summary>
     internal ValueTask<QueuedTask> DequeueAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Stops accepting new work. What is already queued can still be dequeued; once it is gone,
+    ///     <see cref="DequeueAsync" /> throws <see cref="System.Threading.Channels.ChannelClosedException" />.
+    /// </summary>
+    internal void CompleteAdding();
+
+    /// <summary>Cancels every work item still queued, so nothing awaiting one hangs. Returns how many there were.</summary>
+    internal int CancelPending();
 }

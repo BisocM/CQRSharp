@@ -111,6 +111,10 @@ internal sealed partial class BackgroundTaskQueue : IBackgroundTaskQueue, IBackg
     ValueTask<QueuedTask> IBackgroundTaskQueue.DequeueAsync(CancellationToken cancellationToken) =>
         DequeueAsync(cancellationToken);
 
+    void IBackgroundTaskQueue.CompleteAdding() => Complete();
+
+    int IBackgroundTaskQueue.CancelPending() => DrainAndCancelPending();
+
     /// <summary>
     ///     Disposes resources used by the queue, such as completing the channels and disposing the semaphore.
     /// </summary>

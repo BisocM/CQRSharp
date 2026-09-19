@@ -76,11 +76,19 @@ public sealed class BackgroundTaskQueueOptions
     public TimeSpan NotificationRetryDelay { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    ///     When the host begins shutting down, how long to wait for in‑flight tasks
-    ///     to complete gracefully before cancelling them.
-    ///     Default is 30 seconds.
+    ///     When the host begins shutting down, how long in-flight work - and, with <see cref="DrainOnShutdown" />, work
+    ///     still waiting in the queue - gets to finish before it is cancelled. Keep it under the host's own
+    ///     <c>HostOptions.ShutdownTimeout</c>. Default is 30 seconds.
     /// </summary>
     public TimeSpan ShutdownTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     Whether shutdown also runs the work that is still <em>queued</em>, not just what is already executing. The
+    ///     queue stops accepting new work the moment shutdown begins; whatever <see cref="ShutdownTimeout" /> does not
+    ///     cover is cancelled, so nothing awaiting a queued item hangs. Set to <see langword="false" /> to cancel queued
+    ///     work immediately instead. Default is <see langword="true" />.
+    /// </summary>
+    public bool DrainOnShutdown { get; set; } = true;
 
     /// <summary>
     ///     How long a <see cref="CQRSharp.RunMode.Queued" /> dispatch waits for the background queue consumer to start

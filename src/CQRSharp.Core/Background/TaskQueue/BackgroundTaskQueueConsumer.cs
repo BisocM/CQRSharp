@@ -22,6 +22,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     /// </summary>
     private readonly List<Task> _processingTasks = new();
 
+    private readonly bool _drainOnShutdown;
     private readonly TimeSpan _shutdownTimeout;
 
     // The token handed to work items. Deliberately NOT the host's stoppingToken: that fires the instant shutdown
@@ -58,6 +59,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 
         _concurrencyLimiter = new SemaphoreSlim(maxConcurrency, maxConcurrency);
         _shutdownTimeout = opts.ShutdownTimeout;
+        _drainOnShutdown = opts.DrainOnShutdown;
     }
 
     /// <summary>
@@ -75,38 +77,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 
         try
         {
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                // Acquire a concurrency slot BEFORE dequeuing. If we dequeued first and cancellation then interrupted
-                // the slot wait, the dequeued task would be dropped without its work item ever running, and the caller
-                // awaiting its Task (e.g. Send under RunMode.Queued) would hang forever — its completion source is only
-                // driven by executing the work item.
-                await _concurrencyLimiter.WaitAsync(stoppingToken).ConfigureAwait(false);
-
-                QueuedTask queuedTask;
-                try
-                {
-                    queuedTask = await _taskQueue.DequeueAsync(stoppingToken).ConfigureAwait(false);
-                }
-                catch (ChannelClosedException)
-                {
-                    // The queue was completed/disposed. Release the slot we just took and stop.
-                    _concurrencyLimiter.Release();
-                    break;
-                }
-                catch
-                {
-                    // Dequeue failed/cancelled after acquiring the slot but before the task is tracked; release the
-                    // slot (the TrackTask continuation never ran to release it) and let the outer handler observe it.
-                    _concurrencyLimiter.Release();
-                    throw;
-                }
-
-                // Create a task to process the work item, and track it for graceful shutdown. The slot is released by
-                // the TrackTask continuation when the work item completes.
-                var processingTask = ProcessWorkItemAsync(queuedTask, _workCancellation.Token);
-                TrackTask(processingTask);
-            }
+            await ConsumeAsync(stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -118,35 +89,90 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
         }
         finally
         {
-            // This block ensures that upon shutdown, we wait for all active tasks to finish.
-            _logger.LogInformation("Consumer loop ending. Waiting for {Count} active task(s) to complete.", _processingTasks.Count);
+            await ShutDownAsync().ConfigureAwait(false);
+        }
+    }
 
-            // Create a snapshot of the tasks to wait for.
+    // Runs until the token is cancelled (throws) or the queue is completed and empty (returns).
+    private async Task ConsumeAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            // Acquire a concurrency slot BEFORE dequeuing. If we dequeued first and cancellation then interrupted
+            // the slot wait, the dequeued task would be dropped without its work item ever running, and the caller
+            // awaiting its Task (e.g. Send under RunMode.Queued) would hang forever: its completion source is only
+            // driven by executing the work item.
+            await _concurrencyLimiter.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            QueuedTask queuedTask;
+            try
+            {
+                queuedTask = await _taskQueue.DequeueAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ChannelClosedException)
+            {
+                // The queue was completed/disposed and is empty. Release the slot we just took and stop.
+                _concurrencyLimiter.Release();
+                return;
+            }
+            catch
+            {
+                // Dequeue failed/cancelled after acquiring the slot but before the task is tracked; release the
+                // slot (the TrackTask continuation never ran to release it) and let the caller observe it.
+                _concurrencyLimiter.Release();
+                throw;
+            }
+
+            // Create a task to process the work item, and track it for graceful shutdown. The slot is released by
+            // the TrackTask continuation when the work item completes.
+            var processingTask = ProcessWorkItemAsync(queuedTask, _workCancellation.Token);
+            TrackTask(processingTask);
+        }
+    }
+
+    // One ShutdownTimeout budget covers both the queued backlog and the in-flight work. New work is refused from the
+    // first moment; whatever the budget does not cover is cancelled, so no caller awaiting a queued item is left hanging.
+    private async Task ShutDownAsync()
+    {
+        using var deadline = new CancellationTokenSource(_shutdownTimeout, _timeProvider);
+        try
+        {
+            _taskQueue.CompleteAdding();
+
+            if (_drainOnShutdown)
+                await ConsumeAsync(deadline.Token).ConfigureAwait(false);
+
             Task[] tasksToWaitFor;
             lock (_processingTasks)
             {
                 tasksToWaitFor = _processingTasks.ToArray();
             }
 
-            try
-            {
-                // Wait for all tasks to complete, with a final shutdown timeout.
-                using var cts = new CancellationTokenSource(_shutdownTimeout, _timeProvider);
-                var allTasks = Task.WhenAll(tasksToWaitFor);
-                await allTasks.WaitAsync(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogWarning("Graceful shutdown timed out after {Timeout}. Cancelling the remaining background tasks.", _shutdownTimeout);
-                _workCancellation.Cancel();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while waiting for active tasks to complete during shutdown.");
-            }
-
-            _logger.LogInformation("All active tasks have completed. Consumer stopped.");
+            _logger.LogInformation("Waiting for {Count} active background task(s) to complete.", tasksToWaitFor.Length);
+            await Task.WhenAll(tasksToWaitFor).WaitAsync(deadline.Token).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Graceful shutdown timed out after {Timeout}. Cancelling the remaining background tasks.", _shutdownTimeout);
+            _workCancellation.Cancel();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while waiting for background tasks to complete during shutdown.");
+        }
+
+        try
+        {
+            var abandoned = _taskQueue.CancelPending();
+            if (abandoned > 0)
+                _logger.LogWarning("Cancelled {Count} queued background task(s) that did not get to run before shutdown.", abandoned);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while cancelling the queued background tasks during shutdown.");
+        }
+
+        _logger.LogInformation("Background task queue consumer stopped.");
     }
 
     /// <summary>
