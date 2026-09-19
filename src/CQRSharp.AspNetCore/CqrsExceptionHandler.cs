@@ -32,9 +32,16 @@ internal sealed class CqrsExceptionHandler(IOptions<CqrsProblemDetailsOptions> o
         // The ProblemDetails writers serialize Status but do not apply it to the response.
         httpContext.Response.StatusCode = problemDetails.Status!.Value;
 
-        if (exception is RateLimitExceededException && settings.RateLimitRetryAfter is { } retryAfter)
+        var retryAfter = exception switch
         {
-            var seconds = Math.Max(1, (long)Math.Ceiling(retryAfter.TotalSeconds));
+            RateLimitExceededException => settings.RateLimitRetryAfter,
+            DuplicateRequestException { IsInProgress: true } => settings.DuplicateInProgressRetryAfter,
+            _ => null
+        };
+
+        if (retryAfter is { } delay)
+        {
+            var seconds = Math.Max(1, (long)Math.Ceiling(delay.TotalSeconds));
             httpContext.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
         }
 

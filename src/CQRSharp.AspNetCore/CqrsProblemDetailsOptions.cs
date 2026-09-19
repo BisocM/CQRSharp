@@ -54,4 +54,12 @@ public sealed class CqrsProblemDetailsOptions
     ///     derived from the exception; set this to the window you configured for the rate-limiting behavior.
     /// </remarks>
     public TimeSpan? RateLimitRetryAfter { get; set; }
+
+    /// <summary>
+    ///     The <c>Retry-After</c> (rounded up to whole seconds) sent with a duplicate-request response whose original
+    ///     request is <em>still running</em> (<see cref="DuplicateRequestException.IsInProgress" />): the client should
+    ///     simply ask again shortly, and will then get the original result replayed. Defaults to one second;
+    ///     <see langword="null" /> sends no header. A duplicate whose original already completed never gets one.
+    /// </summary>
+    public TimeSpan? DuplicateInProgressRetryAfter { get; set; } = TimeSpan.FromSeconds(1);
 }

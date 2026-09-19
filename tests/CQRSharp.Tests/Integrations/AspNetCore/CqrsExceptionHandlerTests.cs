@@ -85,6 +85,20 @@ public sealed class CqrsExceptionHandlerTests
         body.GetProperty("status").GetInt32().Should().Be(409);
         body.GetProperty("title").GetString().Should().Be("Conflict");
         body.GetProperty("detail").GetString().Should().Be("A request with idempotency key 'order-17' has already been processed.");
+        response.Headers.RetryAfter.Should().BeNull("the original already completed; asking again will not change the answer");
+    }
+
+    [Fact(DisplayName = "A duplicate whose original is still running maps to 409 with Retry-After, so the client asks again and gets the replay")]
+    public async Task In_progress_duplicate_carries_retry_after()
+    {
+        await using var host = await StartAsync(() => new DuplicateRequestException("order-17", isInProgress: true));
+
+        var response = await host.Client.GetAsync("/");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(1));
+        var body = await AspNetCoreTestHost.ReadJsonAsync(response);
+        body.GetProperty("detail").GetString().Should().Be("A request with idempotency key 'order-17' is still being processed.");
     }
 
     [Fact(DisplayName = "RateLimitExceededException maps to 429 without leaking the request or user id, and without Retry-After by default")]
