@@ -18,42 +18,6 @@ public sealed partial class PipelineExecutor
             : string.CompareOrdinal(left.GetType().FullName, right.GetType().FullName);
     }
 
-    private sealed class PreHandlerPriorityComparer : IComparer<IPreHandlerAttribute>
-    {
-        private PreHandlerPriorityComparer()
-        {
-        }
-
-        public static PreHandlerPriorityComparer Instance { get; } = new();
-
-        public int Compare(IPreHandlerAttribute? x, IPreHandlerAttribute? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x is null) return -1;
-            if (y is null) return 1;
-
-            return CompareByPriorityThenName(x.PreHandlerExecutionPriority, y.PreHandlerExecutionPriority, x, y);
-        }
-    }
-
-    private sealed class PostHandlerPriorityComparer : IComparer<IPostHandlerAttribute>
-    {
-        private PostHandlerPriorityComparer()
-        {
-        }
-
-        public static PostHandlerPriorityComparer Instance { get; } = new();
-
-        public int Compare(IPostHandlerAttribute? x, IPostHandlerAttribute? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x is null) return -1;
-            if (y is null) return 1;
-
-            return CompareByPriorityThenName(x.PostHandlerExecutionPriority, y.PostHandlerExecutionPriority, x, y);
-        }
-    }
-
     private sealed class BehaviorPriorityComparer<TRequest, TResult> : IComparer<IPipelineBehavior<TRequest, TResult>> where TRequest : IRequest
     {
         private BehaviorPriorityComparer()

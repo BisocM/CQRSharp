@@ -91,38 +91,18 @@ public sealed partial class CqrsSourceGenerator
         return $"new {fullyQualifiedInterfaceName}[] {{ {string.Join(", ", instancesCode)} }}";
     }
 
-    private static void GenerateHandlerRegistry(StringBuilder sb, Dictionary<string, List<HandlerImplModel>> handlerBindingsByRequest)
-    {
-        sb.AppendLine();
-        sb.AppendLine("            // Registering Handler Registry");
-        sb.AppendLine("            var handlerInvokerMappings = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();");
-
-        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
-        {
-            var bindings = kvp.Value;
-            if (bindings.Count == 0) continue;
-            var selected = SelectDeterministicBinding(bindings);
-
-            var requestType = selected.RequestTypeName;
-            var handlerInterface = selected.InterfaceNameNullable;
-            var invokerLambda = selected.Kind == HandlerKind.Stream
-                ? $"(handler, request, ct) => global::System.Threading.Tasks.Task.FromResult((object?)(({handlerInterface})handler).Handle(({requestType})request, ct))"
-                : $"async (handler, request, ct) => (object?)await (({handlerInterface})handler).Handle(({requestType})request, ct).ConfigureAwait(false)";
-            sb.AppendLine($"            handlerInvokerMappings.TryAdd(typeof({requestType}), {invokerLambda});");
-        }
-    }
-
-    // The hot-path invoker for commands and queries: a static lambda that returns the handler's own Task<TResult>, so a
-    // dispatch neither boxes the result nor pays for the extra async state machine the object-returning invoker needs.
-    // The executor casts it back to Func<object, TRequest, CancellationToken, Task<TResult>> with the same TResult the
-    // generated dispatcher closes ExecuteCommandAsync/ExecuteQueryAsync over.
-    private static void GenerateTypedHandlerRegistry(
+    // One typed invoker per request: a static lambda that returns the handler's own Task<TResult> (commands, queries) or
+    // IAsyncEnumerable<TItem> (streams), so a dispatch neither boxes the result nor pays for an async wrapper. The executor
+    // casts it back to Func<object, TRequest, CancellationToken, ...> with the same result type the generated dispatcher
+    // closes the executor's entry point over.
+    private static void GenerateHandlerRegistry(
         StringBuilder sb,
         Dictionary<string, List<HandlerImplModel>> handlerBindingsByRequest,
         KnownSnapshot known)
     {
         sb.AppendLine();
-        sb.AppendLine("            var typedInvokerMappings = new Dictionary<Type, Delegate>();");
+        sb.AppendLine("            // Registering Handler Registry");
+        sb.AppendLine("            var handlerInvokerMappings = new Dictionary<Type, Delegate>();");
         // The delegate is closed over the un-annotated result type (nullability is erased at runtime, and that is the
         // type the executor casts to); a handler declared over 'User?' would otherwise warn on the conversion.
         sb.AppendLine("#pragma warning disable CS8619, CS8620");
@@ -132,14 +112,18 @@ public sealed partial class CqrsSourceGenerator
             var bindings = kvp.Value;
             if (bindings.Count == 0) continue;
             var selected = SelectDeterministicBinding(bindings);
-            if (selected.Kind == HandlerKind.Stream) continue;
 
+            // Streams record their result as IAsyncEnumerable<TItem>; the handler returns it directly (no Task).
             var resultType = selected.Kind == HandlerKind.Command ? known.CommandResultTypeName : selected.ResultTypeName;
             if (string.IsNullOrEmpty(resultType)) continue;
 
+            var returnType = selected.Kind == HandlerKind.Stream
+                ? resultType
+                : $"global::System.Threading.Tasks.Task<{resultType}>";
+
             var requestType = selected.RequestTypeName;
             sb.AppendLine(
-                $"            typedInvokerMappings[typeof({requestType})] = new Func<object, {requestType}, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<{resultType}>>(" +
+                $"            handlerInvokerMappings[typeof({requestType})] = new Func<object, {requestType}, global::System.Threading.CancellationToken, {returnType}>(" +
                 $"static (handler, request, ct) => (({selected.InterfaceNameNullable})handler).Handle(request, ct));");
         }
 

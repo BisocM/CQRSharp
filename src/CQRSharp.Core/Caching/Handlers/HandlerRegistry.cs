@@ -1,19 +1,14 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 
 namespace CQRSharp.Core.Caching.Handlers;
 
-/// <inheritdoc />
-public class HandlerRegistry(
-    ConcurrentDictionary<Type, HandlerInvokerDelegate> handlerMap,
-    ConcurrentDictionary<Type, Delegate>? typedInvokerMap = null) : IHandlerRegistry
+/// <summary>
+///     The default <see cref="IHandlerRegistry" />: a lookup over the invokers merged from every registered module.
+/// </summary>
+/// <param name="invokers">The typed handler invokers, keyed by request type.</param>
+public class HandlerRegistry(ConcurrentDictionary<Type, Delegate> invokers) : IHandlerRegistry
 {
     /// <inheritdoc />
-    public Delegate? TryGetTypedInvoker(Type requestType)
-        => typedInvokerMap is not null && typedInvokerMap.TryGetValue(requestType, out var invoker) ? invoker : null;
-
-    /// <inheritdoc />
-    public bool TryGetHandlerDelegate(Type requestType, out HandlerInvokerDelegate? invokerDelegate)
-    {
-        return handlerMap.TryGetValue(requestType, out invokerDelegate);
-    }
+    public Delegate? TryGetInvoker(Type requestType)
+        => invokers.TryGetValue(requestType, out var invoker) ? invoker : null;
 }

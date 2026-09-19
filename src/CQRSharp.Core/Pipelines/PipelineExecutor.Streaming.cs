@@ -1,16 +1,53 @@
-using CQRSharp.Pipelines;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Pipelines;
 
 public sealed partial class PipelineExecutor
 {
+    // The streaming counterpart of the command/query fast path: in the current scope, untraced, with the outbox off and
+    // nothing registered around the handler, the stream the caller enumerates IS the handler's stream — no wrapping
+    // iterators, no per-item hop. Returns null when any of that does not hold and the full path is needed.
+    private IAsyncEnumerable<TItem>? TryExecuteBareStream<TRequest, TItem>(TRequest request, CancellationToken ct)
+        where TRequest : IStreamRequest<TItem>
+    {
+        if (_outboxEnabled || CqrsActivitySource.Instance.HasListeners()) return null;
+
+        try
+        {
+            var plan = _plans.GetStream<TRequest, TItem>();
+            if (!plan.IsBareHandler || plan.MayHaveBehaviors) return null;
+
+            // An asynchronously hydrated context needs an await before the handler runs: take the full path.
+            if (!plan.UsesDefaultContextFactory && request.Context is null) return null;
+
+            var contextReady = InitializeRequestContext(plan, request, _services, ct);
+            Debug.Assert(contextReady.IsCompletedSuccessfully);
+
+            var handler = _services.GetRequiredService(plan.HandlerType);
+            return plan.Invoker(handler, request, ct) ?? throw NullStream(request);
+        }
+        catch (Exception ex)
+        {
+            // Dispatching a stream never throws; a failure surfaces when the stream is enumerated, as on the full path.
+            return Throwing<TItem>(ex);
+        }
+    }
+
+#pragma warning disable CS1998 // deliberately synchronous: the iterator exists only to defer the throw to enumeration
+    private static async IAsyncEnumerable<TItem> Throwing<TItem>(Exception failure)
+    {
+        ExceptionDispatchInfo.Capture(failure).Throw();
+        yield break;
+    }
+#pragma warning restore CS1998
+
     private IAsyncEnumerable<TItem> ExecuteStreamInNewScope<TRequest, TItem>(
         TRequest request,
         CancellationToken ct)
@@ -70,10 +107,11 @@ public sealed partial class PipelineExecutor
             {
                 // Context init is awaited (the factory may hydrate asynchronously) before the handler is resolved and
                 // the stream pipeline is built, so the context is fully populated by the time the first item is produced.
-                await InitializeRequestContextAsync(request, provider, cancellationToken).ConfigureAwait(false);
+                var plan = _plans.GetStream<TRequest, TItem>();
+                await InitializeRequestContext(plan, request, provider, cancellationToken).ConfigureAwait(false);
 
-                var handler = GetHandler(typeof(TRequest), provider);
-                pipeline = ExecuteStreamPipeline<TRequest, TItem>(request, handler, provider, cancellationToken);
+                var handler = provider.GetRequiredService(plan.HandlerType);
+                pipeline = ExecuteStreamPipeline(plan, request, handler, provider, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -121,18 +159,23 @@ public sealed partial class PipelineExecutor
     }
 
     private IAsyncEnumerable<TItem> ExecuteStreamPipeline<TRequest, TItem>(
+        StreamPlan<TRequest, TItem> plan,
         TRequest request,
         object handler,
         IServiceProvider services,
         CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TItem>
     {
+        // The provider has no IStreamPipelineBehavior<TRequest, TItem> registration at all: skip the resolution.
+        if (!plan.MayHaveBehaviors)
+            return ExecuteFinalStreamAction(plan, request, handler, services, cancellationToken);
+
         // Fresh per-resolution array (Microsoft DI); the in-place filter/sort below is concurrency-safe — see the note
         // in ExecutePipelineAsync.
         var resolved = services.GetServices<IStreamPipelineBehavior<TRequest, TItem>>();
         var behaviors = resolved as IStreamPipelineBehavior<TRequest, TItem>[] ?? resolved.ToArray();
 
-        var exemptions = request.Metadata?.PipelineExemptions;
+        var exemptions = plan.Metadata.PipelineExemptions;
         var behaviorCount = behaviors.Length;
         if (exemptions is { Length: > 0 } && behaviorCount > 0)
         {
@@ -147,9 +190,22 @@ public sealed partial class PipelineExecutor
             behaviorCount = write;
         }
 
-        if (behaviorCount == 0)
-            return ExecuteFinalStreamAction<TRequest, TItem>(request, handler, services, cancellationToken);
+        return behaviorCount == 0
+            ? ExecuteFinalStreamAction(plan, request, handler, services, cancellationToken)
+            : RunStreamBehaviorChain(plan, behaviors, behaviorCount, request, handler, services, cancellationToken);
+    }
 
+    // In its own method so the chain's closure is only allocated when there is a chain to run.
+    private IAsyncEnumerable<TItem> RunStreamBehaviorChain<TRequest, TItem>(
+        StreamPlan<TRequest, TItem> plan,
+        IStreamPipelineBehavior<TRequest, TItem>[] behaviors,
+        int behaviorCount,
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+        where TRequest : IStreamRequest<TItem>
+    {
         if (behaviorCount > 1)
             Array.Sort(behaviors, 0, behaviorCount, StreamBehaviorPriorityComparer<TRequest, TItem>.Instance);
 
@@ -158,7 +214,7 @@ public sealed partial class PipelineExecutor
         IAsyncEnumerable<TItem> InvokeBehavior(int index, CancellationToken ct)
         {
             if (index >= behaviorCount)
-                return ExecuteFinalStreamAction<TRequest, TItem>(request, handler, services, ct);
+                return ExecuteFinalStreamAction(plan, request, handler, services, ct);
 
             var behavior = behaviors[index];
             return behavior.Handle(request, nextToken => InvokeBehavior(index + 1, nextToken), ct);
@@ -166,19 +222,35 @@ public sealed partial class PipelineExecutor
     }
 
     private IAsyncEnumerable<TItem> ExecuteFinalStreamAction<TRequest, TItem>(
+        StreamPlan<TRequest, TItem> plan,
         TRequest request,
         object handler,
         IServiceProvider services,
         CancellationToken cancellationToken)
         where TRequest : IStreamRequest<TItem>
     {
+        // Nothing brackets the handler and there is no outbox buffer to settle: its stream is the final action.
+        if (plan.IsBareHandler && !_outboxEnabled)
+            try
+            {
+                return plan.Invoker(handler, request, cancellationToken) ?? throw NullStream(request);
+            }
+            catch (Exception ex)
+            {
+                return Throwing<TItem>(ex);
+            }
+
         return ExecuteAsync();
 
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
-            var notificationDispatcher = services.GetRequiredService<INotificationDispatcher>();
+            // Lifecycle notifications are skipped only when the provider can prove nothing subscribes to them.
+            var notificationDispatcher = plan.MayHaveLifecycleSubscribers
+                ? services.GetRequiredService<INotificationDispatcher>()
+                : null;
 
-            await notificationDispatcher.Publish(new StreamInitiatedNotification<TItem>(request), cancellationToken).ConfigureAwait(false);
+            if (notificationDispatcher is not null)
+                await notificationDispatcher.Publish(new StreamInitiatedNotification<TItem>(request), cancellationToken).ConfigureAwait(false);
 
             var yielded = 0L;
             var completed = false;
@@ -189,8 +261,11 @@ public sealed partial class PipelineExecutor
             IAsyncEnumerable<TItem>? stream = null;
             try
             {
-                await InvokePreHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
-                stream = await HandleStreamRequest<TItem>(request, handler, cancellationToken).ConfigureAwait(false);
+                var preHandlers = plan.PreHandlers;
+                for (var i = 0; i < preHandlers.Length; i++)
+                    await preHandlers[i].OnBeforeHandle(request, services, cancellationToken).ConfigureAwait(false);
+
+                stream = plan.Invoker(handler, request, cancellationToken) ?? throw NullStream(request);
             }
             catch (Exception ex)
             {
@@ -225,15 +300,18 @@ public sealed partial class PipelineExecutor
 
             if (completed)
             {
-                await InvokePostHandleAttributes(request, RequestOutcome.FromResult(null), services, cancellationToken).ConfigureAwait(false);
-                await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
-                    .ConfigureAwait(false);
+                if (plan.PostHandlers.Length > 0)
+                    await InvokePostHandlers(plan.PostHandlers, request, RequestOutcome.FromResult(null), services, cancellationToken).ConfigureAwait(false);
+
+                if (notificationDispatcher is not null)
+                    await notificationDispatcher.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken)
+                        .ConfigureAwait(false);
             }
             else if (failure is not null)
             {
                 // Plain cancellation is not a fault and the token would also block the publish; just propagate it.
                 // The publish is isolated so a faulting subscriber never replaces the stream's own exception.
-                if (failure is not OperationCanceledException)
+                if (notificationDispatcher is not null && failure is not OperationCanceledException)
                     try
                     {
                         await notificationDispatcher.Publish(new StreamFailedNotification<TItem>(request, yielded, failure), cancellationToken)
@@ -245,7 +323,7 @@ public sealed partial class PipelineExecutor
                     }
 
                 // Outcome-aware post-handlers observe a faulted stream too, exactly as they do a faulted command/query.
-                await InvokePostHandleAttributesIsolated(request, RequestOutcome.FromException(failure), services, cancellationToken)
+                await InvokePostHandlersIsolated(plan.PostHandlers, request, RequestOutcome.FromException(failure), services, cancellationToken)
                     .ConfigureAwait(false);
 
                 ExceptionDispatchInfo.Capture(failure).Throw();
@@ -256,20 +334,8 @@ public sealed partial class PipelineExecutor
         }
     }
 
-    private async Task<IAsyncEnumerable<TItem>> HandleStreamRequest<TItem>(
-        object request,
-        object handler,
-        CancellationToken cancellationToken)
-    {
-        if (!_handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
-            throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
-
-        var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
-        if (result is null)
-            throw new InvalidOperationException($"Handler returned null stream for request '{request.GetType().Name}'.");
-
-        return (IAsyncEnumerable<TItem>)result;
-    }
+    private static InvalidOperationException NullStream(IRequest request)
+        => new($"Handler returned null stream for request '{request.GetType().Name}'.");
 
     private static CancellationTokenSource? CreateLinkedCancellationTokenSource(CancellationToken requestToken, CancellationToken enumeratorToken)
     {

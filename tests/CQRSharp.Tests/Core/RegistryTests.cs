@@ -8,29 +8,25 @@ namespace CQRSharp.Tests.Core;
 public class HandlerRegistryTests
 {
     [Fact]
-    public void TryGetHandlerDelegate_ReturnsTrue_WhenHandlerExists()
+    public void TryGetInvoker_ReturnsTheTypedInvoker_WhenHandlerExists()
     {
-        var map = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();
+        var map = new ConcurrentDictionary<Type, Delegate>();
         var requestType = typeof(TestCommand);
-        map[requestType] = (_, _, _) => Task.FromResult<object?>("test");
+        Func<object, TestCommand, CancellationToken, Task<CommandResult>> typed = (_, _, _) => Task.FromResult(CommandResult.FromSuccess());
+        map[requestType] = typed;
         var registry = new HandlerRegistry(map);
 
-        var found = registry.TryGetHandlerDelegate(requestType, out var invoker);
+        var invoker = registry.TryGetInvoker(requestType);
 
-        Assert.True(found);
-        Assert.NotNull(invoker);
+        Assert.Same(typed, invoker);
     }
 
     [Fact]
-    public void TryGetHandlerDelegate_ReturnsFalse_WhenHandlerNotFound()
+    public void TryGetInvoker_ReturnsNull_WhenHandlerNotFound()
     {
-        var map = new ConcurrentDictionary<Type, HandlerInvokerDelegate>();
-        var registry = new HandlerRegistry(map);
+        var registry = new HandlerRegistry(new ConcurrentDictionary<Type, Delegate>());
 
-        var found = registry.TryGetHandlerDelegate(typeof(TestCommand), out var invoker);
-
-        Assert.False(found);
-        Assert.Null(invoker);
+        Assert.Null(registry.TryGetInvoker(typeof(TestCommand)));
     }
 }
 

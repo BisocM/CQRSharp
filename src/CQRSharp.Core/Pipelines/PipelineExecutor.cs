@@ -32,9 +32,6 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
     private readonly IOptions<DispatcherOptions> _dispatcherOptions;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IServiceProvider _services;
-    private readonly IRequestRegistry _requestRegistry;
-    private readonly IHandlerRegistry _handlerRegistry;
-    private readonly IContextFactoryRegistry _contextFactoryRegistry;
 
     // The per-provider plan cache (a singleton). An executor built by hand without it — unit tests — gets a private one.
     private readonly RequestPlanCache _plans;
@@ -56,9 +53,6 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         _services = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
         _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
-        _requestRegistry = requestRegistry;
-        _handlerRegistry = handlerRegistry;
-        _contextFactoryRegistry = contextFactoryRegistry;
         _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         _plans = serviceProvider.GetService<RequestPlanCache>()
                  ?? new RequestPlanCache(serviceProvider, requestRegistry, handlerRegistry, contextFactoryRegistry);
@@ -73,9 +67,6 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         _services = serviceProvider;
         _backgroundTaskManager = shared.BackgroundTaskManager;
         _dispatcherOptions = shared.DispatcherOptions;
-        _requestRegistry = shared.RequestRegistry;
-        _handlerRegistry = shared.HandlerRegistry;
-        _contextFactoryRegistry = shared.ContextFactoryRegistry;
         _scopeFactory = shared.ScopeFactory;
         _plans = shared.Plans;
         _outboxEnabled = shared.OutboxEnabled;
@@ -133,9 +124,11 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         if (_dispatcherOptions.Value.RunMode == RunMode.Queued)
             throw new InvalidOperationException("RunMode.Queued is not supported for streaming requests.");
 
-        return _dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New
-            ? ExecuteStreamInNewScope<TRequest, TItem>(request, ct)
-            : ExecuteStreamInProvider<TRequest, TItem>(request, _services, ct);
+        if (_dispatcherOptions.Value.ScopeMode == ExecutionScopeMode.New)
+            return ExecuteStreamInNewScope<TRequest, TItem>(request, ct);
+
+        return TryExecuteBareStream<TRequest, TItem>(request, ct)
+               ?? ExecuteStreamInProvider<TRequest, TItem>(request, _services, ct);
     }
 
     // Commands and queries share one execution path; only the activity name differs.
@@ -295,27 +288,12 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
             : null;
 
     /// <summary>
-    ///     Resolves the specific handler for a request type from the scoped DI container.
+    ///     Initializes <see cref="IRequest.Metadata" /> and <see cref="IRequest.Context" /> on the request from its cached
+    ///     plan: no registry lookups, and the built-in default context is constructed directly rather than through a
+    ///     transient factory resolved from DI. Completes synchronously unless a custom factory hydrates asynchronously.
     /// </summary>
-    /// <param name="requestType">The type of the request.</param>
-    /// <param name="scopedProvider">The scoped service provider for this request.</param>
-    /// <returns>The resolved handler instance.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the handler type is not registered or cannot be resolved.</exception>
-    private object GetHandler(Type requestType, IServiceProvider scopedProvider)
-    {
-        // Find the handler type from the source-generated registry.
-        var handlerType = _requestRegistry.TryGetHandlerType(requestType)
-                          ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
-
-        // Resolve the handler instance from the current scope.
-        return scopedProvider.GetRequiredService(handlerType)
-               ?? throw new InvalidOperationException($"Handler instance '{handlerType.Name}' not available.");
-    }
-
-    // Command/query variant of the context initialization below, driven by the cached plan: no registry lookups, and the
-    // built-in default context is constructed directly rather than through a transient factory resolved from DI.
-    private ValueTask InitializeRequestContext<TRequest, TResult>(
-        RequestPlan<TRequest, TResult> plan,
+    private ValueTask InitializeRequestContext<TRequest>(
+        RequestPlanBase plan,
         TRequest request,
         IServiceProvider services,
         CancellationToken cancellationToken)
@@ -333,7 +311,7 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
             return default;
         }
 
-        if (plan.ContextFactoryResolver?.Invoke(services) is not IInternalRequestContextFactory contextFactory)
+        if (plan.ContextFactoryResolver(services) is not IInternalRequestContextFactory contextFactory)
             throw new InvalidOperationException(
                 $"No IRequestContextFactory<{plan.ContextType.Name}> is registered for context type '{plan.ContextType.FullName}'. " +
                 "Register one in DI, or use the default context (CommandBase/QueryBase without a custom context type).");
@@ -351,40 +329,5 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
         {
             target.Context = await creating.ConfigureAwait(false);
         }
-    }
-
-    /// <summary>
-    ///     Initializes the <see cref="IRequest.Metadata" /> and <see cref="IRequest.Context" /> on the request object.
-    ///     This ensures the request is enriched with necessary information before it enters the pipeline.
-    /// </summary>
-    /// <param name="requestBase">The request object.</param>
-    /// <param name="services">The scoped service provider used to resolve the context factory.</param>
-    /// <param name="cancellationToken">A token to cancel the asynchronous context creation.</param>
-    /// <exception cref="InvalidOperationException">Thrown if metadata or a required context factory is not found.</exception>
-    private async ValueTask InitializeRequestContextAsync(IRequest requestBase, IServiceProvider services, CancellationToken cancellationToken)
-    {
-        // Retrieve and assign source-generated metadata to the request object.
-        if (!_requestRegistry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata == null)
-            throw new InvalidOperationException($"No metadata for request '{requestBase.GetType().Name}'.");
-
-        requestBase.Metadata = metadata;
-
-        // If the context is already set (e.g., manually by the caller), do nothing.
-        if (requestBase.Context != null) return;
-
-        // Determine the required context type from metadata or default to RequestContextBase.
-        var contextType = metadata.ContextType ?? typeof(RequestContextBase);
-
-        // Find the appropriate factory for creating an instance of the context.
-        var factoryObj = _contextFactoryRegistry.TryGetFactory(contextType, services);
-
-        if (factoryObj is not IInternalRequestContextFactory contextFactory)
-            throw new InvalidOperationException(
-                $"No IRequestContextFactory<{contextType.Name}> is registered for context type '{contextType.FullName}'. " +
-                "Register one in DI, or use the default context (CommandBase/QueryBase without a custom context type).");
-
-        // Create and assign the context to the request. The factory may load request-scoped data asynchronously
-        // (the default implementation wraps a synchronous CreateContext, so existing factories complete inline).
-        requestBase.Context = await contextFactory.CreateContextAsync(requestBase, cancellationToken).ConfigureAwait(false);
     }
 }

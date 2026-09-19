@@ -250,13 +250,10 @@ public sealed partial class PipelineExecutor
         object handler,
         CancellationToken cancellationToken) where TRequest : IRequest
     {
-        if (plan.TypedInvoker is not { } invoke)
-            return HandleRequest<TResult>(request, handler, plan.LegacyInvoker, cancellationToken);
-
         Task<TResult>? task;
         try
         {
-            task = invoke(handler, request, cancellationToken);
+            task = plan.Invoker(handler, request, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -286,30 +283,4 @@ public sealed partial class PipelineExecutor
 
     private static InvalidOperationException NullResult(IRequest request)
         => new($"Handler returned null for request '{request.GetType().Name}'.");
-
-    /// <summary>
-    ///     Invokes the handler through the object-returning delegate from the handler registry (modules emitted without
-    ///     typed invokers).
-    /// </summary>
-    private static async Task<TResult> HandleRequest<TResult>(
-        IRequest request,
-        object handler,
-        Caching.Handlers.HandlerInvokerDelegate? handlerDelegate,
-        CancellationToken cancellationToken)
-    {
-        if (handlerDelegate is null)
-            throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
-
-        var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
-
-        if (result is null)
-        {
-            if (request is ICommand || default(TResult) is not null)
-                throw NullResult(request);
-
-            return default!;
-        }
-
-        return (TResult)result;
-    }
 }

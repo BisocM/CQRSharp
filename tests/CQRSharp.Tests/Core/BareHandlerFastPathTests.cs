@@ -61,6 +61,42 @@ public sealed class BareHandlerFastPathTests
         result.Should().BeNull();
     }
 
+    [Fact(DisplayName = "Stream fast path: the items are the handler's, and the context is initialised before it runs")]
+    public async Task Bare_stream_yields_the_handler_items()
+    {
+        await using var provider = Build();
+        await using var scope = provider.CreateAsyncScope();
+        var request = new FastStream { Count = 3 };
+
+        var items = new List<FastItem>();
+        await foreach (var item in scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Stream(request))
+            items.Add(item);
+
+        items.Should().Equal(new FastItem(1), new FastItem(2), new FastItem(3));
+        request.Context.Should().NotBeNull();
+        request.Metadata.Should().NotBeNull();
+    }
+
+    [Fact(DisplayName = "Stream fast path: dispatching never throws; a handler that fails up front faults the enumeration")]
+    public async Task Bare_stream_failure_is_deferred_to_enumeration()
+    {
+        await using var provider = Build();
+        await using var scope = provider.CreateAsyncScope();
+        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+
+        IAsyncEnumerable<FastItem>? stream = null;
+        Action dispatch = () => stream = dispatcher.Stream(new FastStream { Count = -1 });
+        dispatch.Should().NotThrow();
+
+        var enumerate = async () =>
+        {
+            await foreach (var _ in stream!)
+            {
+            }
+        };
+        (await enumerate.Should().ThrowAsync<ArgumentOutOfRangeException>()).WithMessage("*negative count*");
+    }
+
     [Fact(DisplayName = "The request context is stamped from the application's TimeProvider, not the system clock")]
     public async Task Context_timestamp_follows_the_time_provider()
     {
@@ -163,6 +199,33 @@ public sealed record FastResult(int Value);
 public sealed class FastQuery : QueryBase<FastResult?>
 {
     public FastMode Mode { get; init; }
+}
+
+public sealed record FastItem(int Value);
+
+// Its own item type, so no other fixture's Stream*Notification<T> subscriber or stream behavior applies to it.
+public sealed class FastStream : StreamRequestBase<FastItem>
+{
+    public int Count { get; init; }
+}
+
+public sealed class FastStreamHandler : IStreamRequestHandler<FastStream, FastItem>
+{
+    // Not an iterator: it validates eagerly, so a bad request throws from Handle itself rather than from MoveNext.
+    public IAsyncEnumerable<FastItem> Handle(FastStream request, CancellationToken cancellationToken)
+    {
+        if (request.Count < 0) throw new ArgumentOutOfRangeException(nameof(request), "negative count");
+        return Produce(request.Count);
+
+        static async IAsyncEnumerable<FastItem> Produce(int count)
+        {
+            for (var i = 1; i <= count; i++)
+            {
+                await Task.Yield();
+                yield return new FastItem(i);
+            }
+        }
+    }
 }
 
 public sealed class FastQueryHandler : IQueryHandler<FastQuery, FastResult?>

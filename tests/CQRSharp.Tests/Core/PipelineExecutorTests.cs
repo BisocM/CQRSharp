@@ -104,17 +104,12 @@ public class PipelineExecutorTests
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
-            .Returns((Type _, out HandlerInvokerDelegate del) =>
+        _mockHandlerRegistry.Setup(r => r.TryGetInvoker(requestType))
+            .Returns(new Func<object, TestCommand, CancellationToken, Task<CommandResult>>((h, r, c) =>
             {
-                del = (h, r, c) =>
-                {
-                    callOrder.Add("handle");
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c)
-                        .ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+                callOrder.Add("handle");
+                return ((TestCommandHandler)h).Handle(r, c);
+            }));
 
         SetupHandlerResolution(handler);
 
@@ -139,12 +134,8 @@ public class PipelineExecutorTests
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
-            .Returns((Type _, out HandlerInvokerDelegate del) =>
-            {
-                del = (h, r, c) => ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-                return true;
-            });
+        _mockHandlerRegistry.Setup(r => r.TryGetInvoker(requestType))
+            .Returns(new Func<object, TestCommand, CancellationToken, Task<CommandResult>>((h, r, c) => ((TestCommandHandler)h).Handle(r, c)));
 
         SetupHandlerResolution(handler);
 
@@ -180,16 +171,12 @@ public class PipelineExecutorTests
 
         var handled = false;
         _mockHandlerRegistry
-            .Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
-            .Returns((Type _, out HandlerInvokerDelegate del) =>
+            .Setup(r => r.TryGetInvoker(requestType))
+            .Returns(new Func<object, TestCommand, CancellationToken, Task<CommandResult>>((h, r, c) =>
             {
-                del = (h, r, c) =>
-                {
-                    handled = true;
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+                handled = true;
+                return ((TestCommandHandler)h).Handle(r, c);
+            }));
 
         SetupHandlerResolution(handler);
 
@@ -249,16 +236,12 @@ public class PipelineExecutorTests
 
         _mockRequestRegistry.Setup(r => r.TryGetRequestMetadata(requestType, out metadata!)).Returns(true);
         _mockRequestRegistry.Setup(r => r.TryGetHandlerType(requestType)).Returns(handlerType);
-        _mockHandlerRegistry.Setup(r => r.TryGetHandlerDelegate(requestType, out It.Ref<HandlerInvokerDelegate?>.IsAny))
-            .Returns((Type _, out HandlerInvokerDelegate del) =>
+        _mockHandlerRegistry.Setup(r => r.TryGetInvoker(requestType))
+            .Returns(new Func<object, TestCommand, CancellationToken, Task<CommandResult>>((h, r, c) =>
             {
-                del = (h, r, c) =>
-                {
-                    callOrder.Add("handle");
-                    return ((TestCommandHandler)h).Handle((TestCommand)r, c).ContinueWith(t => (object?)t.Result, TaskScheduler.Default);
-                };
-                return true;
-            });
+                callOrder.Add("handle");
+                return ((TestCommandHandler)h).Handle(r, c);
+            }));
 
         SetupHandlerResolution(handler);
 

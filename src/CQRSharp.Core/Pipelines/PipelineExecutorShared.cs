@@ -1,8 +1,5 @@
 using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.TaskQueue;
-using CQRSharp.Core.Caching.Contexts;
-using CQRSharp.Core.Caching.Handlers;
-using CQRSharp.Core.Caching.Requests;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -15,9 +12,6 @@ namespace CQRSharp.Core.Pipelines;
 /// </summary>
 internal sealed class PipelineExecutorShared(
     IServiceScopeFactory scopeFactory,
-    IRequestRegistry requestRegistry,
-    IHandlerRegistry handlerRegistry,
-    IContextFactoryRegistry contextFactoryRegistry,
     IOptions<DispatcherOptions> dispatcherOptions,
     IOptions<OutboxOptions> outboxOptions,
     IBackgroundTaskManager backgroundTaskManager,
@@ -70,9 +64,6 @@ internal sealed class PipelineExecutorShared(
     }
 
     public IServiceScopeFactory ScopeFactory { get; } = scopeFactory;
-    public IRequestRegistry RequestRegistry { get; } = requestRegistry;
-    public IHandlerRegistry HandlerRegistry { get; } = handlerRegistry;
-    public IContextFactoryRegistry ContextFactoryRegistry { get; } = contextFactoryRegistry;
     public IOptions<DispatcherOptions> DispatcherOptions { get; } = dispatcherOptions;
     public IBackgroundTaskManager BackgroundTaskManager { get; } = backgroundTaskManager;
     public RequestPlanCache Plans { get; } = plans;

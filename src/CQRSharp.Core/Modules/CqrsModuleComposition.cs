@@ -40,9 +40,7 @@ public static class CqrsModuleComposition
 
         services.RemoveAll<IHandlerRegistry>();
         services.AddSingleton<IHandlerRegistry>(sp =>
-            new HandlerRegistry(
-                Merge(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers),
-                Merge(sp.GetServices<ICqrsModule>(), m => m.TypedHandlerInvokers)));
+            new HandlerRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers)));
 
         services.RemoveAll<IContextFactoryRegistry>();
         services.AddSingleton<IContextFactoryRegistry>(sp =>

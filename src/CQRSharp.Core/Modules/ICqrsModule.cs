@@ -22,29 +22,26 @@ public interface ICqrsModule
     /// <summary>Per-request metadata (handler type, context, pre/post handlers, exemptions) discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, RequestMetadata> RequestMetadata { get; }
 
-    /// <summary>Per-request compiled handler invokers discovered in this assembly.</summary>
-    IReadOnlyDictionary<Type, HandlerInvokerDelegate> HandlerInvokers { get; }
-
     /// <summary>
-    ///     Typed command/query invokers keyed by request type: each is a
-    ///     <c>Func&lt;object, TRequest, CancellationToken, Task&lt;TResult&gt;&gt;</c> that returns the handler's own task.
-    ///     The executor prefers these over <see cref="HandlerInvokers" /> (which box the result behind an extra state
-    ///     machine); empty for a module emitted by a generator that predates them.
+    ///     Typed handler invokers keyed by request type: a
+    ///     <c>Func&lt;object, TRequest, CancellationToken, Task&lt;TResult&gt;&gt;</c> for a command or query, a
+    ///     <c>Func&lt;object, TRequest, CancellationToken, IAsyncEnumerable&lt;TItem&gt;&gt;</c> for a streaming request. Each
+    ///     returns the handler's own task/stream.
     /// </summary>
-    IReadOnlyDictionary<Type, Delegate> TypedHandlerInvokers => System.Collections.Immutable.ImmutableDictionary<Type, Delegate>.Empty;
+    IReadOnlyDictionary<Type, Delegate> HandlerInvokers { get; }
 
     /// <summary>Per-context-type factory resolvers discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, Func<IServiceProvider, object?>> ContextFactories { get; }
 
     /// <summary>
     ///     This module's command/query routes keyed by exact request type. The composition merges every module's routes
-    ///     into one table, so a dispatch is a single lookup; empty for a module that only offers
-    ///     <see cref="CreateRequestDispatcher" />.
+    ///     into one table, so a dispatch is a single lookup. A request type listed in <see cref="RequestTypes" /> without
+    ///     a route here is dispatched through <see cref="CreateRequestDispatcher" /> instead.
     /// </summary>
-    IReadOnlyDictionary<Type, RequestRoute> RequestRoutes => System.Collections.Immutable.ImmutableDictionary<Type, RequestRoute>.Empty;
+    IReadOnlyDictionary<Type, RequestRoute> RequestRoutes { get; }
 
     /// <summary>The boxed-result counterpart of <see cref="RequestRoutes" />, for the untyped <c>Send(object)</c> path.</summary>
-    IReadOnlyDictionary<Type, UntypedRequestRoute> UntypedRequestRoutes => System.Collections.Immutable.ImmutableDictionary<Type, UntypedRequestRoute>.Empty;
+    IReadOnlyDictionary<Type, UntypedRequestRoute> UntypedRequestRoutes { get; }
 
     /// <summary>Per-request exception-hook invokers discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, RequestExceptionHookInvoker> ExceptionHooks { get; }
