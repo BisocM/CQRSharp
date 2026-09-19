@@ -142,6 +142,13 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
                 DetachRange(candidates);
                 return [];
             }
+            catch
+            {
+                // Any other failed save (a provider error, cancellation) must not leave the half-claimed rows tracked
+                // as Modified: the next SaveChanges on this context would silently re-send those stale UPDATEs.
+                DetachRange(candidates);
+                throw;
+            }
         }
     }
 
@@ -267,6 +274,13 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
                     id, attempt, _maxClaimAttempts);
 
                 _context.Entry(entity).State = EntityState.Detached;
+            }
+            catch
+            {
+                // The retry budget is spent, or the save failed for another reason. Detach before propagating: a stale
+                // Modified row left tracked would be re-sent by — and fail — every later mutation in this batch.
+                _context.Entry(entity).State = EntityState.Detached;
+                throw;
             }
         }
     }

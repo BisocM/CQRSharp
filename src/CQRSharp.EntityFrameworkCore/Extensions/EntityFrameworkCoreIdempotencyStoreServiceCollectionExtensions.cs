@@ -3,6 +3,8 @@ using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 // Namespace-extends the DI builder so registration reads naturally next to the rest of the app's service wiring.
 namespace Microsoft.Extensions.DependencyInjection;
@@ -44,7 +46,13 @@ public static class EntityFrameworkCoreIdempotencyStoreServiceCollectionExtensio
         // Default the clock to the system provider; tests/callers can replace it before this runs.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.TryAddSingleton<IIdempotencyStore, EfCoreIdempotencyStore<TContext>>();
+        // A singleton that resolves a fresh TContext per operation through a scope: injecting the (scoped) TContext
+        // directly would make it a captive dependency of this singleton. The factory pins the scope-factory constructor.
+        services.TryAddSingleton<IIdempotencyStore>(sp => new EfCoreIdempotencyStore<TContext>(
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<IOptions<EfCoreIdempotencyStoreOptions>>(),
+            sp.GetRequiredService<ILogger<EfCoreIdempotencyStore<TContext>>>()));
 
         return services;
     }

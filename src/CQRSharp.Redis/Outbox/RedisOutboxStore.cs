@@ -114,8 +114,9 @@ for _, id in ipairs(ids) do
 end
 return result";
 
-    // Mark processed (terminal). Idempotent: a missing/already-terminal message is a no-op. Removes the due entry so
-    // it is never reclaimed, records the processed timestamp, adds the finalized marker, and applies the retention TTL.
+    // Mark processed (terminal). Idempotent: a missing/already-terminal message is a no-op, so a late mark from a
+    // claimant whose lease expired can never flip a dead-lettered message to processed (or back). Removes the due entry
+    // so it is never reclaimed, records the processed timestamp, and applies the retention TTL.
     private const string ProcessedScript = @"
 local prefix = KEYS[1]
 local id = ARGV[1]
@@ -123,11 +124,11 @@ local now = ARGV[2]
 local retention = tonumber(ARGV[3])
 local key = prefix .. 'msg:' .. id
 if redis.call('EXISTS', key) == 0 then return 0 end
+local status = tonumber(redis.call('HGET', key, '" + FieldStatus + @"'))
+if status == " + StatusProcessed + @" or status == " + StatusFailed + @" then return 0 end
 redis.call('ZREM', prefix .. 'due', id)
 redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusProcessed + @"', '" + FieldProcessed + @"', now)
-redis.call('SADD', prefix .. 'done', id)
 redis.call('PEXPIRE', key, retention)
-redis.call('PEXPIRE', prefix .. 'done', retention)
 return 1";
 
     // Record a failed attempt and reschedule to Pending. Returns the new attempt count, or 0 if the message is missing
@@ -157,19 +158,19 @@ redis.call('HSET', key,
 redis.call('ZADD', prefix .. 'due', score, id)
 return attempts";
 
-    // Dead-letter (terminal). Idempotent no-op on a missing message. Removes the due entry, records the error, marks
-    // the finalized set, and applies the retention TTL. ARGV: id, error, retention.
+    // Dead-letter (terminal). Idempotent no-op on a missing or already-terminal message. Removes the due entry, records
+    // the error, and applies the retention TTL. ARGV: id, error, retention.
     private const string FailedScript = @"
 local prefix = KEYS[1]
 local id = ARGV[1]
 local retention = tonumber(ARGV[3])
 local key = prefix .. 'msg:' .. id
 if redis.call('EXISTS', key) == 0 then return 0 end
+local status = tonumber(redis.call('HGET', key, '" + FieldStatus + @"'))
+if status == " + StatusProcessed + @" or status == " + StatusFailed + @" then return 0 end
 redis.call('ZREM', prefix .. 'due', id)
 redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusFailed + @"', '" + FieldError + @"', ARGV[2])
-redis.call('SADD', prefix .. 'done', id)
 redis.call('PEXPIRE', key, retention)
-redis.call('PEXPIRE', prefix .. 'done', retention)
 return 1";
 
     public async Task StoreAsync(IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)

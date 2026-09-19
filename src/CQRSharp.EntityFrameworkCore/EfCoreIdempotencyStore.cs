@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -31,16 +32,34 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     // we re-read it, so a handful of attempts is ample for the unique-key contention to resolve to a single winner.
     private const int MaxClaimAttempts = 3;
 
-    private readonly TContext _context;
+    // Exactly one of these is set. Registered through DI the store is a singleton that opens a short-lived scope — and so
+    // a fresh TContext — per operation: a DbContext is scoped, so holding one here would be a captive dependency (a
+    // startup failure under scope validation; otherwise one root context, tracking every claim, for the process
+    // lifetime). A private context also means a claim or release can never flush the caller's own pending changes.
+    // The single-context form exists for direct construction over a context the caller owns (the contract tests).
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly TContext? _context;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<EfCoreIdempotencyStore<TContext>> _logger;
     private readonly TimeSpan _retention;
 
-    // A DbContext is not thread-safe and forbids overlapping operations. The idempotency behavior may issue concurrent
-    // claims against the one shared store/context (the contract suite does exactly this with 16 parallel callers), so
-    // this gate serializes every context access. Cross-caller claim safety still rests on the unique primary key; this
-    // lock only guards the single shared context from concurrent use within this instance.
+    // Single-context form only: a DbContext is not thread-safe and forbids overlapping operations, and callers may issue
+    // concurrent claims against the one shared context (the contract suite does exactly this with 16 parallel callers),
+    // so this gate serializes every access to it. Cross-caller claim safety still rests on the unique primary key.
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>Creates the DI-registered store, which resolves a fresh <typeparamref name="TContext" /> per operation.</summary>
+    public EfCoreIdempotencyStore(
+        IServiceScopeFactory scopeFactory,
+        TimeProvider timeProvider,
+        IOptions<EfCoreIdempotencyStoreOptions> options,
+        ILogger<EfCoreIdempotencyStore<TContext>> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _timeProvider = timeProvider;
+        _logger = logger;
+        _retention = options.Value.Retention;
+    }
 
     /// <summary>Creates the store over a <paramref name="context" />, reading time from <paramref name="timeProvider" />.</summary>
     public EfCoreIdempotencyStore(
@@ -58,12 +77,23 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public async Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
+    public Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
+        => WithContextAsync(context => ClaimAsync(context, key, cancellationToken), cancellationToken);
+
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
+    private async Task<TResult> WithContextAsync<TResult>(Func<TContext, Task<TResult>> operation, CancellationToken cancellationToken)
     {
+        if (_scopeFactory is not null)
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            return await operation(scope.ServiceProvider.GetRequiredService<TContext>()).ConfigureAwait(false);
+        }
+
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await ClaimAsync(key, cancellationToken).ConfigureAwait(false);
+            return await operation(_context!).ConfigureAwait(false);
         }
         finally
         {
@@ -73,7 +103,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
 
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    private async Task<bool> ClaimAsync(string key, CancellationToken cancellationToken)
+    private async Task<bool> ClaimAsync(TContext context, string key, CancellationToken cancellationToken)
     {
         // Bounded INSERT/take-over retry. Each attempt: read the row; if absent, INSERT it and win; if present but
         // expired, take it over (refresh ExpiresAt) and win; if present and live, lose as a duplicate. A concurrent
@@ -84,7 +114,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
             var now = Now();
             var expiresAt = now + _retention;
 
-            var existing = await _context.Set<IdempotencyEntity>()
+            var existing = await context.Set<IdempotencyEntity>()
                 .FirstOrDefaultAsync(e => e.Key == key, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -92,11 +122,11 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
             {
                 // No row: try to create the claim. The unique primary key makes this the atomic race point.
                 var entity = new IdempotencyEntity { Key = key, ExpiresAt = expiresAt };
-                _context.Set<IdempotencyEntity>().Add(entity);
+                context.Set<IdempotencyEntity>().Add(entity);
 
                 try
                 {
-                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     return true;
                 }
                 catch (DbUpdateException ex) when (attempt < MaxClaimAttempts)
@@ -107,8 +137,14 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
                         "Idempotency claim of {Key} lost an insert race on attempt {Attempt}/{MaxAttempts}; retrying.",
                         key, attempt, MaxClaimAttempts);
 
-                    _context.Entry(entity).State = EntityState.Detached;
+                    context.Entry(entity).State = EntityState.Detached;
                     continue;
+                }
+                catch
+                {
+                    // Out of attempts (or another failure): never leave the rejected insert tracked as Added.
+                    context.Entry(entity).State = EntityState.Detached;
+                    throw;
                 }
             }
 
@@ -116,7 +152,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
             if (existing.ExpiresAt > now)
             {
                 // Detach so the live row we only read does not linger as tracked state on the shared context.
-                _context.Entry(existing).State = EntityState.Detached;
+                context.Entry(existing).State = EntityState.Detached;
                 return false;
             }
 
@@ -128,7 +164,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
 
             try
             {
-                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 return true;
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < MaxClaimAttempts)
@@ -139,7 +175,12 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
                     "Idempotency take-over of {Key} lost a concurrency race on attempt {Attempt}/{MaxAttempts}; retrying.",
                     key, attempt, MaxClaimAttempts);
 
-                _context.Entry(existing).State = EntityState.Detached;
+                context.Entry(existing).State = EntityState.Detached;
+            }
+            catch
+            {
+                context.Entry(existing).State = EntityState.Detached;
+                throw;
             }
         }
     }
@@ -147,26 +188,22 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public async Task ReleaseAsync(string key, CancellationToken cancellationToken)
+    public Task ReleaseAsync(string key, CancellationToken cancellationToken)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        return WithContextAsync(async context =>
         {
-            var existing = await _context.Set<IdempotencyEntity>()
+            var existing = await context.Set<IdempotencyEntity>()
                 .FirstOrDefaultAsync(e => e.Key == key, cancellationToken)
                 .ConfigureAwait(false);
 
             // Releasing an unknown (or already-expired-and-removed) key is a no-op.
             if (existing is null)
-                return;
+                return false;
 
-            _context.Set<IdempotencyEntity>().Remove(existing);
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            context.Set<IdempotencyEntity>().Remove(existing);
+            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return true;
+        }, cancellationToken);
     }
 
     private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
