@@ -1,9 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
+using CQRSharp.Pipelines;
 
-namespace CQRSharp.Core.Notifications.Types;
+namespace CQRSharp;
 
 /// <summary>
 ///     This notification contains information about the completed command and its result.

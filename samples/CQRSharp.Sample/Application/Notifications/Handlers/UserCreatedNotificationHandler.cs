@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 using CQRSharp.Sample.Domain.Events;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.Logging;

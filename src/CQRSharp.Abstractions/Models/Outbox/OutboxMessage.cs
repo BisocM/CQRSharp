@@ -1,11 +1,11 @@
-namespace CQRSharp.Abstractions.Models.Outbox;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Represents a message stored in the outbox for deferred processing.
 /// </summary>
 /// <param name="Id">The unique identifier for the outbox message.</param>
 /// <param name="NotificationType">
-///     The stable name of the notification, as produced by <see cref="CQRSharp.Abstractions.Interfaces.Notifications.INotificationSerializer.GetNotificationName" />.
+///     The stable name of the notification, as produced by <see cref="CQRSharp.Pipelines.INotificationSerializer.GetNotificationName" />.
 /// </param>
 /// <param name="Payload">The serialized content of the notification.</param>
 /// <param name="CreatedAt">The UTC timestamp when the message was created.</param>

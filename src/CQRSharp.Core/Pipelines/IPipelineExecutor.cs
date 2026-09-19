@@ -1,8 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Core.Pipelines;
 

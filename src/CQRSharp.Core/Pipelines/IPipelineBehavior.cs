@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-
-namespace CQRSharp.Core.Pipelines;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The continuation a pipeline behavior invokes to run the next behavior (or, at the end of the chain, the handler).

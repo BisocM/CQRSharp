@@ -1,8 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Handlers;
+namespace CQRSharp;
 
 /// <summary>
 ///     Handles a value-returning command (<see cref="ICommand{TResult}" />), producing a

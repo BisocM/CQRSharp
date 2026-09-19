@@ -1,4 +1,6 @@
-namespace CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Pipelines;
+
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides information about the current transactional state of a request.

@@ -1,7 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp;
+using CQRSharp.Pipelines;
 
-namespace CQRSharp.Core.Notifications.Types;
+namespace CQRSharp;
 
 /// <summary>
 ///     Published when a query's handler throws, signalling that the query did not complete successfully.

@@ -1,13 +1,7 @@
 using System.Data;
 using System.Diagnostics;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

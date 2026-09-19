@@ -1,7 +1,5 @@
+using CQRSharp.Pipelines;
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Core.Pipelines;
 

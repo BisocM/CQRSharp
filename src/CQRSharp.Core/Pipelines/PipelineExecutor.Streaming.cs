@@ -1,13 +1,10 @@
+using CQRSharp.Pipelines;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Notifications.Types;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Pipelines;

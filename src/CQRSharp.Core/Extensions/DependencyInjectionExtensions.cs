@@ -1,26 +1,21 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
+using CQRSharp;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Background.Outbox.Types;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
-using CQRSharp.Core.Factories;
 using CQRSharp.Core.Idempotency;
-using CQRSharp.Core.Mediation;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace CQRSharp.Core.Extensions;
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides extension methods for registering CQRSharp services with the dependency injection container.

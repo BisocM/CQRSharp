@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Commands;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents the result of a command execution.

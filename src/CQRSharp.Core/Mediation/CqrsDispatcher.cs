@@ -1,11 +1,10 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Core.Mediation;
+namespace CQRSharp;
 
 /// <summary>
 ///     Default implementation of <see cref="ICqrsDispatcher" /> backed by CQRSharp dispatchers.

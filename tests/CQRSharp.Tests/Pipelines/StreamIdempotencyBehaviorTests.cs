@@ -1,10 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Idempotency;
-using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Idempotency;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;

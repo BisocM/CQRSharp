@@ -1,9 +1,5 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using CQRSharp.Tests.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

@@ -19,7 +19,7 @@ public sealed partial class CqrsSourceGenerator
     {
         sb.AppendLine();
         sb.AppendLine("            // Registering Request Registry");
-        sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata>();");
+        sb.AppendLine("            var requestMetadataMappings = new ConcurrentDictionary<Type, global::CQRSharp.RequestMetadata>();");
 
         if (string.IsNullOrEmpty(known.PreHandlerInterfaceName) ||
             string.IsNullOrEmpty(known.PostHandlerInterfaceName) ||
@@ -76,7 +76,7 @@ public sealed partial class CqrsSourceGenerator
                 : "null";
 
             sb.AppendLine(
-                $"            requestMetadataMappings.TryAdd(typeof({requestTypeName}), new global::CQRSharp.Abstractions.Models.Requests.RequestMetadata(typeof({requestTypeName}), typeof({selected.ImplTypeName}), {preHandlersCode}, {postHandlersCode}, {pipelineExemptionsCode}, {resultTypeCode}, typeof({metadata.ContextTypeName})));");
+                $"            requestMetadataMappings.TryAdd(typeof({requestTypeName}), new global::CQRSharp.RequestMetadata(typeof({requestTypeName}), typeof({selected.ImplTypeName}), {preHandlersCode}, {postHandlersCode}, {pipelineExemptionsCode}, {resultTypeCode}, typeof({metadata.ContextTypeName})));");
         }
     }
 
@@ -163,7 +163,7 @@ public sealed partial class CqrsSourceGenerator
 
         // Always register the default RequestContextBase factory (provided by CQRSharp.Core).
         sb.AppendLine(
-            $"            factoryMappings.TryAdd(typeof({known.RequestContextBaseTypeName}), sp => sp.GetService<global::CQRSharp.Core.Factories.IRequestContextFactory>());");
+            $"            factoryMappings.TryAdd(typeof({known.RequestContextBaseTypeName}), sp => sp.GetService<global::CQRSharp.IRequestContextFactory>());");
     }
 
     private static void GenerateRequestExceptionHookRegistry(StringBuilder sb, ImmutableArray<CandidateModel> candidates)
@@ -209,7 +209,7 @@ public sealed partial class CqrsSourceGenerator
                 if ((kind & ExceptionHookKind.Action) != 0)
                 {
                     sb.AppendLine(
-                        $"                        var actions = sp.GetServices<global::CQRSharp.Abstractions.Interfaces.Exceptions.IRequestExceptionAction<{requestTypeName}, {exceptionTypeName}>>();");
+                        $"                        var actions = sp.GetServices<global::CQRSharp.IRequestExceptionAction<{requestTypeName}, {exceptionTypeName}>>();");
                     sb.AppendLine("                        foreach (var action in actions)");
                     sb.AppendLine("                            await action.Execute(typedRequest, typedException, ct).ConfigureAwait(false);");
                 }
@@ -217,9 +217,9 @@ public sealed partial class CqrsSourceGenerator
                 if ((kind & ExceptionHookKind.Handler) != 0)
                 {
                     sb.AppendLine(
-                        $"                        var handlers = sp.GetServices<global::CQRSharp.Abstractions.Interfaces.Exceptions.IRequestExceptionHandler<{requestTypeName}, {resultTypeName}, {exceptionTypeName}>>();");
+                        $"                        var handlers = sp.GetServices<global::CQRSharp.IRequestExceptionHandler<{requestTypeName}, {resultTypeName}, {exceptionTypeName}>>();");
                     sb.AppendLine(
-                        $"                        var state = new global::CQRSharp.Abstractions.Models.Exceptions.RequestExceptionHandlerState<{resultTypeName}>();");
+                        $"                        var state = new global::CQRSharp.RequestExceptionHandlerState<{resultTypeName}>();");
                     sb.AppendLine("                        foreach (var handler in handlers)");
                     sb.AppendLine("                        {");
                     sb.AppendLine("                            await handler.Handle(typedRequest, typedException, state, ct).ConfigureAwait(false);");

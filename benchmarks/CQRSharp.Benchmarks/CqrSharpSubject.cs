@@ -1,13 +1,8 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Pipelines;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Benchmarks.CqrSharp;
+namespace Benchmarks.CqrSharp;
 
 public sealed class Ping : QueryBase<int>;
 

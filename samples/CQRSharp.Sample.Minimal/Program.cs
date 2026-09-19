@@ -1,9 +1,7 @@
 // The smallest end-to-end CQRSharp app. With the CQRSharp meta-package the CQRSharp.* usings below are applied
 // automatically (global usings); this sample uses ProjectReferences, so it imports them explicitly.
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 

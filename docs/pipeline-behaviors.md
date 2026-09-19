@@ -279,7 +279,7 @@ request's `RequestOutcome` — the value the handler returned, or the exception 
 ### ICommandInterceptor — the one-stop pre+post interface
 
 When an attribute needs to run on **both** sides of the handler, implement
-`CQRSharp.Abstractions.Attributes.Pipelines.ICommandInterceptor` rather than listing both interfaces
+`CQRSharp.ICommandInterceptor` rather than listing both interfaces
 separately. It is the idiomatic combined interceptor — it simply unions the two contracts:
 
 ```csharp

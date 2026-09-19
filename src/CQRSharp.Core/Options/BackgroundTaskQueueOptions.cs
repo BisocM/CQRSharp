@@ -1,6 +1,6 @@
 ﻿using System.Threading.Channels;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Configuration options for the background task queue (<see cref="CQRSharp.Core.Background.TaskQueue.IBackgroundTaskManager" />).

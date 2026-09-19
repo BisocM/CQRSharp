@@ -1,5 +1,3 @@
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Application.Pipelines;
 

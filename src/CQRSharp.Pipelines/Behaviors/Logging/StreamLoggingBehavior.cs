@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
 

@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Pipelines.Options;
+﻿namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Configuration options for the resilience behavior.

@@ -14,7 +14,8 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine("using System.Threading.Tasks;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
+        sb.AppendLine("using CQRSharp;");
+        sb.AppendLine("using CQRSharp.Pipelines;");
         sb.AppendLine("using CQRSharp.Core.Notifications;");
         sb.AppendLine();
         sb.AppendLine($"namespace {known.ModuleNamespace}");

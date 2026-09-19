@@ -1,6 +1,6 @@
 using System.Data;
 
-namespace CQRSharp.Abstractions.Interfaces.Transactions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Extends the <see cref="IUnitOfWork" /> to provide explicit control over database transactions,

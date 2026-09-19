@@ -17,7 +17,7 @@ public sealed class DirectCoreRegistrationAnalyzer : DiagnosticAnalyzer
 {
     // Resolve the call by the resolved method's containing type (not by "is it followed by AddGenerated"): the fluent
     // AddCqrsGenerated(b => ...) overload is a different method and must not be flagged.
-    private const string ExtensionsMetadataName = "CQRSharp.Core.Extensions.DependencyInjectionExtensions";
+    private const string ExtensionsMetadataName = "CQRSharp.DependencyInjectionExtensions";
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(CqrsDiagnostics.DirectCoreRegistration);

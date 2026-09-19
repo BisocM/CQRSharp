@@ -1,5 +1,4 @@
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.ExternalModule;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,12 +60,12 @@ public sealed class MultiAssemblyTests
 }
 
 /// <summary>A local command in the composition-root assembly, to assert local + referenced modules coexist.</summary>
-public sealed class LocalCoexistCommand : CQRSharp.Abstractions.Interfaces.Markers.Command.CommandBase;
+public sealed class LocalCoexistCommand : CQRSharp.CommandBase;
 
 internal sealed class LocalCoexistCommandHandler
-    : CQRSharp.Abstractions.Interfaces.Handlers.ICommandHandler<LocalCoexistCommand>
+    : CQRSharp.ICommandHandler<LocalCoexistCommand>
 {
-    public Task<CQRSharp.Abstractions.Models.Commands.CommandResult> Handle(
+    public Task<CQRSharp.CommandResult> Handle(
         LocalCoexistCommand command, CancellationToken cancellationToken)
-        => Task.FromResult(CQRSharp.Abstractions.Models.Commands.CommandResult.FromSuccess());
+        => Task.FromResult(CQRSharp.CommandResult.FromSuccess());
 }

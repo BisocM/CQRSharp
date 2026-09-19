@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Sample.Application.Contexts;
 
 namespace CQRSharp.Sample.Application.Queries.Requests;

@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Command;
+namespace CQRSharp;
 
 /// <summary>
 ///     Marker interface for commands. A command reports only a <see cref="CommandResult" /> outcome; for a command that

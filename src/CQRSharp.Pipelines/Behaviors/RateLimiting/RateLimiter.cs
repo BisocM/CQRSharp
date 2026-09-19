@@ -1,4 +1,3 @@
-using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Pipelines.Behaviors.RateLimiting;

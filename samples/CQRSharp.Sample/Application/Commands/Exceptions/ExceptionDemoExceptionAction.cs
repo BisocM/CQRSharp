@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Exceptions;
 using CQRSharp.Sample.Application.Commands.Requests;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 

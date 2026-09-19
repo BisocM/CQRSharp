@@ -1,10 +1,4 @@
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 

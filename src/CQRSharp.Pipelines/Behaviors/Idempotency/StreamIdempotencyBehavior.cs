@@ -1,7 +1,4 @@
 using System.Runtime.ExceptionServices;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Idempotency;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
 

@@ -1,9 +1,5 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Idempotency;
-using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Idempotency;
 using FluentAssertions;
@@ -77,8 +73,8 @@ public class IdempotencyBehaviorTests
         var behavior = Create<IdempotentRequest>(new InMemoryStore());
 
         var first = await behavior.Handle(new IdempotentRequest("k3"),
-            _ => Task.FromResult<object>(CQRSharp.Abstractions.Models.Commands.CommandResult.FromError("declined")), CancellationToken.None);
-        first.Should().BeOfType<CQRSharp.Abstractions.Models.Commands.CommandResult>().Which.IsSuccess.Should().BeFalse();
+            _ => Task.FromResult<object>(CQRSharp.CommandResult.FromError("declined")), CancellationToken.None);
+        first.Should().BeOfType<CQRSharp.CommandResult>().Which.IsSuccess.Should().BeFalse();
 
         var retry = await behavior.Handle(new IdempotentRequest("k3"),
             _ => Task.FromResult<object>("ok"), CancellationToken.None);

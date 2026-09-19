@@ -1,6 +1,6 @@
-using CQRSharp.Core.Options.Enums;
+using CQRSharp;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Configures the fail-fast startup validator that inspects CQRSharp configuration and request bindings when

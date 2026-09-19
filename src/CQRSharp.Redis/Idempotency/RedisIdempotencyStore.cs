@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Idempotency;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 

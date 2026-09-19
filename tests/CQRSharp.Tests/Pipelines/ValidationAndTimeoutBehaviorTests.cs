@@ -1,8 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Validation;
-using CQRSharp.Abstractions.Models.Validation;
 using CQRSharp.Pipelines.Behaviors.Timeout;
 using CQRSharp.Pipelines.Behaviors.Validation;
-using CQRSharp.Pipelines.Options;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;

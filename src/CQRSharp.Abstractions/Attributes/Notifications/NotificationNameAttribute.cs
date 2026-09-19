@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Attributes.Notifications;
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides a stable, application-defined name for a notification type — the opt-in that makes a notification

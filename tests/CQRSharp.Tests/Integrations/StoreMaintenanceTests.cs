@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using FluentAssertions;

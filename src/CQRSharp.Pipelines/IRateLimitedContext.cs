@@ -1,5 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-
 namespace CQRSharp.Pipelines;
 
 /// <summary>

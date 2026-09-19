@@ -1,10 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Abstractions.Models.Outbox;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

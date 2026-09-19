@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Attributes.Pipelines;
+namespace CQRSharp;
 
 /// <summary>
 ///     The outcome of a request after its handler ran: the value it returned, or the exception it threw. Handed to a

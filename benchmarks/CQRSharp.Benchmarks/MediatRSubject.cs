@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Benchmarks.MediatRLib;
+namespace Benchmarks.MediatRLib;
 
 public sealed class Ping : IRequest<int>;
 

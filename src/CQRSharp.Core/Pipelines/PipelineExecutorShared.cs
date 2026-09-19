@@ -1,8 +1,8 @@
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 

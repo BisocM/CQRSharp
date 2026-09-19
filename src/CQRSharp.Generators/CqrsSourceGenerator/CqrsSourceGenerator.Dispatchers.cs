@@ -29,8 +29,9 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Request;");
+        sb.AppendLine("using CQRSharp;");
         sb.AppendLine("using CQRSharp.Core.Pipelines;");
+        sb.AppendLine("using CQRSharp.Pipelines;");
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using System.Threading;");
         sb.AppendLine();
@@ -103,8 +104,9 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System.Threading;");
         // WithCancellation/ConfigureAwait on IAsyncEnumerable live here; never rely on the consumer's implicit usings.
         sb.AppendLine("using System.Threading.Tasks;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Stream;");
+        sb.AppendLine("using CQRSharp;");
         sb.AppendLine("using CQRSharp.Core.Pipelines;");
+        sb.AppendLine("using CQRSharp.Pipelines;");
         sb.AppendLine();
         sb.AppendLine($"namespace {known.ModuleNamespace}");
         sb.AppendLine("{");

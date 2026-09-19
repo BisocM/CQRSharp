@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Exceptions;
+namespace CQRSharp;
 
 /// <summary>
 ///     Tracks whether an exception has been handled and optionally stores a response to return to the caller.

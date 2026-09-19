@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
 using CQRSharp.Sample.Application.Contexts;
 using CQRSharp.Sample.Domain.Entities;
 

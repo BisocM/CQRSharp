@@ -17,9 +17,7 @@ public sealed class GeneratorDiagnosticTests
     private const string OpenGenericHandlerSource = @"
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
 namespace ProbeNs;
 
@@ -36,9 +34,7 @@ public sealed class GenericCommandHandler<T> : ICommandHandler<GenericCommand<T>
     private const string ClosedHandlerSource = @"
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
 namespace ProbeNs;
 

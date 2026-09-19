@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Outbox;
-using CQRSharp.Core.Options;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Background.Outbox.Types;

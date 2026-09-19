@@ -1,7 +1,5 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 

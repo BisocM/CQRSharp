@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Analyzers;
-using CQRSharp.Core.Mediation;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
@@ -23,10 +21,7 @@ public class SendStreamRequestCodeFixTests
 {
     private const string StreamSendSource = """
                                             using System.Threading.Tasks;
-                                            using CQRSharp.Abstractions.Interfaces.Context;
-                                            using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-                                            using CQRSharp.Abstractions.Models.Requests;
-                                            using CQRSharp.Core.Mediation;
+                                            using CQRSharp;
 
                                             public sealed class MyStream : IStreamRequest<int>
                                             {

@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Attributes.Pipelines;
+namespace CQRSharp;
 
 /// <summary>
 ///     Defines an interface for attributes that perform actions after an executable unit is handled.

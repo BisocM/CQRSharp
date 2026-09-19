@@ -1,20 +1,12 @@
 // CQRSharp.Tests/Core/PipelineExecutorTests.cs
 
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Abstractions.Models.Requests;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Core.Factories;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Notifications.Types;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

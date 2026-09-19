@@ -1,5 +1,5 @@
 using System.Data;
-using CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Pipelines;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.Logging;
 

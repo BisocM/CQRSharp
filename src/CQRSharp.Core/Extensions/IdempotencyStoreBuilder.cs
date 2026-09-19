@@ -1,8 +1,7 @@
 using System;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Core.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Selects the idempotency store, used by the fluent builder's <c>UseIdempotency(...)</c> verb so enabling

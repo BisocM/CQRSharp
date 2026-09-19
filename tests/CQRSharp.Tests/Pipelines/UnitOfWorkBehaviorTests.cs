@@ -1,12 +1,7 @@
 ﻿using System.Data;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Transactions;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Tests.Shared;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -70,7 +65,7 @@ public class UnitOfWorkBehaviorTests
     {
         var options = Options.Create(new UnitOfWorkOptions { RollbackOnFailedResult = false });
         var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _mockUoW.Object, _mockOutbox.Object, options);
-        _mockOutbox.Setup(outbox => outbox.Drain()).Returns(Array.Empty<CQRSharp.Abstractions.Interfaces.Notifications.INotification>());
+        _mockOutbox.Setup(outbox => outbox.Drain()).Returns(Array.Empty<CQRSharp.INotification>());
         var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
         nextDelegate.Setup(next => next(It.IsAny<CancellationToken>())).ReturnsAsync(CommandResult.FromError("recorded anyway"));
 

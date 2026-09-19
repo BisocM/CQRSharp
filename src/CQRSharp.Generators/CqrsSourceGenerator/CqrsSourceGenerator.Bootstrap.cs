@@ -16,9 +16,9 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("#nullable enable");
         sb.AppendLine("using System;");
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
-        sb.AppendLine("using CQRSharp.Core.Options;");
+        sb.AppendLine("using CQRSharp;");
         sb.AppendLine();
-        sb.AppendLine("namespace CQRSharp.Core.Extensions");
+        sb.AppendLine("namespace CQRSharp");
         sb.AppendLine("{");
         EmitSummary(sb, "    ", "Source-generated registrations: wires this assembly's CQRSharp module and every referenced assembly's module into one set of framework services. Internal, so it never collides across assemblies.");
         sb.AppendLine("    internal static class CqrsGeneratedRegistrations");
@@ -62,14 +62,14 @@ public sealed partial class CqrsSourceGenerator
             sb.AppendLine();
             EmitSummary(sb, "        ", "Registers CQRSharp and the source-generated handlers and dispatchers, configuring the pipeline through the fluent <c>ICqrsBuilder</c> (verb order does not matter).");
             sb.AppendLine(
-                "        internal static IServiceCollection AddCqrsGenerated(this IServiceCollection services, System.Action<global::CQRSharp.Pipelines.Extensions.ICqrsBuilder> configure)");
+                "        internal static IServiceCollection AddCqrsGenerated(this IServiceCollection services, System.Action<global::CQRSharp.Pipelines.ICqrsBuilder> configure)");
             sb.AppendLine("        {");
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(services);");
             sb.AppendLine("            ArgumentNullException.ThrowIfNull(configure);");
             sb.AppendLine();
             sb.AppendLine("            // This entry point owns the generated registrations (applied after Build()).");
             sb.AppendLine(
-                "            var builder = new global::CQRSharp.Pipelines.Extensions.CqrsBuilder(services);");
+                "            var builder = new global::CQRSharp.Pipelines.CqrsBuilder(services);");
             sb.AppendLine("            configure(builder);");
             sb.AppendLine();
             sb.AppendLine("            // Build() runs the canonical AddCqrs(...)/pack sequence (order-insensitive). Apply the");

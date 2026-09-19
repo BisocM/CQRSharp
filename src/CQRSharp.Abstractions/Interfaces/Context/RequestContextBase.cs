@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Context;
+namespace CQRSharp;
 
 /// <summary>
 ///     Default implementation of IRequestContext. Can be used as a fallback or baseline.

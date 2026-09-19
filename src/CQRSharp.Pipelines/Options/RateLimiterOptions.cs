@@ -1,6 +1,6 @@
 ﻿using CQRSharp.Pipelines.Behaviors.RateLimiting;
 
-namespace CQRSharp.Pipelines.Options;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Options for configuring the built-in <see cref="RateLimiter" />.

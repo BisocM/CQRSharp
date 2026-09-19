@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 
 namespace CQRSharp.Pipelines.Telemetry;
 

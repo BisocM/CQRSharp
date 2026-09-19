@@ -1,7 +1,5 @@
 using CQRSharp.Core.Diagnostics;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,7 +62,7 @@ public sealed class CqrsStartupValidatorTests
         services.AddInMemoryOutboxStore();
         RegisterTestRequestFactories(services);
         // A plain (non-explicit) IUnitOfWork triggers CQRCONF002 (Warning) but no error.
-        services.AddScoped<CQRSharp.Abstractions.Interfaces.Transactions.IUnitOfWork, PlainUnitOfWork>();
+        services.AddScoped<CQRSharp.Pipelines.IUnitOfWork, PlainUnitOfWork>();
         await using var provider = services.BuildServiceProvider();
 
         await using (var scope = provider.CreateAsyncScope())
@@ -84,7 +82,7 @@ public sealed class CqrsStartupValidatorTests
         services.AddCqrsGenerated(configureOutbox: o => o.Mode = OutboxMode.Transactional);
         services.AddInMemoryOutboxStore();
         RegisterTestRequestFactories(services);
-        services.AddScoped<CQRSharp.Abstractions.Interfaces.Transactions.IUnitOfWork, PlainUnitOfWork>();
+        services.AddScoped<CQRSharp.Pipelines.IUnitOfWork, PlainUnitOfWork>();
         await using var provider = services.BuildServiceProvider();
 
         var validator = CreateValidator(provider, CqrsValidationPolicy.ThrowOnWarning);
@@ -231,7 +229,7 @@ public sealed class CqrsStartupValidatorTests
     // the assertions isolate the configuration-level codes under test.
     private static void RegisterTestRequestFactories(IServiceCollection services)
         => services.AddTransient<
-            CQRSharp.Core.Factories.IRequestContextFactory<DiagnosticsCustomContext>,
+            CQRSharp.IRequestContextFactory<DiagnosticsCustomContext>,
             DiagnosticsCustomContextFactory>();
 
     private sealed class CountingScopeFactory : IServiceScopeFactory
@@ -245,7 +243,7 @@ public sealed class CqrsStartupValidatorTests
         }
     }
 
-    private sealed class PlainUnitOfWork : CQRSharp.Abstractions.Interfaces.Transactions.IUnitOfWork
+    private sealed class PlainUnitOfWork : CQRSharp.Pipelines.IUnitOfWork
     {
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
         public TService GetService<TService>() where TService : class => throw new NotSupportedException();

@@ -31,7 +31,7 @@ CQRSharp-referencing assembly emits — `internal`, so they never collide across
 
 The module's types are emitted into a per-assembly namespace (`CQRSharp.Generated.<AssemblyName>`) so two assemblies
 in one reference graph never collide. The `AddCqrsGenerated` entry points keep the stable type name
-`CQRSharp.Core.Extensions.CqrsGeneratedBootstrap`, but are emitted **`internal`** — so even when two assemblies both
+`CQRSharp.CqrsGeneratedBootstrap`, but are emitted **`internal`** — so even when two assemblies both
 emit them, a referenced assembly's copy is invisible to the referencing one and there is nothing to collide on. You
 call `AddCqrsGenerated(...)` from inside the assembly that wires DI, where `internal` visibility is exactly right. A
 second generator, `CqrsAotHintGenerator`, emits an `AotHintProvider` that keeps generic instantiations rooted for the

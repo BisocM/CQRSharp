@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Attributes.Pipelines;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Models.Requests;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents metadata for a specific request, including its associations with

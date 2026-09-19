@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Command;
+namespace CQRSharp;
 
 /// <summary>
 ///     A command that mutates state <em>and</em> returns a value, dispatched with <c>ICqrsDispatcher.Send</c> and

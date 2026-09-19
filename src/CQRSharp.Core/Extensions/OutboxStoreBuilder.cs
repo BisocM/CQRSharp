@@ -1,9 +1,7 @@
 using System;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Core.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Selects the outbox mode and store in a single place, used by the fluent builder's <c>UseOutbox(...)</c> verb so

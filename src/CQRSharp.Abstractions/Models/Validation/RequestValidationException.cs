@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Validation;
+namespace CQRSharp;
 
 /// <summary>
 ///     An exception raised when one or more request validators report failures.

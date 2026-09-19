@@ -1,4 +1,4 @@
-namespace CQRSharp.Core.Options.Enums;
+namespace CQRSharp;
 
 /// <summary>
 ///     Defines the behavior for the notification outbox.
@@ -13,7 +13,7 @@ public enum OutboxMode
 
     /// <summary>
     ///     All notifications are sent to the outbox for deferred processing by a background service.
-    ///     This requires registering an <see cref="CQRSharp.Abstractions.Interfaces.Outbox.IOutboxStore" /> implementation
+    ///     This requires registering an <see cref="CQRSharp.Pipelines.IOutboxStore" /> implementation
     ///     and the outbox processor.
     /// </summary>
     Enabled,

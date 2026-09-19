@@ -1,5 +1,3 @@
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Command;
+namespace CQRSharp;
 
 /// <summary>
 ///     Base class for a value-returning command (<see cref="ICommand{TResult}" />) with a custom context. Derives from

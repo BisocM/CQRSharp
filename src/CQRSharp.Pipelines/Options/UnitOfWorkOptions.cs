@@ -1,6 +1,6 @@
 ﻿using System.Data;
 
-namespace CQRSharp.Pipelines.Options;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Provides configuration options for the Unit of Work behavior.

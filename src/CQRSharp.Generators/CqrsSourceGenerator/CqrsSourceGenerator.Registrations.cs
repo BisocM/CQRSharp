@@ -90,13 +90,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System.Collections.Concurrent;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Notifications;");
-        sb.AppendLine("using CQRSharp.Abstractions.Models.Requests;");
+        sb.AppendLine("using CQRSharp;");
+        sb.AppendLine("using CQRSharp.Pipelines;");
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.Caching.Handlers;");
         sb.AppendLine("using CQRSharp.Core.Caching.Contexts;");
         sb.AppendLine("using CQRSharp.Core.Diagnostics;");
-        sb.AppendLine("using CQRSharp.Core.Factories;");
         sb.AppendLine("using CQRSharp.Core.Modules;");
         sb.AppendLine("using CQRSharp.Core.Notifications;");
         sb.AppendLine("using CQRSharp.Core.Pipelines;");
@@ -107,7 +106,7 @@ public sealed partial class CqrsSourceGenerator
         EmitSummary(sb, "    ", "This assembly's source-generated CQRSharp module: its compile-time-discovered handlers, request bindings, context factories, exception hooks, and AOT-safe dispatch surface, exposed for a composition root to merge.");
         sb.AppendLine("    public sealed class CqrsModule : global::CQRSharp.Core.Modules.ICqrsModule");
         sb.AppendLine("    {");
-        sb.AppendLine("        private static readonly ConcurrentDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata> __requestMetadata = __BuildRequestMetadata();");
+        sb.AppendLine("        private static readonly ConcurrentDictionary<Type, global::CQRSharp.RequestMetadata> __requestMetadata = __BuildRequestMetadata();");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, HandlerInvokerDelegate> __handlerInvokers = __BuildHandlerInvokers();");
         sb.AppendLine("        private static readonly Dictionary<Type, Delegate> __typedHandlerInvokers = __BuildTypedHandlerInvokers();");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, object?>> __contextFactories = __BuildContextFactories();");
@@ -119,7 +118,7 @@ public sealed partial class CqrsSourceGenerator
         EmitTypeArray(sb, "__stableNotificationTypes", stableTypes);
         sb.AppendLine();
         sb.AppendLine("        /// <inheritdoc />");
-        sb.AppendLine("        public IReadOnlyDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata> RequestMetadata => __requestMetadata;");
+        sb.AppendLine("        public IReadOnlyDictionary<Type, global::CQRSharp.RequestMetadata> RequestMetadata => __requestMetadata;");
         sb.AppendLine("        /// <inheritdoc />");
         sb.AppendLine("        public IReadOnlyDictionary<Type, HandlerInvokerDelegate> HandlerInvokers => __handlerInvokers;");
         sb.AppendLine("        /// <inheritdoc />");
@@ -157,7 +156,7 @@ public sealed partial class CqrsSourceGenerator
             : "        public INotificationSerializer? OutboxSerializer => null;");
         sb.AppendLine();
 
-        sb.AppendLine("        private static ConcurrentDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata> __BuildRequestMetadata()");
+        sb.AppendLine("        private static ConcurrentDictionary<Type, global::CQRSharp.RequestMetadata> __BuildRequestMetadata()");
         sb.AppendLine("        {");
         GenerateRequestRegistry(sb, candidates, known, handlerBindingsByRequest, context, config);
         sb.AppendLine("            return requestMetadataMappings;");

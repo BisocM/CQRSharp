@@ -1,6 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-
 namespace CQRSharp.Sample.ExternalModule;
 
 /// <summary>A query declared in a separate assembly, dispatched by the Sample to prove cross-assembly routing under AOT.</summary>

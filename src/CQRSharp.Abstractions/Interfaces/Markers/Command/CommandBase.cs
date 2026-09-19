@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Command;
+namespace CQRSharp;
 
 /// <summary>
 ///     Base class for commands that can optionally specify a custom TContext.

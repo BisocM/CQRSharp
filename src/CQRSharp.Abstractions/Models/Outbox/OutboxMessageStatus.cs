@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Outbox;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Represents the processing status of an <see cref="OutboxMessage" />.
@@ -23,7 +23,7 @@ public enum OutboxMessageStatus
     /// <summary>
     ///     The message has been claimed by a processor and is currently being dispatched.
     ///     A store should only hand a <see cref="Pending" /> message to one processor at a time by transitioning it
-    ///     to this state atomically (see <see cref="CQRSharp.Abstractions.Interfaces.Outbox.IOutboxStore.GetPendingAsync" />).
+    ///     to this state atomically (see <see cref="CQRSharp.Pipelines.IOutboxStore.GetPendingAsync" />).
     ///     Appended last so the ordinal values of the original members remain stable for any persisted data.
     /// </summary>
     InProgress

@@ -1,7 +1,4 @@
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,4 @@
-using CQRSharp.Abstractions.Attributes.Notifications;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Sample.Domain.Events;
 

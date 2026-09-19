@@ -19,9 +19,7 @@ public sealed class IncrementalGeneratorCachingTests
     private const string SourceTemplate = @"
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
 
 namespace CachingProbe;
 

@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Notifications;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Provides a trimming- and AOT-friendly way to determine whether a notification has a stable outbox name.

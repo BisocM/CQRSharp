@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Query;
+namespace CQRSharp;
 
 /// <summary>
 ///     Marker interface for queries that return a result of type <typeparamref name="TResult" />.

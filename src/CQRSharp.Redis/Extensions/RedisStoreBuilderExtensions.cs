@@ -1,4 +1,5 @@
-using CQRSharp.Core.Extensions;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using CQRSharp.Redis.Idempotency;
 using CQRSharp.Redis.Outbox;
 using StackExchange.Redis;

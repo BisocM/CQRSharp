@@ -1,8 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp;
+using CQRSharp.Pipelines;
 
-namespace CQRSharp.Core.Mediation;
+namespace CQRSharp;
 
 /// <summary>
 ///     Primary CQRSharp dispatch façade: sends requests and publishes notifications.

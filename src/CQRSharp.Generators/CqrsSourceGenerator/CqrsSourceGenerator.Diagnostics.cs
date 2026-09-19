@@ -20,19 +20,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using CQRSharp.Abstractions.Attributes.Pipelines;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Context;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Command;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Query;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Request;");
-        sb.AppendLine("using CQRSharp.Abstractions.Interfaces.Markers.Stream;");
-        sb.AppendLine("using CQRSharp.Abstractions.Models.Commands;");
-        sb.AppendLine("using CQRSharp.Abstractions.Models.Requests;");
+        sb.AppendLine("using CQRSharp;");
         sb.AppendLine("using CQRSharp.Core.Caching.Contexts;");
         sb.AppendLine("using CQRSharp.Core.Caching.Requests;");
         sb.AppendLine("using CQRSharp.Core.Diagnostics;");
-        sb.AppendLine("using CQRSharp.Core.Factories;");
         sb.AppendLine("using CQRSharp.Core.Pipelines;");
+        sb.AppendLine("using CQRSharp.Pipelines;");
         sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
         sb.AppendLine("using Microsoft.Extensions.Options;");
         sb.AppendLine();
@@ -54,8 +47,8 @@ public sealed partial class CqrsSourceGenerator
         EmitSummary(sb, "        ", "Inspects the resolved CQRSharp configuration and returns any binding issues that were detected.");
         sb.AppendLine("        public IReadOnlyList<CqrsBindingIssue> DescribeConfiguration()");
         sb.AppendLine("        {");
-        sb.AppendLine("            var outbox = _services.GetService<IOptions<CQRSharp.Core.Options.OutboxOptions>>()?.Value ?? new();");
-        sb.AppendLine("            var dispatcher = _services.GetService<IOptions<CQRSharp.Core.Options.DispatcherOptions>>()?.Value ?? new();");
+        sb.AppendLine("            var outbox = _services.GetService<IOptions<CQRSharp.OutboxOptions>>()?.Value ?? new();");
+        sb.AppendLine("            var dispatcher = _services.GetService<IOptions<CQRSharp.DispatcherOptions>>()?.Value ?? new();");
         sb.AppendLine("            return CQRSharp.Core.Diagnostics.CqrsConfigurationInspector.Inspect(");
         sb.AppendLine("                _services, outbox, dispatcher, DescribeAllRequests(), _notificationRegistry);");
         sb.AppendLine("        }");
@@ -81,7 +74,7 @@ public sealed partial class CqrsSourceGenerator
                 sb.AppendLine($"                binding = Describe<{requestName}, {request.ResultOrItemNullable}>();");
             else
                 sb.AppendLine(
-                    $"                binding = Describe<{requestName}, global::CQRSharp.Abstractions.Models.Commands.CommandResult>();");
+                    $"                binding = Describe<{requestName}, global::CQRSharp.CommandResult>();");
             sb.AppendLine("                return true;");
             sb.AppendLine("            }");
         }
@@ -116,7 +109,7 @@ public sealed partial class CqrsSourceGenerator
                 sb.AppendLine($"            list.Add(Describe<{requestName}, {request.ResultOrItemNullable}>());");
             else
                 sb.AppendLine(
-                    $"            list.Add(Describe<{requestName}, global::CQRSharp.Abstractions.Models.Commands.CommandResult>());");
+                    $"            list.Add(Describe<{requestName}, global::CQRSharp.CommandResult>());");
         }
 
         sb.AppendLine("            return list;");

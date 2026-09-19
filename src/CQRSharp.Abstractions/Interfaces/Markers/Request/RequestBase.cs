@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents a fundamental base class for handling requests.

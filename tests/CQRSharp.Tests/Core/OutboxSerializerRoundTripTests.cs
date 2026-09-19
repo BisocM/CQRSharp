@@ -1,7 +1,5 @@
 using System.Text.Json;
-using CQRSharp.Abstractions.Attributes.Notifications;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Extensions;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 

@@ -1,3 +1,5 @@
+using CQRSharp.Pipelines;
+
 namespace CQRSharp.Core.Pipelines;
 
 // Marker interfaces implemented by the optional pipeline behaviors so configuration inspection can detect whether a

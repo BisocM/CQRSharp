@@ -1,5 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.Time.Testing;
 

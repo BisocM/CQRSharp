@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.Outbox.Types;
 using FluentAssertions;
 

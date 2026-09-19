@@ -1,5 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;

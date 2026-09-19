@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Validation;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents a single validation failure for a request.

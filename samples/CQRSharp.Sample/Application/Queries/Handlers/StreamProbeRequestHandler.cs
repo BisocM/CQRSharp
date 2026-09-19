@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Sample.Application.Queries.Requests;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.Logging;

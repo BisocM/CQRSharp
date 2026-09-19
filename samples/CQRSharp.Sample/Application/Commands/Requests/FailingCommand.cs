@@ -1,5 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Sample.Application.Contexts;
 
 namespace CQRSharp.Sample.Application.Commands.Requests;

@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Exceptions;
+namespace CQRSharp;
 
 /// <summary>
 ///     Executes side effects when an exception occurs during request processing.

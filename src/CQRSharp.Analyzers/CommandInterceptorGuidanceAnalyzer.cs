@@ -14,7 +14,7 @@ namespace CQRSharp.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class CommandInterceptorGuidanceAnalyzer : DiagnosticAnalyzer
 {
-    private const string CommandInterceptorMetadataName = "CQRSharp.Abstractions.Attributes.Pipelines.ICommandInterceptor";
+    private const string CommandInterceptorMetadataName = "CQRSharp.ICommandInterceptor";
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(CqrsDiagnostics.CollapseToCommandInterceptor);

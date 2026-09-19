@@ -1,7 +1,8 @@
+using CQRSharp.Pipelines;
 using System.Data;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Transactions;
+namespace CQRSharp;
 
 /// <summary>
 ///     A non-generic marker interface that identifies a query as requiring a transaction.

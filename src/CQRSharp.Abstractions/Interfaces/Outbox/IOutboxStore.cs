@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Models.Outbox;
-
-namespace CQRSharp.Abstractions.Interfaces.Outbox;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Defines the contract for a persistence store for outbox messages.

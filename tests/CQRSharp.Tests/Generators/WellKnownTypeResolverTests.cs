@@ -1,4 +1,3 @@
-using CQRSharp.Core.Mediation;
 using CQRSharp.Shared;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
@@ -110,11 +109,7 @@ public sealed class WellKnownTypeResolverTests
         const string source = """
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Handlers;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Commands;
-                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp;
 
                               public sealed class C : ICommand
                               {

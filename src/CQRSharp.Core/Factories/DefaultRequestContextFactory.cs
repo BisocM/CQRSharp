@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Core.Factories;
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides a default implementation of the <see cref="IRequestContextFactory" /> interface.

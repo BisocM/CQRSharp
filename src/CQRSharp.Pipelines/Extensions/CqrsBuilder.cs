@@ -1,12 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
-using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace CQRSharp.Pipelines.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The fluent builder implementation. Each verb records intent into a field or into the single

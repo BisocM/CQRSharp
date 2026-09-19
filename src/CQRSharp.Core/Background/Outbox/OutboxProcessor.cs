@@ -1,11 +1,8 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

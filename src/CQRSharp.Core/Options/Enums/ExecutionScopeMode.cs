@@ -1,4 +1,4 @@
-namespace CQRSharp.Core.Options.Enums;
+namespace CQRSharp;
 
 /// <summary>
 ///     Controls which dependency injection scope is used to execute requests and notifications.

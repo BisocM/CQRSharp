@@ -1,9 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Core.Factories;
+namespace CQRSharp;
 
 /// <summary>
 ///     Factory for creating IRequestContext instances.

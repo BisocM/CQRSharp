@@ -1,6 +1,6 @@
-using CQRSharp.Core.Options.Enums;
+using CQRSharp;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Configuration options for how notifications are dispatched to their handlers. Kept separate from

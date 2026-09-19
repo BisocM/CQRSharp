@@ -1,7 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp;
+using CQRSharp.Pipelines;
 
-namespace CQRSharp.Core.Notifications.Types;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents a notification that is published when a streaming request is fully consumed successfully.

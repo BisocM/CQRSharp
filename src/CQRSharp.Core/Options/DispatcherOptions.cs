@@ -1,6 +1,6 @@
-﻿using CQRSharp.Core.Options.Enums;
+﻿using CQRSharp;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Represents the configuration options for the dispatcher.

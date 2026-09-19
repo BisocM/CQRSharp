@@ -1,6 +1,5 @@
 ﻿using System.Threading.Channels;
 using CQRSharp.Core.Background.TaskQueue.Types;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

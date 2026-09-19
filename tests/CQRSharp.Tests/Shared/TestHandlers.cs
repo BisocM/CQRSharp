@@ -1,6 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Models.Commands;
-
 namespace CQRSharp.Tests.Shared;
 
 /// <summary>

@@ -1,6 +1,4 @@
 using System.Threading.Channels;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Core.Notifications.Types;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 
@@ -8,7 +6,7 @@ namespace CQRSharp.Tests.Core;
 
 /// <summary>
 ///     Unit tests covering <see cref="CommandResult" /> (every factory/branch) and the lifecycle/failure
-///     notification types under CQRSharp.Core.Notifications.Types. The notification tests construct each
+///     lifecycle notification types in the CQRSharp namespace. The notification tests construct each
 ///     type with realistic values and assert that its properties round-trip, in particular preserving any
 ///     exception or request/command reference.
 /// </summary>

@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.Redis.Outbox;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;

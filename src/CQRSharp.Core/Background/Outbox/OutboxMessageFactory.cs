@@ -1,6 +1,5 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Core.Background.Outbox;
 

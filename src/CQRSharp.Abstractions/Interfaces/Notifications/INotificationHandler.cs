@@ -1,4 +1,6 @@
-namespace CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
+
+namespace CQRSharp;
 
 /// <summary>
 ///     Interface for handling notifications.

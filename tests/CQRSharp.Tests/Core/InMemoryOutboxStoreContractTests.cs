@@ -1,6 +1,5 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.Outbox.Types;
-using CQRSharp.Core.Options;
 using CQRSharp.Testing.Outbox;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;

@@ -1,5 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

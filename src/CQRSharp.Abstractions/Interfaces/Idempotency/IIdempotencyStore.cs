@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Idempotency;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Persistence contract for request idempotency. Implement this (e.g. backed by a database table, Redis, etc.) and

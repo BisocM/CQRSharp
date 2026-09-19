@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-
-namespace CQRSharp.Core.Notifications.Pipelines;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Defines an interface for notification pipeline behaviors that can be applied globally to all notifications.

@@ -1,4 +1,4 @@
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Options for the in-process in-memory outbox store.

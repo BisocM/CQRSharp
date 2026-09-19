@@ -1,13 +1,7 @@
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Diagnostics;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.Options;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Pipelines.Extensions;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

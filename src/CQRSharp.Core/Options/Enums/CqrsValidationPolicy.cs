@@ -1,4 +1,4 @@
-namespace CQRSharp.Core.Options.Enums;
+namespace CQRSharp;
 
 /// <summary>
 ///     Controls how the startup validator reacts to the configuration and binding issues it finds when the host

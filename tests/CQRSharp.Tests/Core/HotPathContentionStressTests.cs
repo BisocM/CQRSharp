@@ -1,13 +1,5 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Options.Enums;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -196,7 +188,7 @@ public sealed class HotPathContentionStressTests
 
     private static ServiceProvider BuildProvider(
         ContentionSink sink,
-        Action<global::CQRSharp.Pipelines.Extensions.ICqrsBuilder>? configure = null,
+        Action<global::CQRSharp.Pipelines.ICqrsBuilder>? configure = null,
         Action<IServiceCollection>? extra = null)
     {
         var services = new ServiceCollection();

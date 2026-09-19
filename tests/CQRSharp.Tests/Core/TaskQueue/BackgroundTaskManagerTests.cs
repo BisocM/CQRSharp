@@ -2,8 +2,6 @@
 using System.Threading.Channels;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Background.TaskQueue.Types;
-using CQRSharp.Core.Notifications.Types;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

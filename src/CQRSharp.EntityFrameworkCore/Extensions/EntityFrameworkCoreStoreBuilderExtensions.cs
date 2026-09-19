@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp.Core.Extensions;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,9 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 

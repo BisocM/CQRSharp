@@ -1,6 +1,3 @@
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-
 namespace CQRSharp.Tests.Shared;
 
 /// <summary>

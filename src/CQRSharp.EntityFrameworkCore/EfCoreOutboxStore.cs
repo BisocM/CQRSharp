@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

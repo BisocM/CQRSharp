@@ -1,12 +1,7 @@
 using System.Data;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Abstractions.Interfaces.Validation;
-using CQRSharp.Abstractions.Models.Validation;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Transactions;
 using CQRSharp.Pipelines.Behaviors.Validation;
-using CQRSharp.Pipelines.Options;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;

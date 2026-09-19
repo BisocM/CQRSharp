@@ -1,9 +1,6 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Notifications.Pipelines;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;

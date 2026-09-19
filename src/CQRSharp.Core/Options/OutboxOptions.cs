@@ -1,6 +1,6 @@
-﻿using CQRSharp.Core.Options.Enums;
+﻿using CQRSharp;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides configuration options for the notification outbox pattern.

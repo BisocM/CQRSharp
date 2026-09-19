@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Tests.ExternalModule;
 

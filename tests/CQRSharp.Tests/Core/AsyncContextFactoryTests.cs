@@ -1,7 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Requests;
-using CQRSharp.Core.Factories;
 using FluentAssertions;
 
 namespace CQRSharp.Tests.Core;

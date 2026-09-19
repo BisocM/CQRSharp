@@ -1,5 +1,3 @@
-using CQRSharp.Abstractions.Models.Requests;
-
 namespace CQRSharp.Core.Caching.Requests;
 
 /// <summary>

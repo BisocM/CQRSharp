@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Attributes.Pipelines;
+namespace CQRSharp;
 
 /// <summary>
 ///     Marker interface for command interceptors.

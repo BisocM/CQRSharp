@@ -1,4 +1,4 @@
-﻿namespace CQRSharp.Core.Pipelines;
+﻿namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Optional contract for pipeline behaviors that require a deterministic execution order.

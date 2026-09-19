@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Handlers;
+namespace CQRSharp;
 
 /// <summary>
 ///     Interface for handling queries that return a result of type <typeparamref name="TResult" />.

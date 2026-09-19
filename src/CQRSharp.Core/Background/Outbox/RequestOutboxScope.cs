@@ -1,5 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Background.Outbox;

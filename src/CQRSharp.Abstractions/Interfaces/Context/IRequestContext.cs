@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Context;
+namespace CQRSharp;
 
 /// <summary>
 ///     A common interface for all request contexts. This interface mandates that every context

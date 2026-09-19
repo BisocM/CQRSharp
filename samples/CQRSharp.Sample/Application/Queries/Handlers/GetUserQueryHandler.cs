@@ -1,4 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
 using CQRSharp.Sample.Application.Queries.Requests;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Infrastructure.Persistence;

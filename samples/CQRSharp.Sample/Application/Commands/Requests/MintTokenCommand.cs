@@ -1,7 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
-
 namespace CQRSharp.Sample.Application.Commands.Requests;
 
 /// <summary>

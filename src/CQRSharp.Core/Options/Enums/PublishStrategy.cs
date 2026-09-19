@@ -1,4 +1,4 @@
-namespace CQRSharp.Core.Options.Enums;
+namespace CQRSharp;
 
 /// <summary>
 ///     Controls how a notification is dispatched to its multiple handlers.

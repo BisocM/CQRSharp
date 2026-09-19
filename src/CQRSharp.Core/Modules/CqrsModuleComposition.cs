@@ -1,16 +1,12 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Requests;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Caching.Contexts;
 using CQRSharp.Core.Caching.Handlers;
 using CQRSharp.Core.Caching.Requests;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Options;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

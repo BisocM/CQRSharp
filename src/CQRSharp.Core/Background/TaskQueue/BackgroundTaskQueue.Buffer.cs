@@ -1,10 +1,8 @@
 ﻿using System.Threading.Channels;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.TaskQueue.Telemetry;
 using CQRSharp.Core.Background.TaskQueue.Types;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Notifications.Types;
-using CQRSharp.Core.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

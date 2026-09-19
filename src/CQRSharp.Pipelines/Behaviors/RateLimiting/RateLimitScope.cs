@@ -1,4 +1,4 @@
-namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Specifies the scope for rate limiting, determining how rate limits are applied.

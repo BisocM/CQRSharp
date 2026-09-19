@@ -1,4 +1,4 @@
-namespace CQRSharp.Pipelines.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Sentinel type registered once by <c>AddCqrsPipelinePack</c>. Its presence in the service collection marks that

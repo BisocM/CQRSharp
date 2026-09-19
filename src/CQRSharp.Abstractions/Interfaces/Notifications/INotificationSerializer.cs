@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Notifications;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Defines the contract for serializing and deserializing notification objects for durable storage, such as in an outbox pattern.

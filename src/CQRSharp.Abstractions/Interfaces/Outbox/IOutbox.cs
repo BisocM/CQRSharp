@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-
-namespace CQRSharp.Abstractions.Interfaces.Outbox;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Defines a contract for a scoped, in-memory outbox used to collect notifications

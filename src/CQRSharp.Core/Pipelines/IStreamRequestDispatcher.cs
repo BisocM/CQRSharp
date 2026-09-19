@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp.Pipelines;
 
 namespace CQRSharp.Core.Pipelines;
 

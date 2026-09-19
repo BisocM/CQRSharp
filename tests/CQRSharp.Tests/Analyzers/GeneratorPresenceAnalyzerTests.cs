@@ -3,9 +3,7 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Analyzers;
-using CQRSharp.Core.Mediation;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -23,9 +21,7 @@ public sealed class GeneratorPresenceAnalyzerTests
     private const string HandlerSource = """
                                          using System.Threading;
                                          using System.Threading.Tasks;
-                                         using CQRSharp.Abstractions.Interfaces.Handlers;
-                                         using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                                         using CQRSharp.Abstractions.Models.Commands;
+                                         using CQRSharp;
 
                                          public sealed class MissingGenCommand : CommandBase;
 
@@ -51,9 +47,7 @@ public sealed class GeneratorPresenceAnalyzerTests
         const string withMarker = """
                                   using System.Threading;
                                   using System.Threading.Tasks;
-                                  using CQRSharp.Abstractions.Interfaces.Handlers;
-                                  using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                                  using CQRSharp.Abstractions.Models.Commands;
+                                  using CQRSharp;
 
                                   [assembly: global::CQRSharp.Abstractions.Attributes.SourceGeneration.CqrsGeneratedModule(typeof(MissingGenCommandHandler))]
 

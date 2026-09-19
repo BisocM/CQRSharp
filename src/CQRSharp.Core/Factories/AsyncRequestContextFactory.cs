@@ -1,10 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Core.Factories;
+namespace CQRSharp;
 
 /// <summary>
 ///     Base class for a request context factory that hydrates its context from asynchronous sources (a database, an

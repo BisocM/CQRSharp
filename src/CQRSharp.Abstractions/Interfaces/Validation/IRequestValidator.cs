@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Validation;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Validation;
+namespace CQRSharp;
 
 /// <summary>
 ///     Defines a validator for a specific request type. Implementations should be registered in DI.

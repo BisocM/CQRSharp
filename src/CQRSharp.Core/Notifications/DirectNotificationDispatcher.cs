@@ -1,8 +1,5 @@
 ﻿using System.Runtime.ExceptionServices;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Notifications.Pipelines;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

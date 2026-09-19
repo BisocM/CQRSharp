@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Context;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Handlers;
+namespace CQRSharp;
 
 /// <summary>
 ///     Interface for handling streaming requests that yield elements of type <typeparamref name="TItem" />.

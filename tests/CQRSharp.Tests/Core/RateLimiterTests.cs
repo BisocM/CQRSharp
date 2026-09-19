@@ -1,9 +1,6 @@
 ﻿using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines;
-using CQRSharp.Pipelines.Extensions;
-using CQRSharp.Pipelines.Options;
+using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Tests.Shared;
 using CQRSharp.Tests.Shared.CollisionsA;
 using FluentAssertions;

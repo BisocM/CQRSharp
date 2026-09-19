@@ -1,7 +1,7 @@
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Benchmarks.MediatorLib;
+namespace Benchmarks.MediatorLib;
 
 public sealed class Ping : IRequest<int>;
 

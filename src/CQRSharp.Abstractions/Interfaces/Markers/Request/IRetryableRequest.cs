@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
+namespace CQRSharp;
 
 /// <summary>
 ///     Opt-in marker interface that makes a request eligible for automatic retries by the resilience behavior.

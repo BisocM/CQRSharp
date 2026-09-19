@@ -1,6 +1,6 @@
 ﻿using CQRSharp.Core.Background.Outbox;
 
-namespace CQRSharp.Core.Options;
+namespace CQRSharp;
 
 /// <summary>
 ///     Provides configuration for the <see cref="OutboxProcessor" />.

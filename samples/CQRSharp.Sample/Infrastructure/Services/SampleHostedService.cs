@@ -1,10 +1,7 @@
 using System.Diagnostics;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Abstractions.Models.Validation;
 using CQRSharp.Core.Background.TaskQueue;
 using CQRSharp.Core.Diagnostics;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Notifications.Types;
+using CQRSharp.Pipelines;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Sample.Application.Commands.Handlers;
 using CQRSharp.Sample.Application.Commands.Requests;

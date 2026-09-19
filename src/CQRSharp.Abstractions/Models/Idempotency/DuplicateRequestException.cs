@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Idempotency;
+namespace CQRSharp;
 
 /// <summary>
 ///     Thrown by the idempotency behavior when a request's idempotency key has already been claimed — i.e. the request

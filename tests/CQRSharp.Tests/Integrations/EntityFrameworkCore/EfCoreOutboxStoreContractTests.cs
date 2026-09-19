@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using CQRSharp.Testing.Outbox;

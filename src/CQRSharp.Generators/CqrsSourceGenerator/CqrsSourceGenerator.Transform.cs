@@ -26,7 +26,7 @@ public sealed partial class CqrsSourceGenerator
     private static KnownSnapshot CreateKnownSnapshot(Compilation compilation)
     {
         var known = CqrsKnownSymbols.For(compilation);
-        var hasBuilder = compilation.GetTypeByMetadataName("CQRSharp.Pipelines.Extensions.ICqrsBuilder") is not null;
+        var hasBuilder = compilation.GetTypeByMetadataName("CQRSharp.Pipelines.ICqrsBuilder") is not null;
         var commandResult = known.CommandResult?.ToDisplayString(Fq) ?? string.Empty;
         var contextBase = known.RequestContextBase?.ToDisplayString(Fq) ?? string.Empty;
         var preHandler = known.IPreHandlerAttribute?.ToDisplayString(Fq) ?? string.Empty;

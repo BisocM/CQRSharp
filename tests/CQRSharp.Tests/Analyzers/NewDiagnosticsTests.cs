@@ -1,8 +1,6 @@
 using System.Collections.Immutable;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Analyzers;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Pipelines.Extensions;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -52,7 +50,8 @@ public class NewDiagnosticsTests
     public async Task CQRA014_FlagsDirectAddCqrs()
     {
         const string source = """
-                              using CQRSharp.Core.Extensions;
+                              using CQRSharp;
+                              using CQRSharp.Pipelines;
                               using Microsoft.Extensions.DependencyInjection;
 
                               public class Startup
@@ -86,8 +85,7 @@ public class NewDiagnosticsTests
     {
         const string source = """
                               using System;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp;
 
                               public sealed class MyContext : IRequestContext
                               {
@@ -106,10 +104,7 @@ public class NewDiagnosticsTests
     {
         const string source = """
                               using System;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
-                              using CQRSharp.Core.Factories;
+                              using CQRSharp;
 
                               public sealed class MyContext : IRequestContext
                               {
@@ -132,7 +127,7 @@ public class NewDiagnosticsTests
     public async Task CQRA011_DoesNotFlagDefaultContext()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp;
 
                               public sealed class PlainCommand : CommandBase { }
                               """;
@@ -148,10 +143,8 @@ public class NewDiagnosticsTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Interfaces.Validation;
-                              using CQRSharp.Abstractions.Models.Validation;
-                              using CQRSharp.Core.Extensions;
+                              using CQRSharp;
+                              using CQRSharp.Pipelines;
                               using Microsoft.Extensions.DependencyInjection;
 
                               public sealed class MyCommand : CommandBase { }
@@ -179,11 +172,8 @@ public class NewDiagnosticsTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Interfaces.Validation;
-                              using CQRSharp.Abstractions.Models.Validation;
-                              using CQRSharp.Core.Extensions;
-                              using CQRSharp.Pipelines.Extensions;
+                              using CQRSharp;
+                              using CQRSharp.Pipelines;
                               using Microsoft.Extensions.DependencyInjection;
 
                               public sealed class MyCommand : CommandBase { }
@@ -209,8 +199,8 @@ public class NewDiagnosticsTests
     public async Task CQRA013_FlagsRequestWithoutMarkerWhenConfigured()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Pipelines.Extensions;
+                              using CQRSharp;
+                              using CQRSharp.Pipelines;
 
                               public sealed class PlainCommand : CommandBase { }
 
@@ -228,7 +218,7 @@ public class NewDiagnosticsTests
     public async Task CQRA013_DoesNotFlagWhenNotConfigured()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp;
 
                               public sealed class PlainCommand : CommandBase { }
                               """;
@@ -244,8 +234,7 @@ public class NewDiagnosticsTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp;
 
                               public sealed class BothAttribute : Attribute, IPreHandlerAttribute, IPostHandlerAttribute
                               {
@@ -267,8 +256,7 @@ public class NewDiagnosticsTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp;
 
                               public sealed class CombinedAttribute : Attribute, ICommandInterceptor
                               {

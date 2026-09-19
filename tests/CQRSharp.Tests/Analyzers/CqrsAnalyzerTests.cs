@@ -1,7 +1,5 @@
 using System.Collections.Immutable;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Analyzers;
-using CQRSharp.Core.Mediation;
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -48,10 +46,7 @@ public class CqrsAnalyzerTests
     {
         const string source = """
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Stream;
-                              using CQRSharp.Abstractions.Models.Requests;
-                              using CQRSharp.Core.Mediation;
+                              using CQRSharp;
 
                               public sealed class MyStream : IStreamRequest<int>
                               {
@@ -74,10 +69,7 @@ public class CqrsAnalyzerTests
     {
         const string source = """
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Requests;
-                              using CQRSharp.Core.Mediation;
+                              using CQRSharp;
 
                               public sealed class MyCommand : ICommand
                               {
@@ -99,7 +91,7 @@ public class CqrsAnalyzerTests
     public async Task CQRA005_FlagsNonBehaviorExemption()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
+                              using CQRSharp;
 
                               public sealed class NotABehavior { }
 
@@ -116,10 +108,7 @@ public class CqrsAnalyzerTests
     {
         const string source = """
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Requests;
-                              using CQRSharp.Core.Mediation;
+                              using CQRSharp;
 
                               public sealed class Unhandled : ICommand
                               {
@@ -143,12 +132,7 @@ public class CqrsAnalyzerTests
         const string source = """
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Handlers;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Commands;
-                              using CQRSharp.Abstractions.Models.Requests;
-                              using CQRSharp.Core.Mediation;
+                              using CQRSharp;
 
                               public sealed class Handled : ICommand
                               {
@@ -177,8 +161,8 @@ public class CqrsAnalyzerTests
     {
         const string source = """
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Notifications;
-                              using CQRSharp.Core.Mediation;
+                              using CQRSharp;
+                              using CQRSharp.Pipelines;
 
                               public sealed class Unheard : INotification { }
 
@@ -198,10 +182,7 @@ public class CqrsAnalyzerTests
         const string source = """
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Handlers;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Commands;
+                              using CQRSharp;
 
                               public sealed class CtxA : RequestContextBase { }
                               public sealed class CtxB : RequestContextBase { }
@@ -228,10 +209,7 @@ public class CqrsAnalyzerTests
         const string source = """
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Handlers;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Models.Commands;
+                              using CQRSharp;
 
                               public sealed class CustomCtx : RequestContextBase { }
 
@@ -253,8 +231,7 @@ public class CqrsAnalyzerTests
     // the in-memory harness does not reference CQRSharp.Pipelines. A call named AddRateLimiting is what the analyzer
     // treats as "rate limiting configured".
     private const string RateLimitedContextDecl = """
-                                                  using CQRSharp.Abstractions.Interfaces.Context;
-                                                  using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                                                  using CQRSharp;
                                                   using CQRSharp.Pipelines;
 
                                                   namespace CQRSharp.Pipelines
@@ -333,9 +310,9 @@ public class CqrsAnalyzerTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp;
                               using CQRSharp.Core.Pipelines;
+                              using CQRSharp.Pipelines;
 
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
@@ -359,12 +336,9 @@ public class CqrsAnalyzerTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
-                              using CQRSharp.Abstractions.Interfaces.Context;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
-                              using CQRSharp.Abstractions.Models.Requests;
+                              using CQRSharp;
                               using CQRSharp.Core.Pipelines;
+                              using CQRSharp.Pipelines;
 
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
@@ -394,9 +368,9 @@ public class CqrsAnalyzerTests
                               using System;
                               using System.Threading;
                               using System.Threading.Tasks;
-                              using CQRSharp.Abstractions.Attributes.Pipelines;
-                              using CQRSharp.Abstractions.Interfaces.Markers.Request;
+                              using CQRSharp;
                               using CQRSharp.Core.Pipelines;
+                              using CQRSharp.Pipelines;
 
                               public sealed class MyBehavior<TRequest, TResult> : IPipelineBehavior<TRequest, TResult>
                                   where TRequest : IRequest
@@ -417,7 +391,7 @@ public class CqrsAnalyzerTests
     public async Task CQRA009_FlagsValueReturningCommand()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp;
 
                               public sealed class MintToken : ResultCommandBase<string> { }
                               """;
@@ -430,7 +404,7 @@ public class CqrsAnalyzerTests
     public async Task CQRA009_DoesNotFlagPlainCommand()
     {
         const string source = """
-                              using CQRSharp.Abstractions.Interfaces.Markers.Command;
+                              using CQRSharp;
 
                               public sealed class DoThing : CommandBase { }
                               """;

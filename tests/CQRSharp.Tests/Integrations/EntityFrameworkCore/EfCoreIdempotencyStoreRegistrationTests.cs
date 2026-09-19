@@ -1,4 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Idempotency;
+using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore.Extensions;
 using CQRSharp.EntityFrameworkCore.Persistence;
 using FluentAssertions;

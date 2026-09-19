@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Markers.Stream;
+namespace CQRSharp;
 
 /// <summary>
 ///     Non-generic marker interface for streaming requests, used to identify any streaming request

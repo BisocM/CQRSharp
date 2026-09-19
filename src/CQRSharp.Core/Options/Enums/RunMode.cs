@@ -1,6 +1,6 @@
-using CQRSharp.Core.Notifications.Types;
+using CQRSharp;
 
-namespace CQRSharp.Core.Options.Enums;
+namespace CQRSharp;
 
 /// <summary>
 ///     Controls where a dispatched command or query actually executes: inline on the calling flow, or funneled through

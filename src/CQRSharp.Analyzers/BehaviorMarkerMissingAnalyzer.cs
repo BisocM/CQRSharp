@@ -18,8 +18,8 @@ namespace CQRSharp.Analyzers;
 public sealed class BehaviorMarkerMissingAnalyzer : DiagnosticAnalyzer
 {
     // The opt-in markers live in CQRSharp.Abstractions (not part of the well-known-type metadata), so resolve by name.
-    private const string RetryableMetadataName = "CQRSharp.Abstractions.Interfaces.Markers.Request.IRetryableRequest";
-    private const string IdempotentMetadataName = "CQRSharp.Abstractions.Interfaces.Markers.Request.IIdempotentRequest";
+    private const string RetryableMetadataName = "CQRSharp.IRetryableRequest";
+    private const string IdempotentMetadataName = "CQRSharp.IIdempotentRequest";
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(CqrsDiagnostics.BehaviorMarkerMissing);

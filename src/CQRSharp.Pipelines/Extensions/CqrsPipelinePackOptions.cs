@@ -1,7 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Pipelines.Options;
-
-namespace CQRSharp.Pipelines.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Configures which optional pipeline behaviors <c>AddCqrsPipelinePack</c> registers and how it configures the

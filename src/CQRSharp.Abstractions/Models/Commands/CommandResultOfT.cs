@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Models.Commands;
+namespace CQRSharp;
 
 /// <summary>
 ///     The outcome of a <em>value-returning</em> command (one declared with <c>ICommand&lt;TResult&gt;</c>): a

@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Markers.Command;
+namespace CQRSharp;
 
 /// <summary>
 ///     Non-generic marker shared by <see cref="ICommand" /> and <see cref="ICommand{TResult}" />, so command-flavored

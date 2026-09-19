@@ -1,6 +1,4 @@
-using CQRSharp.Pipelines;
-
-namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
+namespace CQRSharp.Pipelines;
 
 /// <inheritdoc />
 public sealed class RateLimitExceededException(IRateLimitedContext requestContext, string message) : Exception(

@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
+namespace CQRSharp;
 
 /// <summary>
 ///     Opt-in marker for requests that must be processed at most once. The idempotency behavior uses
@@ -8,8 +8,8 @@ namespace CQRSharp.Abstractions.Interfaces.Markers.Request;
 ///     The key must be stable for a given logical request and unique across distinct requests (e.g. a client-supplied
 ///     request id, or a deterministic hash of the meaningful inputs). A duplicate (a request whose key was already
 ///     claimed and not released) is rejected with a
-///     <see cref="CQRSharp.Abstractions.Models.Idempotency.DuplicateRequestException" />. Idempotency is enforced via a
-///     consumer-provided <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" />, enabled with
+///     <see cref="CQRSharp.DuplicateRequestException" />. Idempotency is enforced via a
+///     consumer-provided <see cref="CQRSharp.Pipelines.IIdempotencyStore" />, enabled with
 ///     <c>UseIdempotency(...)</c> on the CQRSharp builder.
 /// </remarks>
 public interface IIdempotentRequest : IRequest

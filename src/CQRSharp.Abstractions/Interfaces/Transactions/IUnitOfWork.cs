@@ -1,4 +1,4 @@
-namespace CQRSharp.Abstractions.Interfaces.Transactions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     Defines the contract for a Unit of Work, which manages transactions

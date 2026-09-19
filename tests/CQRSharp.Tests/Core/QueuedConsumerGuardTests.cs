@@ -1,12 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
-using CQRSharp.Core.Options.Enums;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;

@@ -1,6 +1,4 @@
-using CQRSharp.Abstractions.Models.Commands;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

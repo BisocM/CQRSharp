@@ -1,11 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Options;
-using CQRSharp.Core.Options.Enums;
-using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace CQRSharp.Pipelines.Extensions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The fluent builder for wiring CQRSharp into a service collection, reached through

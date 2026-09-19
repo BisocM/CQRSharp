@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Core.Options;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Idempotency;

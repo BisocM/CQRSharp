@@ -1,7 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Models.Exceptions;
+using CQRSharp;
 
-namespace CQRSharp.Abstractions.Interfaces.Exceptions;
+namespace CQRSharp;
 
 /// <summary>
 ///     Handles exceptions thrown during request processing and can optionally convert them into a response.

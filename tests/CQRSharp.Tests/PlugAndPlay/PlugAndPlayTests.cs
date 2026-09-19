@@ -1,9 +1,6 @@
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Core.Extensions;
-using CQRSharp.Core.Mediation;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Pipelines.Extensions;
 using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;

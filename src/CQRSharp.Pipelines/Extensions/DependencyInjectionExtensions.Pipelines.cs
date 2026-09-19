@@ -1,5 +1,4 @@
-﻿using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Core.Pipelines;
+﻿using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.Exceptions;
 using CQRSharp.Pipelines.Behaviors.Idempotency;
 using CQRSharp.Pipelines.Behaviors.Logging;
@@ -8,11 +7,10 @@ using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Pipelines.Behaviors.Timeout;
 using CQRSharp.Pipelines.Behaviors.Transactions;
 using CQRSharp.Pipelines.Behaviors.Validation;
-using CQRSharp.Pipelines.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace CQRSharp.Pipelines.Extensions;
+namespace CQRSharp.Pipelines;
 
 // The optional-behavior registration extensions are internal: the fluent builder (UseLogging/UseValidation/UseResilience/
 // UseTimeout/UseRateLimiting/UseUnitOfWork/UseExceptionHandling/UseIdempotency/UsePipelinePack) is the single public lane
@@ -35,7 +33,7 @@ internal static class DependencyInjectionExtensions
     /// </summary>
     /// <remarks>
     ///     The caller must also register an
-    ///     <see cref="CQRSharp.Abstractions.Interfaces.Idempotency.IIdempotencyStore" /> implementation.
+    ///     <see cref="CQRSharp.Pipelines.IIdempotencyStore" /> implementation.
     /// </remarks>
     internal static IServiceCollection AddIdempotency(this IServiceCollection services)
     {

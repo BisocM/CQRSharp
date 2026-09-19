@@ -1,5 +1,4 @@
-using CQRSharp.Abstractions.Interfaces.Outbox;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Pipelines;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 

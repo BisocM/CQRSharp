@@ -21,14 +21,8 @@ public sealed class GeneratedCodeCompilesTests
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using CQRSharp.Abstractions.Attributes.Notifications;
-using CQRSharp.Abstractions.Attributes.Pipelines;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Command;
-using CQRSharp.Abstractions.Interfaces.Markers.Query;
-using CQRSharp.Abstractions.Interfaces.Markers.Request;
-using CQRSharp.Abstractions.Interfaces.Notifications;
-using CQRSharp.Abstractions.Models.Commands;
+using CQRSharp;
+using CQRSharp.Pipelines;
 using CQRSharp.Core.Pipelines;
 
 namespace ProbeNs;

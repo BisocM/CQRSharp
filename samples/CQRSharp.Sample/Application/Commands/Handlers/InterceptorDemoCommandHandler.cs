@@ -1,5 +1,3 @@
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Sample.Application.Commands.Requests;
 using Microsoft.Extensions.Logging;
 
