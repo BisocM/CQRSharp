@@ -24,6 +24,11 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
     private readonly List<Task> _processingTasks = new();
 
     private readonly TimeSpan _shutdownTimeout;
+
+    // The token handed to work items. Deliberately NOT the host's stoppingToken: that fires the instant shutdown
+    // begins, which would abort every in-flight handler immediately. In-flight work keeps running through the
+    // ShutdownTimeout grace period and is cancelled only once that period is exhausted.
+    private readonly CancellationTokenSource _workCancellation = new();
     private readonly IBackgroundTaskQueue _taskQueue;
     private readonly TimeProvider _timeProvider;
 
@@ -100,7 +105,7 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
 
                 // Create a task to process the work item, and track it for graceful shutdown. The slot is released by
                 // the TrackTask continuation when the work item completes.
-                var processingTask = ProcessWorkItemAsync(queuedTask, stoppingToken);
+                var processingTask = ProcessWorkItemAsync(queuedTask, _workCancellation.Token);
                 TrackTask(processingTask);
             }
         }
@@ -133,7 +138,8 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Graceful shutdown timed out after {Timeout}. Some background tasks may not have completed.", _shutdownTimeout);
+                _logger.LogWarning("Graceful shutdown timed out after {Timeout}. Cancelling the remaining background tasks.", _shutdownTimeout);
+                _workCancellation.Cancel();
             }
             catch (Exception ex)
             {
@@ -184,6 +190,13 @@ internal sealed class BackgroundTaskQueueConsumer : BackgroundService
             // Catch and log any unhandled exceptions from the work item to prevent the consumer from crashing.
             _logger.LogError(ex, "A background work item threw an unhandled exception during execution.");
         }
+    }
+
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        _workCancellation.Dispose();
+        base.Dispose();
     }
 
     /// <summary>

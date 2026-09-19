@@ -9,10 +9,10 @@ namespace CQRSharp.Core.Background.Outbox.Types;
 /// <summary>
 ///     A thread-safe in-process outbox store for development, tests, and single-node demos. It is NOT durable: every
 ///     message lives in process memory and is lost on restart, so it offers no real cross-crash at-least-once
-///     guarantee — use a database- or Redis-backed store in production. Claims are atomic (a compare-and-swap against
-///     the exact message snapshot, so two concurrent processors can never claim the same message) and honor a
-///     visibility timeout, so a message left in-progress by a processor that crashed becomes claimable again once the
-///     timeout elapses.
+///     guarantee — use a database- or Redis-backed store in production. Claims are atomic (serialized, so two concurrent
+///     processors can never claim the same message) and honor a visibility timeout, so a message left in-progress by
+///     a processor that crashed becomes claimable again once the timeout elapses. Processed messages are evicted, so a
+///     long-running node does not grow without bound; dead-lettered (failed) messages are kept for inspection.
 /// </summary>
 internal sealed class InMemoryOutboxStore : IOutboxStore
 {
@@ -21,6 +21,10 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
     // When each in-progress message was claimed, so it can be reclaimed after the visibility timeout. Kept out of
     // OutboxMessage so the public transport record stays minimal and free of store-internal lease state.
     private readonly ConcurrentDictionary<Guid, DateTime> _claimedAt = new();
+
+    // Serializes claiming. A snapshot compare-and-swap alone cannot arbitrate the expired-lease reclaim: the message is
+    // already InProgress, so the "claimed" record equals the one read and BOTH racing pollers' swaps would succeed.
+    private readonly object _claimLock = new();
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _visibilityTimeout;
 
@@ -40,27 +44,31 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
 
     public Task<IEnumerable<OutboxMessage>> GetPendingAsync(int batchSize, CancellationToken cancellationToken)
     {
-        var now = Now();
         var claimed = new List<OutboxMessage>();
 
-        // FIFO by creation time; Id breaks ties deterministically so a fixed batch size claims a stable subset.
-        var candidates = _messages.Values
-            .Where(m => IsClaimable(m, now))
-            .OrderBy(m => m.CreatedAt)
-            .ThenBy(m => m.Id);
-
-        foreach (var message in candidates)
+        lock (_claimLock)
         {
-            if (claimed.Count >= batchSize) break;
+            var now = Now();
 
-            var inProgress = message with { Status = OutboxMessageStatus.InProgress };
+            // FIFO by creation time; Id breaks ties deterministically so a fixed batch size claims a stable subset.
+            var candidates = _messages.Values
+                .Where(m => IsClaimable(m, now))
+                .OrderBy(m => m.CreatedAt)
+                .ThenBy(m => m.Id);
 
-            // Compare-and-swap against the exact snapshot we read: only the processor that still sees that snapshot
-            // wins the claim; a racing processor's swap fails and it skips the message.
-            if (!_messages.TryUpdate(message.Id, inProgress, message)) continue;
+            foreach (var message in candidates)
+            {
+                if (claimed.Count >= batchSize) break;
 
-            _claimedAt[message.Id] = now;
-            claimed.Add(inProgress);
+                var inProgress = message with { Status = OutboxMessageStatus.InProgress };
+
+                // Still a compare-and-swap: a concurrent Mark*/IncrementAttempt (which do not take the claim lock) may
+                // have moved the message on since the snapshot was read.
+                if (!_messages.TryUpdate(message.Id, inProgress, message)) continue;
+
+                _claimedAt[message.Id] = now;
+                claimed.Add(inProgress);
+            }
         }
 
         return Task.FromResult<IEnumerable<OutboxMessage>>(claimed);
@@ -68,9 +76,14 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
 
     public Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken)
     {
+        // A processed message is never read again; evict it rather than keep (and re-sort on every poll) the whole
+        // history. A late attempt/mark for an evicted id is the documented "missing message" no-op.
         TryTransition(messageId, m => IsTerminal(m)
             ? null
             : m with { Status = OutboxMessageStatus.Processed, ProcessedAt = Now() });
+
+        if (_messages.TryGetValue(messageId, out var current) && current.Status == OutboxMessageStatus.Processed)
+            _messages.TryRemove(messageId, out _);
 
         return Task.CompletedTask;
     }

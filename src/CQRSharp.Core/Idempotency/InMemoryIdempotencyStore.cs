@@ -19,6 +19,10 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _retention;
 
+    // Expired claims are otherwise only replaced when the SAME key returns, so with a unique key per request (the normal
+    // case) the dictionary would grow forever. Sweep them at most once per retention window, from the claim path.
+    private long _nextSweepTicks;
+
     public InMemoryIdempotencyStore(TimeProvider timeProvider, IOptions<InMemoryIdempotencyStoreOptions> options)
     {
         _timeProvider = timeProvider;
@@ -28,6 +32,7 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
     public Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow().UtcDateTime;
+        SweepExpired(now);
 
         while (true)
         {
@@ -47,6 +52,20 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
 
             // Lost the race to another caller; retry from the top.
         }
+    }
+
+    private void SweepExpired(DateTime now)
+    {
+        var due = Interlocked.Read(ref _nextSweepTicks);
+        if (now.Ticks < due) return;
+
+        // One sweeper per window; a caller that loses the swap skips (the winner is already sweeping).
+        if (Interlocked.CompareExchange(ref _nextSweepTicks, (now + _retention).Ticks, due) != due) return;
+
+        foreach (var claim in _claims)
+            if (now - claim.Value >= _retention)
+                // Remove only the exact expired pair, so a claim that was just taken over (a fresh timestamp) survives.
+                _claims.TryRemove(claim);
     }
 
     public Task ReleaseAsync(string key, CancellationToken cancellationToken)

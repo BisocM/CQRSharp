@@ -78,6 +78,13 @@ public sealed class OpenTelemetryQueueMetricsReporter : IQueueMetricsReporter
     }
 
     /// <inheritdoc />
+    public void ItemEvictedNewest()
+    {
+        _droppedNewestCounter.Add(1);
+        Interlocked.Decrement(ref _currentCount); // The evicted item had been enqueued, so the count decreases.
+    }
+
+    /// <inheritdoc />
     public void ItemDroppedOldest()
     {
         _droppedOldestCounter.Add(1);

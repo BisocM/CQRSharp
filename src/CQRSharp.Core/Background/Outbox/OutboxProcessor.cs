@@ -50,7 +50,7 @@ internal sealed class OutboxProcessor : BackgroundService
             {
                 await ProcessOutboxMessagesAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
             {
                 _logger.LogError(ex, "An unhandled exception occurred in the Outbox Processor.");
             }
@@ -63,14 +63,16 @@ internal sealed class OutboxProcessor : BackgroundService
 
     private async Task ProcessOutboxMessagesAsync(CancellationToken stoppingToken)
     {
-        using var scope = _scopeFactory.CreateScope();
+        // The batch scope owns the store (claiming, marking, attempt bookkeeping). Each message is dispatched in its own
+        // scope below, so one handler's scoped state — a DbContext with half-tracked entities after a failure — can
+        // never leak into the next message's handlers or into the store's own bookkeeping writes.
+        await using var scope = _scopeFactory.CreateAsyncScope();
         var provider = scope.ServiceProvider;
 
         var outboxStore = provider.GetService<IOutboxStore>();
         var serializer = provider.GetService<INotificationSerializer>();
-        var dispatcher = provider.GetService<IDirectNotificationDispatcher>();
 
-        if (outboxStore is null || serializer is null || dispatcher is null)
+        if (outboxStore is null || serializer is null || provider.GetService<IDirectNotificationDispatcher>() is null)
         {
             _logger.LogWarning("Outbox services (IOutboxStore, INotificationSerializer, IDirectNotificationDispatcher) are not registered. The OutboxProcessor will not run.");
             // Prevent fast spinning by waiting indefinitely. The service will stop on shutdown.
@@ -109,7 +111,12 @@ internal sealed class OutboxProcessor : BackgroundService
                     continue;
                 }
 
-                await dispatcher.Publish(notification, stoppingToken).ConfigureAwait(false);
+                await using (var messageScope = _scopeFactory.CreateAsyncScope())
+                {
+                    var dispatcher = messageScope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
+                    await dispatcher.Publish(notification, stoppingToken).ConfigureAwait(false);
+                }
+
                 await outboxStore.MarkAsProcessedAsync(message.Id, stoppingToken).ConfigureAwait(false);
                 _logger.LogInformation(
                     "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
@@ -125,12 +132,12 @@ internal sealed class OutboxProcessor : BackgroundService
                 {
                     await outboxStore.MarkAsFailedAsync(message.Id, jsonEx.ToString(), stoppingToken).ConfigureAwait(false);
                 }
-                catch (Exception storeEx) when (storeEx is not OperationCanceledException)
+                catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
                 {
                     _logger.LogError(storeEx, "Failed to mark corrupt outbox message {MessageId} as failed.", message.Id);
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
             {
                 _logger.LogError(ex, "Failed to process notification {NotificationType} (ID: {MessageId}).",
                     message.NotificationType, message.Id);
@@ -153,7 +160,7 @@ internal sealed class OutboxProcessor : BackgroundService
                             message.NotificationType, message.Id, recordedAttempts);
                     }
                 }
-                catch (Exception storeEx) when (storeEx is not OperationCanceledException)
+                catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
                 {
                     _logger.LogError(storeEx,
                         "Failed to record the outbox delivery attempt for message {MessageId}; it will be retried on a later poll.",
@@ -162,6 +169,13 @@ internal sealed class OutboxProcessor : BackgroundService
             }
         }
     }
+
+    // Only a cancellation caused by host shutdown may unwind the processor. A handler's own OperationCanceledException
+    // (an HttpClient timeout, its own linked token) while the host is running is an ordinary failed attempt: letting
+    // it escape would fault the BackgroundService — stopping the host by default — and, because the attempt was never
+    // recorded, the same message would do it again on every lease expiry without ever being dead-lettered.
+    private static bool IsShutdown(Exception ex, CancellationToken stoppingToken)
+        => ex is OperationCanceledException && stoppingToken.IsCancellationRequested;
 
     /// <summary>
     ///     Computes the next eligibility time for a failed message using exponential back-off (2^attempt seconds),

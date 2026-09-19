@@ -31,6 +31,15 @@ public interface IQueueMetricsReporter : IDisposable
     void ItemDroppedNewest();
 
     /// <summary>
+    ///     Reports that the newest <em>already-enqueued</em> work item was evicted to make room for an incoming one
+    ///     (<see cref="System.Threading.Channels.BoundedChannelFullMode.DropNewest" />). Unlike
+    ///     <see cref="ItemDroppedNewest" /> — a write that never entered the queue — the evicted item was counted by
+    ///     <see cref="ItemEnqueued" />, so this must also decrement the current queue size. The default forwards to
+    ///     <see cref="ItemDroppedNewest" /> so existing reporters keep compiling.
+    /// </summary>
+    void ItemEvictedNewest() => ItemDroppedNewest();
+
+    /// <summary>
     ///     Reports that the oldest work item was dropped from the queue to make space for a new one,
     ///     consistent with the <see cref="System.Threading.Channels.BoundedChannelFullMode.DropOldest" /> policy.
     ///     This should decrement the current queue size.
