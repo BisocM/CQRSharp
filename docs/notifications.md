@@ -88,7 +88,7 @@ observe command/query/stream execution by simply handling them — no intercepti
 | --- | --- | --- |
 | `CommandInitiatedNotification` | before a command's handler runs | `Command`, `CommandName` |
 | `CommandCompletedNotification` | after a command's handler succeeds | `Command`, `CommandName`, `Result` |
-| `CommandFailedNotification` | when a command's handler throws | `Command`, `CommandName`, `Exception` |
+| `CommandFailedNotification` | when a command's handler **or a pre-handler** throws | `Command`, `CommandName`, `Exception` |
 | `QueryInitiatedNotification` | before a query's handler runs | `Query`, `QueryName` |
 | `QueryCompletedNotification<TResult>` | after a query succeeds | `Query`, `QueryName`, `Result` (`object?`) |
 | `QueryFailedNotification` | when a query's handler throws | `Query`, `QueryName`, `Exception` |

@@ -34,6 +34,16 @@ share one multiplexer across your app). The same lower-level extensions —
 `AddRedisOutboxStore(...)` / `AddRedisIdempotencyStore(...)` — are available on `IServiceCollection` if
 you wire stores outside the builder.
 
+Two operational notes for the Redis outbox:
+
+- **Visibility timeout.** One lease covers a whole claimed batch, which the processor dispatches
+  sequentially, so `RedisOutboxOptions.VisibilityTimeout` (default **5 minutes**) must comfortably exceed
+  `BatchSize × your slowest handler`. Too short, and a second instance reclaims — and re-delivers — the
+  tail of a batch that is still being worked through.
+- **Redis Cluster.** The store's Lua scripts touch several keys under `KeyPrefix` atomically, so on a
+  cluster those keys must share a hash slot: give the prefix a hash tag, e.g.
+  `o.KeyPrefix = "{cqrsharp:outbox}:"`. The default prefix has none and targets standalone / sentinel Redis.
+
 ## Entity Framework Core
 
 ```bash
@@ -51,9 +61,16 @@ services.AddCqrsGenerated(b => b
     .UseIdempotency(i => i.UseEntityFrameworkCore<AppDbContext>()));
 ```
 
-The store participates in your `DbContext`'s transaction, which is what makes the **transactional
+The outbox store participates in your `DbContext`'s transaction, which is what makes the **transactional
 outbox** atomic with your business writes. Configure your `DbContext` to include the outbox/idempotency
 entities per the package's model setup.
+
+The idempotency store is deliberately the opposite: it resolves a **fresh `DbContext` per claim/release**
+(through a DI scope), so a claim never joins — or flushes — the unit of work of the request it guards.
+
+> **Retention.** Neither store deletes finalized rows: processed/dead-lettered outbox messages and expired
+> idempotency keys stay in their tables. Schedule a purge that suits your audit needs, e.g.
+> `ExecuteDeleteAsync` over `ProcessedAt` / `ExpiresAt`.
 
 > **Not Native-AOT compatible.** EF Core uses runtime query compilation, so the EF integration is marked
 > `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]` and is **not** AOT- or full-trim-safe. If you

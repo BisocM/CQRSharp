@@ -351,6 +351,14 @@ boxed as `object` — cast it to the request's result type. `Threw` reports the 
 fault), deliberately distinct from any business verdict the value carries. On the exception path the
 post-handler is isolated, so a fault in your auditing never masks the original exception.
 
+The exception path covers every stage after the request is announced: a **pre-handler** that throws (an
+authorization interceptor rejecting the request) reaches the post-handlers with `outcome.Threw`, exactly as
+a throwing handler does — so an audit post-handler sees denied requests too. Note that this means a
+post-handler can run for a request whose own pre-handler (on a lower-priority interceptor) never did; treat
+`OnAfterHandle` like a `finally`. **Streaming requests** follow the same contract: a stream that faults
+mid-enumeration reaches `OnAfterHandle` with the exception; one that completes reaches it with a `null`
+`Result`. A consumer that simply stops enumerating early triggers neither.
+
 Interceptors are best for small, declarative, per-request concerns that read naturally as an attribute on
 the request type; reach for a **behavior** when the concern is cross-cutting across many requests or needs
 to wrap (not just bracket) the handler.

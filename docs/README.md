@@ -6,7 +6,7 @@ compile time, so there is **zero runtime reflection** and the whole framework is
 AOT-friendly. You author commands, queries, streaming requests, and notifications with small marker
 interfaces and handlers, and dispatch everything through a single façade — `ICqrsDispatcher`.
 
-> **Version:** these docs describe **CQRSharp 4.0**.
+> **Version:** these docs describe **CQRSharp 5.0**.
 
 ---
 

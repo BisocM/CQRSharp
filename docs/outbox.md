@@ -90,18 +90,34 @@ public sealed record OrderPlaced(Guid OrderId, decimal Total) : INotification;
 
 ## How it works
 
-1. While a transactional request is handled, calling `Publish` adds the notification to an in-memory
-   `IOutbox` buffer rather than dispatching it.
-2. When the unit of work commits, the framework **drains** the buffer, serializes each notification into
-   an `OutboxMessage`, and calls `IOutboxStore.StoreAsync(...)` **inside the same transaction** — so the
-   messages commit atomically with your data.
+1. While a request is handled, calling `Publish` adds an outbox-bound notification to the scoped,
+   in-memory `IOutbox` buffer rather than dispatching it.
+2. When a transactional request's unit of work commits, the framework **drains** the buffer, serializes
+   each notification into an `OutboxMessage`, and calls `IOutboxStore.StoreAsync(...)` **inside the same
+   transaction** — so the messages commit atomically with your data.
 3. The background **`OutboxProcessor`** polls the store on an interval. Each cycle it **atomically
    claims** a batch of due messages (`GetPendingAsync`, transitioning them `Pending → InProgress` so two
-   processors never grab the same message), deserializes each, and dispatches it to its handlers.
+   processors never grab the same message), deserializes each, and dispatches it to its handlers — each
+   message in **its own DI scope**, so one handler's scoped state (a `DbContext` left with half-tracked
+   entities after a failure) never reaches the next message.
 4. On success the message is marked **processed** (`MarkAsProcessedAsync`). On failure the attempt is
    recorded (`IncrementAttemptAsync`) with a **persisted attempt count** and a `NextRetryAt` back-off,
    returning the message to `Pending` for a later retry. When attempts are exhausted, the message is
    **dead-lettered** (`MarkAsFailedAsync`).
+
+### Who flushes the buffer
+
+A buffered notification is never silently dropped — something always owns the flush:
+
+| Where `Publish` was called | What happens |
+| --- | --- |
+| Inside a transactional request (`UseUnitOfWork`) | Stored inside the transaction at commit (step 2) — atomic with your data. |
+| Inside any other request (`Enabled` mode), or inside a transaction **your own code** started | Stored when the request **succeeds**. Durable and at-least-once, but not atomic with anything the handler wrote. |
+| Outside any request — a controller, a hosted service | Written straight to the `IOutboxStore`. |
+
+A request that **fails** discards what it buffered: those notifications describe work that did not happen.
+That holds per attempt, so a retried request (`UseResilience`) stores one copy, not one per attempt, and a
+rolled-back unit of work takes its notifications with it.
 
 The W3C `traceparent` of the originating request is captured on the message, so the outbox dispatch
 span links back to the request that produced it.
