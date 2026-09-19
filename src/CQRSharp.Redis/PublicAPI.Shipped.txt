@@ -1,0 +1,30 @@
+#nullable enable
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.Database.get -> int
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.Database.set -> void
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.KeyPrefix.get -> string!
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.KeyPrefix.set -> void
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.RedisIdempotencyOptions() -> void
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.Retention.get -> System.TimeSpan
+CQRSharp.Redis.Idempotency.RedisIdempotencyOptions.Retention.set -> void
+CQRSharp.Redis.Outbox.RedisOutboxOptions
+CQRSharp.Redis.Outbox.RedisOutboxOptions.Database.get -> int
+CQRSharp.Redis.Outbox.RedisOutboxOptions.Database.set -> void
+CQRSharp.Redis.Outbox.RedisOutboxOptions.FinalizedRetention.get -> System.TimeSpan
+CQRSharp.Redis.Outbox.RedisOutboxOptions.FinalizedRetention.set -> void
+CQRSharp.Redis.Outbox.RedisOutboxOptions.KeyPrefix.get -> string!
+CQRSharp.Redis.Outbox.RedisOutboxOptions.KeyPrefix.set -> void
+CQRSharp.Redis.Outbox.RedisOutboxOptions.RedisOutboxOptions() -> void
+CQRSharp.Redis.Outbox.RedisOutboxOptions.VisibilityTimeout.get -> System.TimeSpan
+CQRSharp.Redis.Outbox.RedisOutboxOptions.VisibilityTimeout.set -> void
+Microsoft.Extensions.DependencyInjection.RedisIdempotencyServiceCollectionExtensions
+Microsoft.Extensions.DependencyInjection.RedisIntegrationServiceCollectionExtensions
+Microsoft.Extensions.DependencyInjection.RedisStoreBuilderExtensions
+static Microsoft.Extensions.DependencyInjection.RedisIdempotencyServiceCollectionExtensions.AddRedisIdempotencyStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, StackExchange.Redis.IConnectionMultiplexer! multiplexer, System.Action<CQRSharp.Redis.Idempotency.RedisIdempotencyOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RedisIdempotencyServiceCollectionExtensions.AddRedisIdempotencyStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, System.Action<CQRSharp.Redis.Idempotency.RedisIdempotencyOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RedisIntegrationServiceCollectionExtensions.AddRedisOutboxStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, StackExchange.Redis.IConnectionMultiplexer! multiplexer, System.Action<CQRSharp.Redis.Outbox.RedisOutboxOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RedisIntegrationServiceCollectionExtensions.AddRedisOutboxStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionString, System.Action<CQRSharp.Redis.Outbox.RedisOutboxOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RedisStoreBuilderExtensions.UseRedis(this CQRSharp.Pipelines.IdempotencyStoreBuilder! builder, StackExchange.Redis.IConnectionMultiplexer! multiplexer, System.Action<CQRSharp.Redis.Idempotency.RedisIdempotencyOptions!>? configure = null) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RedisStoreBuilderExtensions.UseRedis(this CQRSharp.Pipelines.IdempotencyStoreBuilder! builder, string! connectionString, System.Action<CQRSharp.Redis.Idempotency.RedisIdempotencyOptions!>? configure = null) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RedisStoreBuilderExtensions.UseRedis(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, StackExchange.Redis.IConnectionMultiplexer! multiplexer, System.Action<CQRSharp.Redis.Outbox.RedisOutboxOptions!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RedisStoreBuilderExtensions.UseRedis(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, string! connectionString, System.Action<CQRSharp.Redis.Outbox.RedisOutboxOptions!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
