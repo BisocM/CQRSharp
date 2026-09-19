@@ -41,6 +41,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         return await HandleImplicitTransactionAsync(request, next, cancellationToken, activity).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
     private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken,

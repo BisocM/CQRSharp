@@ -10,8 +10,10 @@ public sealed class StreamValidationBehavior<TRequest, TItem>(
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    /// <inheritdoc />
     public int PipelineExecutionPriority => -50;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

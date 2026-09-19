@@ -17,6 +17,8 @@
     -->
     <PropertyGroup Condition="'$(HasPublicApi)' == 'true'">
         <EnablePackageValidation>true</EnablePackageValidation>
+        <!-- XML docs ship in every package; an undocumented public member (CS1591) fails the zero-warning gate. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <!-- RS0026/RS0027 police overloads with optional parameters; the CancellationToken-defaulted overloads here are deliberate. -->
         <NoWarn>$(NoWarn);RS0026;RS0027</NoWarn>
     </PropertyGroup>

@@ -6,7 +6,6 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <!--
             Deliberately NO IsAotCompatible / EnableAotAnalyzer here: EF Core relies on runtime query
             compilation (expression trees, reflection) and cannot be Native AOT'd or fully trimmed. The

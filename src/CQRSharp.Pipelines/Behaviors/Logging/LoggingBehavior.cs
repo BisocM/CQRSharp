@@ -37,5 +37,6 @@ public sealed class LoggingBehavior<TRequest, TResult>(
         }
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging;
 }

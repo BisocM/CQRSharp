@@ -35,6 +35,7 @@ public sealed class RateLimiter : IDisposable
     ///     Initializes a new instance of the <see cref="RateLimiter" /> class.
     /// </summary>
     /// <param name="config">Options for rate limiting behavior.</param>
+    /// <param name="timeProvider">The clock the windows are measured against; defaults to <see cref="TimeProvider.System" />.</param>
     public RateLimiter(IOptions<RateLimiterOptions> config, TimeProvider? timeProvider = null)
     {
         _config = config.Value ?? throw new ArgumentNullException(nameof(config));

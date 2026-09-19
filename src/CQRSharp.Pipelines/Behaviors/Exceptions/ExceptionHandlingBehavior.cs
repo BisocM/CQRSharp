@@ -14,6 +14,7 @@ public sealed class ExceptionHandlingBehavior<TRequest, TResult>(
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    /// <inheritdoc />
     public async Task<TResult> Handle(
         TRequest request,
         RequestHandlerDelegate<TResult> next,
@@ -48,5 +49,6 @@ public sealed class ExceptionHandlingBehavior<TRequest, TResult>(
         }
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => int.MinValue;
 }

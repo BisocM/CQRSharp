@@ -6,7 +6,6 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <!--
             Deliberately NO IsAotCompatible / EnableAotAnalyzer here: FluentValidation builds its rules from
             expression trees that it compiles at runtime, so it cannot be Native AOT'd or fully trimmed. The

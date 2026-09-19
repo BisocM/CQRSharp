@@ -18,8 +18,10 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => 300;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

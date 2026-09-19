@@ -11,6 +11,7 @@ public sealed class ValidationBehavior<TRequest, TResult>(
     IEnumerable<IRequestValidator<TRequest>> validators)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
+    /// <inheritdoc />
     public async Task<TResult> Handle(
         TRequest request,
         RequestHandlerDelegate<TResult> next,
@@ -34,5 +35,6 @@ public sealed class ValidationBehavior<TRequest, TResult>(
         return await next(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => -50;
 }

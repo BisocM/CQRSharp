@@ -22,8 +22,10 @@ public sealed class StreamResilienceBehavior<TRequest, TItem>(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     // Runs OUTSIDE the unit-of-work behavior (priority 100) so each retry executes against a fresh transaction.
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

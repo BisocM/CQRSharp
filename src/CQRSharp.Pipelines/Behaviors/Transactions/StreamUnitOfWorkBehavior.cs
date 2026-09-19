@@ -25,8 +25,10 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

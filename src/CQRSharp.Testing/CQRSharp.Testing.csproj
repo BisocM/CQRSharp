@@ -7,7 +7,6 @@
         <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <IsPackable>true</IsPackable>
         <!-- A test-SUPPORT library: it carries abstract xUnit suites for consumers to derive from, but has no runnable
              tests of its own, so runners and `dotnet test` must not treat it as a test assembly. -->

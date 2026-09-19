@@ -15,8 +15,10 @@ public sealed class StreamExceptionHandlingBehavior<TRequest, TItem>(
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    /// <inheritdoc />
     public int PipelineExecutionPriority => int.MinValue;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

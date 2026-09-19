@@ -15,8 +15,10 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

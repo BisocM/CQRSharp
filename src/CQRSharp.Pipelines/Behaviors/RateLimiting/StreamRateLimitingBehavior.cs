@@ -14,8 +14,10 @@ public sealed class StreamRateLimitingBehavior<TRequest, TItem>(
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.RateLimiting;
 
+    /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
         TRequest request,
         StreamHandlerDelegate<TItem> next,

@@ -86,5 +86,6 @@ public sealed class RateLimitingBehavior<TRequest, TResult>(
         return await next(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.RateLimiting;
 }

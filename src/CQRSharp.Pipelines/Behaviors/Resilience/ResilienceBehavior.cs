@@ -103,5 +103,6 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
 
     // Runs OUTSIDE the unit-of-work behavior (priority 100) so that each retry executes against a fresh transaction
     // rather than replaying work against an already-aborted one.
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
 }

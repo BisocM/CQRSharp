@@ -58,5 +58,6 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
         }
     }
 
+    /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.Timeout;
 }
