@@ -1,0 +1,115 @@
+name: Bug report
+description: Something in CQRSharp behaves incorrectly, or the generator / analyzers report or emit the wrong thing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. **Do not report security vulnerabilities here** — use
+        [private vulnerability reporting](https://github.com/BisocM/CQRSharp/security/advisories/new) instead.
+
+        A report that can be reproduced gets fixed fastest: the smallest request + handler + registration that shows
+        the problem is ideal.
+
+  - type: input
+    id: packages
+    attributes:
+      label: Package(s) and version
+      description: Every CQRSharp package involved, with its version. Check the latest version first — the bug may already be fixed.
+      placeholder: "CQRSharp 5.0.0, CQRSharp.Redis 5.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: .NET version and OS
+      description: The target framework, the SDK version (`dotnet --version`) and the operating system.
+      placeholder: "net8.0, SDK 8.0.406, Windows 11 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: aot
+    attributes:
+      label: Native AOT / trimming
+      description: Is the application published with Native AOT or trimming, and does the problem depend on it?
+      options:
+        - Not used
+        - Native AOT (PublishAot) — the problem only happens under AOT
+        - Native AOT (PublishAot) — the problem happens with and without AOT
+        - Trimming only (PublishTrimmed)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: store
+    attributes:
+      label: Outbox / idempotency store
+      description: Which store is configured, if the problem involves the outbox or idempotency.
+      multiple: true
+      options:
+        - Not applicable (no outbox or idempotency involved)
+        - In-memory
+        - Redis (CQRSharp.Redis)
+        - EF Core (CQRSharp.EntityFrameworkCore)
+        - Custom store
+    validations:
+      required: true
+
+  - type: input
+    id: provider
+    attributes:
+      label: Store details
+      description: For EF Core, the database provider and its version; for Redis, the server version and topology (standalone, cluster, managed service).
+      placeholder: "Npgsql.EntityFrameworkCore.PostgreSQL 8.0.10 / Redis 7.2 standalone"
+    validations:
+      required: false
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest code that shows the problem — the request, its handler, and the `AddCqrsGenerated(...)`
+        configuration — or a link to a repository. For a generator or analyzer bug, the source that triggers it is
+        enough.
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead, including the full exception and stack trace if there is one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics and logs
+      description: >-
+        Any `CQRA###` (analyzer), `CQRGEN###` (source generator) or `CQRCONF###` (startup validation) diagnostics,
+        build output, and relevant log lines. For a generator bug, the emitted file (set
+        `<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>`) is very helpful.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Workarounds you found, whether this worked in an earlier version, and so on.
+    validations:
+      required: false
