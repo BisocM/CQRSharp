@@ -17,4 +17,15 @@ public sealed class EfCoreOutboxStoreOptions
     ///     against a competing processor before giving up on that row for the current call.
     /// </summary>
     public int MaxClaimAttempts { get; set; } = 3;
+
+    /// <summary>
+    ///     How long a <b>processed</b> message is kept before the store deletes it, bounding the table. The purge is
+    ///     opportunistic — it piggybacks on the processor's polling, at most once per <see cref="PurgeInterval" /> — so no
+    ///     extra job is needed. <c>null</c> keeps processed messages forever. Dead-lettered (failed) messages are never
+    ///     purged: they are the record of what could not be delivered. Default: 7 days.
+    /// </summary>
+    public TimeSpan? ProcessedRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>The minimum time between two purges by one store instance's process. Default: 1 hour.</summary>
+    public TimeSpan PurgeInterval { get; set; } = TimeSpan.FromHours(1);
 }

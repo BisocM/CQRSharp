@@ -48,6 +48,15 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     // so this gate serializes every access to it. Cross-caller claim safety still rests on the unique primary key.
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    // The expiry each claim held by this process was written with. It identifies the claim: a release deletes the row
+    // only while it still carries that expiry, so a claimant whose claim expired mid-flight (and was taken over by
+    // another process) cannot delete its successor's live claim.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _heldClaims = new(StringComparer.Ordinal);
+
+    // Expired rows are otherwise only ever reused by the same key, so with a unique key per request the table would grow
+    // without bound. Swept at most once per retention window (capped at an hour), from the claim path.
+    private long _nextPurgeTicks;
+
     /// <summary>Creates the DI-registered store, which resolves a fresh <typeparamref name="TContext" /> per operation.</summary>
     public EfCoreIdempotencyStore(
         IServiceScopeFactory scopeFactory,
@@ -78,7 +87,36 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
     public Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
-        => WithContextAsync(context => ClaimAsync(context, key, cancellationToken), cancellationToken);
+        => WithContextAsync(async context =>
+        {
+            await PurgeExpiredAsync(context, cancellationToken).ConfigureAwait(false);
+            return await ClaimAsync(context, key, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken);
+
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
+    private async Task PurgeExpiredAsync(TContext context, CancellationToken cancellationToken)
+    {
+        var now = Now();
+        var due = Interlocked.Read(ref _nextPurgeTicks);
+        if (now.Ticks < due) return;
+
+        var interval = _retention < TimeSpan.FromHours(1) ? _retention : TimeSpan.FromHours(1);
+        if (Interlocked.CompareExchange(ref _nextPurgeTicks, (now + interval).Ticks, due) != due) return;
+
+        try
+        {
+            await context.Set<IdempotencyEntity>()
+                .Where(e => e.ExpiresAt <= now)
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best-effort housekeeping: never let it fail the claim it rides on.
+            _logger.LogWarning(ex, "Purging expired idempotency keys failed; it will be retried later.");
+        }
+    }
 
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
@@ -112,7 +150,10 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
         for (var attempt = 1; ; attempt++)
         {
             var now = Now();
-            var expiresAt = now + _retention;
+
+            // Whole milliseconds: the expiry doubles as the claim's identity on release, so it has to survive a round
+            // trip through providers that store less than .NET's 100 ns tick precision.
+            var expiresAt = new DateTime((now + _retention).Ticks / TimeSpan.TicksPerMillisecond * TimeSpan.TicksPerMillisecond, DateTimeKind.Utc);
 
             var existing = await context.Set<IdempotencyEntity>()
                 .FirstOrDefaultAsync(e => e.Key == key, cancellationToken)
@@ -127,6 +168,8 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
                 try
                 {
                     await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    context.Entry(entity).State = EntityState.Detached;
+                    _heldClaims[key] = expiresAt;
                     return true;
                 }
                 catch (DbUpdateException ex) when (attempt < MaxClaimAttempts)
@@ -165,6 +208,8 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
             try
             {
                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                context.Entry(existing).State = EntityState.Detached;
+                _heldClaims[key] = expiresAt;
                 return true;
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < MaxClaimAttempts)
@@ -190,19 +235,18 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     [RequiresUnreferencedCode(AotMessage)]
     public Task ReleaseAsync(string key, CancellationToken cancellationToken)
     {
+        // Only a claim this process made can be released, and only while the row is still that very claim: an unknown,
+        // expired-and-purged, or taken-over key is left alone.
+        if (!_heldClaims.TryRemove(key, out var claimedExpiry))
+            return Task.CompletedTask;
+
         return WithContextAsync(async context =>
         {
-            var existing = await context.Set<IdempotencyEntity>()
-                .FirstOrDefaultAsync(e => e.Key == key, cancellationToken)
+            var deleted = await context.Set<IdempotencyEntity>()
+                .Where(e => e.Key == key && e.ExpiresAt == claimedExpiry)
+                .ExecuteDeleteAsync(cancellationToken)
                 .ConfigureAwait(false);
-
-            // Releasing an unknown (or already-expired-and-removed) key is a no-op.
-            if (existing is null)
-                return false;
-
-            context.Set<IdempotencyEntity>().Remove(existing);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            return true;
+            return deleted > 0;
         }, cancellationToken);
     }
 

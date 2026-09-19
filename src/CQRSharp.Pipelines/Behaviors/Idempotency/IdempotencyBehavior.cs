@@ -1,5 +1,6 @@
 using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Abstractions.Models.Idempotency;
 using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
@@ -42,7 +43,14 @@ public sealed class IdempotencyBehavior<TRequest, TResult>(
 
         try
         {
-            return await next(cancellationToken).ConfigureAwait(false);
+            var result = await next(cancellationToken).ConfigureAwait(false);
+
+            // A command that reports failure without throwing did not complete either: keeping its claim would reject
+            // the caller's legitimate retry as a duplicate for the whole retention window.
+            if (result is CommandResult { IsSuccess: false })
+                await store.ReleaseAsync(key, CancellationToken.None).ConfigureAwait(false);
+
+            return result;
         }
         catch
         {

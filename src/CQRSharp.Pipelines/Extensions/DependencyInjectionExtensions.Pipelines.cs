@@ -40,6 +40,7 @@ internal static class DependencyInjectionExtensions
     internal static IServiceCollection AddIdempotency(this IServiceCollection services)
     {
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamIdempotencyBehavior<,>)));
         return services;
     }
 

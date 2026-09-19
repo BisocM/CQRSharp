@@ -274,7 +274,13 @@ public sealed partial class PipelineExecutor : IPipelineExecutor
 
             outboxSettled = true;
             if (outboxScope is { } completedScope)
-                await completedScope.CompleteAsync(ct).ConfigureAwait(false);
+            {
+                // A command that returns a failed result did not do the work its notifications announce.
+                if (result is CommandResult { IsSuccess: false })
+                    completedScope.Abandon();
+                else
+                    await completedScope.CompleteAsync(ct).ConfigureAwait(false);
+            }
 
             activity?.SetStatus(ActivityStatusCode.Ok);
             return result;

@@ -40,13 +40,17 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
         TContext context,
         TimeProvider timeProvider,
         IOptions<EfCoreOutboxStoreOptions> options,
-        ILogger<EfCoreOutboxStore<TContext>> logger)
+        ILogger<EfCoreOutboxStore<TContext>> logger,
+        EfCoreOutboxPurgeSchedule? purgeSchedule = null)
     {
+        _purgeSchedule = purgeSchedule ?? new EfCoreOutboxPurgeSchedule();
         _context = context;
         _timeProvider = timeProvider;
         _logger = logger;
         _visibilityTimeout = options.Value.VisibilityTimeout;
         _maxClaimAttempts = options.Value.MaxClaimAttempts;
+        _processedRetention = options.Value.ProcessedRetention;
+        _purgeInterval = options.Value.PurgeInterval;
     }
 
     /// <inheritdoc />
@@ -84,8 +88,45 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
         }
     }
 
+    // The store is scoped (one per poll), so "when is the next purge due" lives in a singleton it is handed.
+    private readonly EfCoreOutboxPurgeSchedule _purgeSchedule;
+    private readonly TimeSpan? _processedRetention;
+    private readonly TimeSpan _purgeInterval;
+
+    // Deletes processed messages older than the retention window, at most once per interval per process. Best-effort: a
+    // failed purge is logged and retried on a later poll, never allowed to fail the claim it rides on.
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
+    private async Task PurgeProcessedAsync(CancellationToken cancellationToken)
+    {
+        if (_processedRetention is not { } retention) return;
+
+        var now = Now();
+        if (!_purgeSchedule.TryBegin(now, _purgeInterval)) return;
+
+        try
+        {
+            var cutoff = now - retention;
+            var deleted = await _context.Set<OutboxEntity>()
+                .Where(e => e.Status == OutboxMessageStatus.Processed && e.ProcessedAt != null && e.ProcessedAt <= cutoff)
+                .ExecuteDeleteAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (deleted > 0)
+                _logger.LogInformation("Purged {Count} processed outbox message(s) older than {Retention}.", deleted, retention);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Purging processed outbox messages failed; it will be retried on a later poll.");
+        }
+    }
+
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
     private async Task<IReadOnlyList<OutboxMessage>> ClaimAsync(int batchSize, CancellationToken cancellationToken)
     {
+        await PurgeProcessedAsync(cancellationToken).ConfigureAwait(false);
+
         // Bounded optimistic-token retry: load a due batch, flip each row to in-progress with a fresh lease and a
         // bumped row-version, then save. Rows whose row-version was changed by a competing processor since we read
         // them lose the SaveChanges race (DbUpdateConcurrencyException); we detach the losers, re-read the batch, and

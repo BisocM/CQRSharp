@@ -4,6 +4,7 @@ using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Abstractions.Models.Commands;
 using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
@@ -68,6 +69,17 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         {
             var response = await next(cancellationToken).ConfigureAwait(false);
 
+            if (IsFailedResult(response))
+            {
+                // The handler reported failure without throwing: same outcome for the transaction, no exception.
+                logger.LogWarning("{RequestName} returned a failed result. Rolling back.", typeof(TRequest).Name);
+                activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to a failed result.");
+                outbox.Drain();
+                await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
+                return response;
+            }
+
             await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
 
             await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -109,6 +121,15 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         {
             var response = await next(cancellationToken).ConfigureAwait(false);
 
+            if (IsFailedResult(response))
+            {
+                // Nothing is saved, so the implicit unit of work is simply abandoned along with its notifications.
+                logger.LogWarning("{RequestName} returned a failed result. Its changes are not saved.", typeof(TRequest).Name);
+                activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction abandoned due to a failed result.");
+                outbox.Drain();
+                return response;
+            }
+
             if (request is ITransactionalCommand)
             {
                 await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
@@ -129,6 +150,9 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
             throw;
         }
     }
+
+    private bool IsFailedResult(TResult response)
+        => options.Value.RollbackOnFailedResult && response is CommandResult { IsSuccess: false };
 
     private IsolationLevel GetIsolationLevel(TRequest request)
     {

@@ -29,6 +29,7 @@ public static class RedisIdempotencyServiceCollectionExtensions
 
         // TryAddSingleton with a factory means the multiplexer is only constructed on first resolution, so nothing
         // connects to Redis during registration; shared with any other CQRSharp Redis integration in the container.
+        global::CQRSharp.Redis.Extensions.RedisConnectionGuard.EnsureSingleConnectionString(services, connectionString);
         services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
         return AddCore(services, configure);
     }

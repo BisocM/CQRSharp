@@ -130,6 +130,26 @@ public sealed class OnUserCreated : INotificationHandler<UserCreated>
         run.CompileErrors.Should().BeEmpty();
     }
 
+    [Fact(DisplayName = "A concrete request deriving from another concrete request compiles and both are routed")]
+    public void Derived_concrete_request_compiles()
+    {
+        var run = Run(Usings + @"
+public class CreateUser : CommandBase;
+public sealed class CreateAdmin : CreateUser;
+public sealed class CreateUserHandler : ICommandHandler<CreateUser>
+{
+    public Task<CommandResult> Handle(CreateUser command, CancellationToken cancellationToken) => Task.FromResult(CommandResult.FromSuccess());
+}
+public sealed class CreateAdminHandler : ICommandHandler<CreateAdmin>
+{
+    public Task<CommandResult> Handle(CreateAdmin command, CancellationToken cancellationToken) => Task.FromResult(CommandResult.FromSuccess());
+}");
+
+        run.CompileErrors.Should().BeEmpty("a type-pattern switch used to emit a subsumed arm (CS8510) here");
+        var dispatcher = run.Generated("GeneratedRequestDispatcher.g.cs");
+        dispatcher.Should().Contain("[typeof(global::ProbeNs.CreateUser)]").And.Contain("[typeof(global::ProbeNs.CreateAdmin)]");
+    }
+
     [Fact(DisplayName = "AOT hints close a constrained open-generic behavior only over the requests that satisfy it")]
     public void Aot_hints_respect_generic_constraints()
     {

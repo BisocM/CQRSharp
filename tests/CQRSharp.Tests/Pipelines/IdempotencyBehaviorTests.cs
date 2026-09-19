@@ -71,6 +71,20 @@ public class IdempotencyBehaviorTests
         retry.Should().Be("ok");
     }
 
+    [Fact(DisplayName = "A request that returns a failed CommandResult releases its claim so the caller can retry")]
+    public async Task FailedResult_ReleasesClaim()
+    {
+        var behavior = Create<IdempotentRequest>(new InMemoryStore());
+
+        var first = await behavior.Handle(new IdempotentRequest("k3"),
+            _ => Task.FromResult<object>(CQRSharp.Abstractions.Models.Commands.CommandResult.FromError("declined")), CancellationToken.None);
+        first.Should().BeOfType<CQRSharp.Abstractions.Models.Commands.CommandResult>().Which.IsSuccess.Should().BeFalse();
+
+        var retry = await behavior.Handle(new IdempotentRequest("k3"),
+            _ => Task.FromResult<object>("ok"), CancellationToken.None);
+        retry.Should().Be("ok", "a failed result is not a completed request, so it must not be remembered as one");
+    }
+
     private sealed class InMemoryStore : IIdempotencyStore
     {
         private readonly ConcurrentDictionary<string, byte> _claimed = new();

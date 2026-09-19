@@ -27,6 +27,7 @@ public static class RedisIntegrationServiceCollectionExtensions
         if (connectionString is null)
             throw new ArgumentNullException(nameof(connectionString));
 
+        global::CQRSharp.Redis.Extensions.RedisConnectionGuard.EnsureSingleConnectionString(services, connectionString);
         services.TryAddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(connectionString));
         return AddCore(services, configure);
     }

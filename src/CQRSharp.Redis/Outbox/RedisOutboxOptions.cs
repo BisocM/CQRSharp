@@ -11,10 +11,11 @@ public sealed class RedisOutboxOptions
     /// </summary>
     /// <remarks>
     ///     The store's Lua scripts touch several keys under this prefix atomically. On <b>Redis Cluster</b> those keys
-    ///     must hash to one slot, so the prefix must contain a hash tag — e.g. <c>{cqrsharp:outbox}:</c>. The default has
-    ///     none (changing it would orphan messages already stored under it), so it targets standalone/sentinel Redis.
+    ///     must hash to one slot, which the default guarantees with a hash tag (the <c>{...}</c> part). A custom prefix
+    ///     must keep one to work on a cluster. <b>Upgrading from 4.x:</b> the default was <c>cqrsharp:outbox:</c>; set that
+    ///     value explicitly to keep draining messages stored under it.
     /// </remarks>
-    public string KeyPrefix { get; set; } = "cqrsharp:outbox:";
+    public string KeyPrefix { get; set; } = "{cqrsharp:outbox}:";
 
     /// <summary>
     ///     How long a claimed message stays leased before it may be reclaimed. A processor that crashes after claiming

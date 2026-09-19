@@ -47,6 +47,7 @@ public static class EntityFrameworkCoreOutboxStoreServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
 
         // Scoped: the store holds a scoped DbContext, so it shares the caller's unit-of-work and transaction.
+        services.TryAddSingleton<EfCoreOutboxPurgeSchedule>();
         services.TryAddScoped<IOutboxStore, EfCoreOutboxStore<TContext>>();
 
         return services;

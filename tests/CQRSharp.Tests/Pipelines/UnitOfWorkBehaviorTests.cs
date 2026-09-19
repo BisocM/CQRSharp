@@ -51,6 +51,34 @@ public class UnitOfWorkBehaviorTests
         _mockUoW.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact(DisplayName = "UoW Behavior does not save when the handler returns a failed CommandResult, and drops its notifications")]
+    public async Task Handle_ShouldNotSave_WhenHandlerReturnsFailedResult()
+    {
+        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _mockUoW.Object, _mockOutbox.Object, _options);
+        var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
+        nextDelegate.Setup(next => next(It.IsAny<CancellationToken>())).ReturnsAsync(CommandResult.FromError("insufficient funds"));
+
+        var result = await behavior.Handle(new TransactionalCommand(), new RequestHandlerDelegate<CommandResult>(nextDelegate.Object), CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        _mockUoW.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _mockOutbox.Verify(outbox => outbox.Drain(), Times.Once, "the failed command's notifications are discarded");
+    }
+
+    [Fact(DisplayName = "UoW Behavior still saves a failed CommandResult when RollbackOnFailedResult is off")]
+    public async Task Handle_ShouldSave_WhenRollbackOnFailedResultIsDisabled()
+    {
+        var options = Options.Create(new UnitOfWorkOptions { RollbackOnFailedResult = false });
+        var behavior = new UnitOfWorkBehavior<ICommand, CommandResult>(_mockLogger.Object, _mockUoW.Object, _mockOutbox.Object, options);
+        _mockOutbox.Setup(outbox => outbox.Drain()).Returns(Array.Empty<CQRSharp.Abstractions.Interfaces.Notifications.INotification>());
+        var nextDelegate = new Mock<Func<CancellationToken, Task<CommandResult>>>();
+        nextDelegate.Setup(next => next(It.IsAny<CancellationToken>())).ReturnsAsync(CommandResult.FromError("recorded anyway"));
+
+        await behavior.Handle(new TransactionalCommand(), new RequestHandlerDelegate<CommandResult>(nextDelegate.Object), CancellationToken.None);
+
+        _mockUoW.Verify(uow => uow.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact(DisplayName = "UoW Behavior should roll back when handler fails for a transactional request")]
     public async Task Handle_ShouldRollbackUoW_WhenHandlerFails()
     {
