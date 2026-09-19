@@ -28,7 +28,7 @@
         <Title>A lightweight, extensible, and attribute-driven CQRS framework for .NET applications (Abstractions).</Title>
         <Description>Shared contracts for CQRSharp: command, query, stream, and notification markers, handler interfaces, pipeline and validation attribute contracts, and exception-hook, idempotency, and outbox abstractions. Reference this to define handlers without depending on the full runtime.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Breaking: the authoring surface is flattened to two namespaces, CQRSharp and CQRSharp.Pipelines (replace your CQRSharp.Abstractions.* / CQRSharp.Core.* usings; the CQRSharp meta-package applies both as global usings). See CHANGELOG.md for the full list.
+            Version 5.0.0. Breaking for custom stores: IOutboxStore is claim-based (GetPendingAsync leases and returns an OutboxClaim; marks are claim-checked; RenewAsync / ReleaseAsync) and IIdempotencyStore.TryClaimAsync returns an IdempotencyClaim, with CompleteAsync storing the result for replay. Breaking: the authoring surface is flattened to two namespaces, CQRSharp and CQRSharp.Pipelines (replace your CQRSharp.Abstractions.* / CQRSharp.Core.* usings; the CQRSharp meta-package applies both as global usings). See CHANGELOG.md for the full list.
         </PackageReleaseNotes>
     </PropertyGroup>
 
