@@ -94,10 +94,10 @@ src/
   CQRSharp.EntityFrameworkCore   EF Core outbox + idempotency stores (not AOT-compatible, by design)
   CQRSharp.FluentValidation      FluentValidation integration (not AOT-compatible, by design)
   CQRSharp.AspNetCore            ASP.NET Core result / ProblemDetails mapping
+  CQRSharp.Testing               the store contract suites + RecordingCqrsDispatcher, shipped for consumers' tests
   Shared                         source linked into the generator, the analyzers and the tests
 samples/      CQRSharp.Sample (self-test + AOT canary), .Sample.Minimal, .Sample.ExternalModule
-tests/        CQRSharp.Tests (the suite), CQRSharp.Testing.Outbox (shared store contract suites),
-              CQRSharp.Tests.ExternalModule (second-assembly fixture)
+tests/        CQRSharp.Tests (the suite), CQRSharp.Tests.ExternalModule (second-assembly fixture)
 benchmarks/   BenchmarkDotNet comparison (not in the solution)
 templates/    the `dotnet new cqrsharp` template
 docs/         the documentation (start at docs/README.md)
@@ -119,7 +119,13 @@ docs/         the documentation (start at docs/README.md)
   `GeneratedCodeCompilesTests` proving the emitted code compiles for the new shape. The generator and analyzers
   reference `Microsoft.CodeAnalysis` **4.8.x on purpose**, so they load in older compilers and IDEs; do not bump it and
   do not use newer Roslyn APIs.
-- **Store changes** must pass the shared contract suites in `tests/CQRSharp.Testing.Outbox`
+- **Public API changes are recorded.** Every library lists its public surface in `PublicAPI.Shipped.txt` /
+  `PublicAPI.Unshipped.txt`. Adding a public member without recording it is a build error (RS0016) — apply the IDE
+  fix ("Add to public API"), which writes it to `PublicAPI.Unshipped.txt`, and commit that with the change. Removing or
+  changing a *shipped* member is a breaking change and needs a major version.
+- **Package versions live in `Directory.Packages.props`** (central package management); a `PackageReference` in a
+  project file carries no `Version`.
+- **Store changes** must pass the shared contract suites in `src/CQRSharp.Testing`
   (`OutboxStoreContractTests`, `IdempotencyStoreContractTests`). A new store derives from both; a new guarantee is added
   to the suite first, so the in-memory, Redis and EF Core stores all have to meet it.
 - **New authoring-surface types go in the `CQRSharp` or `CQRSharp.Pipelines` namespace**, whichever folder or assembly

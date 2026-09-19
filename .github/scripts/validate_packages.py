@@ -35,6 +35,8 @@ LIBRARIES = {
 }
 EXPECTED = LIBRARIES | {META, TEMPLATES}
 FRAMEWORKS = ("net8.0", "net9.0", "net10.0")
+# The contracts are also consumable from netstandard2.0 (the generator and analyzers reference them).
+EXTRA_FRAMEWORKS = {"CQRSharp.Abstractions": ("netstandard2.0",)}
 SHARED_FILES = ("README.md", "LICENSE", "CQRSharp_Icon.png")
 
 errors: list[str] = []
@@ -78,7 +80,7 @@ def published_versions(package_id: str) -> set[str]:
 
 
 def check_library(package_id: str, names: set[str], path: str) -> None:
-    for tfm in FRAMEWORKS:
+    for tfm in FRAMEWORKS + EXTRA_FRAMEWORKS.get(package_id, ()):
         for ext in ("dll", "xml"):
             entry = f"lib/{tfm}/{package_id}.{ext}"
             if entry not in names:

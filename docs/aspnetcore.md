@@ -144,6 +144,7 @@ builder.Services.AddCqrsProblemDetails(o =>
 | `TimeoutStatusCode` | `504` |
 | `InvalidIdempotencyKeyStatusCode` | `400` |
 | `RateLimitRetryAfter` | `null` (no `Retry-After` header) |
+| `DuplicateInProgressRetryAfter` | 1 second — sent with the `409` for a duplicate whose original is still running (`DuplicateRequestException.IsInProgress`); `null` omits the header |
 
 `RateLimitExceededException` does not carry the limiter's window, so `Retry-After` cannot be derived from
 the exception. Set `RateLimitRetryAfter` to the window you configured in `UseRateLimiting(...)`; it is
@@ -235,7 +236,8 @@ public sealed class PlaceOrderHandler : IResultCommandHandler<PlaceOrder, Guid>
 | Request | Response |
 |---------|----------|
 | valid, first time | `201 Created`, `Location: /orders/{id}`, the id as the body |
-| same `Idempotency-Key` again | `409` ProblemDetails (from `DuplicateRequestException`) |
+| same `Idempotency-Key` again, original finished | `409` ProblemDetails (from `DuplicateRequestException`) — or, with [`ReplayResultsWith(...)`](idempotency-and-resilience.md#what-can-be-replayed) configured for `CommandResult<Guid>`, the original `201 Created` again |
+| same `Idempotency-Key` again, original still running | `409` ProblemDetails + `Retry-After: 1` (`DuplicateInProgressRetryAfter`) |
 | no `Idempotency-Key` header | `400` ProblemDetails, `"The Idempotency-Key header is required."` |
 | `quantity: 0` | `409` ProblemDetails with `"errorCode": 1001` (the `failureStatusCode` passed above) |
 

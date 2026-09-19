@@ -75,6 +75,10 @@ services.AddCqrsGenerated(b => b
 | `CQRSharp.Pipelines` | The opt-in behaviors and the fluent builder (pulled in by the meta-package). |
 | `CQRSharp.Redis` | Redis outbox + idempotency stores. Native-AOT-compatible. |
 | `CQRSharp.EntityFrameworkCore` | EF Core (relational) outbox + idempotency stores; the outbox joins your `DbContext` transaction. |
+| `CQRSharp.AspNetCore` | `CommandResult` → `IResult`, pipeline exceptions → ProblemDetails (400 / 409 / 429 / 504), `Idempotency-Key` header handling. Native-AOT-compatible. |
+| `CQRSharp.FluentValidation` | Runs your FluentValidation validators inside the validation behavior. |
+| `CQRSharp.Testing` | The store contract-test suites (for a custom outbox / idempotency store) and `RecordingCqrsDispatcher`, a stub-and-record dispatcher for unit tests. |
+| `CQRSharp.Templates` | `dotnet new install CQRSharp.Templates` → `dotnet new cqrsharp`. |
 
 ---
 
@@ -90,13 +94,18 @@ services.AddCqrsGenerated(b => b
   value *or* the exception, and `Initiated` → `Completed` / `Failed` lifecycle notifications with a guaranteed terminal
   event. Commands, queries and streams follow the same contract.
 - **Reliable messaging.** A transactional outbox with at-least-once delivery, persisted retry/back-off, dead-lettering
-  and W3C trace propagation; nothing published is silently dropped, and nothing from a failed request is delivered.
-  Plus a bounded background task queue with a real graceful-shutdown window.
-- **Observability.** `ActivitySource` spans for every dispatch, behavior and outbox delivery, queue metrics, health
-  checks, and a diagnostics API that reports exactly how each request is bound.
+  and W3C trace propagation. Delivery is **claim-based**: a processor owns a leased message, renews the lease while it
+  works, and cannot overwrite the outcome of whoever took over a lease it lost — so several instances can drain one
+  outbox. Nothing published is silently dropped, and nothing from a failed request is delivered. Plus a bounded
+  background task queue that drains its backlog inside a real graceful-shutdown window.
+- **Idempotency that answers the retry.** A duplicate of a completed request gets the **original result replayed**, not
+  an error; a duplicate of one still running gets a distinguishable "in progress" (409 + `Retry-After` over HTTP).
+- **Observability.** `ActivitySource` spans for every dispatch, behavior and outbox delivery; request-duration,
+  notification and outbox-outcome metrics plus queue metrics; health checks; and a diagnostics API that reports exactly
+  how each request is bound. All pay-for-use: nothing is measured until something listens.
 - **Testability.** Every time read goes through `TimeProvider`, so retries, timeouts, leases and expiry are
-  deterministic under `FakeTimeProvider`. The store contract-test suites the built-in stores pass live in
-  `tests/CQRSharp.Testing.Outbox`, ready to run against a custom store.
+  deterministic under `FakeTimeProvider`. `CQRSharp.Testing` ships the contract suites every built-in store passes —
+  derive one class to check a custom store — and a recording dispatcher for unit-testing code that dispatches.
 
 ---
 
@@ -118,8 +127,9 @@ infrastructure that usually gets hand-rolled around a mediator.
 | Streaming requests | Yes, with stream behaviors | Yes | Yes |
 | Notifications | Sequential / parallel strategies, notification behaviors | Pluggable publisher | Pluggable publisher |
 | Built-in validation, retry, timeout, rate limiting | Yes (opt-in) | No — bring your own behaviors | No — bring your own behaviors |
-| Idempotency (in-memory / Redis / EF Core stores), unit of work | Yes (opt-in) | No | No |
-| Transactional outbox | Yes, in-memory / Redis / EF Core stores | No | No |
+| Idempotency (in-memory / Redis / EF Core stores), unit of work | Yes (opt-in), with result replay | No | No |
+| Transactional outbox | Yes, in-memory / Redis / EF Core stores; multi-instance safe | No | No |
+| ASP.NET Core result / ProblemDetails mapping, FluentValidation adapter, test doubles | Yes (separate packages) | No | No |
 | Startup configuration validation | Yes | No | No |
 | Tracing / metrics | Built in (`ActivitySource`, `Meter`) | No | No |
 
@@ -169,11 +179,11 @@ when nothing brackets a handler `Send` returns the handler's own task.
 
 ```
 src/          the packages: CQRSharp (meta), .Abstractions, .Core, .Pipelines, .Generators, .Analyzers,
-              .Redis, .EntityFrameworkCore
+              .Redis, .EntityFrameworkCore, .AspNetCore, .FluentValidation, .Testing
 samples/      CQRSharp.Sample (full self-test, the Native AOT canary), .Sample.Minimal, .Sample.ExternalModule
-tests/        the test suite, the shared store contract tests, a second-assembly fixture
+tests/        the test suite and a second-assembly fixture
 benchmarks/   BenchmarkDotNet comparison (not part of the solution)
-templates/    the `dotnet new cqrsharp` template
+templates/    the `dotnet new cqrsharp` template and the CQRSharp.Templates package project
 docs/         the documentation
 ```
 

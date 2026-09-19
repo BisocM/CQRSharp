@@ -54,6 +54,10 @@ Runtime internals live deeper (`CQRSharp.Core.*`) and are only needed when you e
 | `CQRSharp.Pipelines` | Opt-in pipeline behaviors and the fluent builder (`UseValidation()`, `UseResilience(...)`, `UseOutbox(...)`, …). |
 | `CQRSharp.Redis` | Durable Redis-backed outbox and idempotency stores (Native-AOT-clean). |
 | `CQRSharp.EntityFrameworkCore` | Durable EF Core (relational) outbox and idempotency stores. *(Not AOT-compatible — EF Core uses runtime query compilation.)* |
+| `CQRSharp.AspNetCore` | `CommandResult` → `IResult`, pipeline exceptions → ProblemDetails, `Idempotency-Key` header handling (Native-AOT-clean). |
+| `CQRSharp.FluentValidation` | Runs FluentValidation validators inside the validation behavior. *(Not AOT-compatible — FluentValidation compiles expressions at runtime.)* |
+| `CQRSharp.Testing` | Store contract-test suites and `RecordingCqrsDispatcher` for your own tests. |
+| `CQRSharp.Templates` | The `dotnet new cqrsharp` project template. |
 
 ```bash
 dotnet add package CQRSharp
@@ -81,8 +85,9 @@ dotnet add package CQRSharp
 
 **Tooling, diagnostics & operations**
 - [Diagnostics & validation](diagnostics.md) — the `CQRA` analyzers, `CQRGEN` generator diagnostics, `CQRCONF` startup validation, the diagnostics introspection API, and health checks.
-- [Observability](observability.md) — distributed tracing and queue metrics.
+- [Observability](observability.md) — distributed tracing, dispatch / notification / outbox metrics, and queue metrics.
 - [Testing](testing.md) — store contract tests and testing your handlers.
+- [The CQRSharp.Testing package](testing-package.md) — the contract suites for a custom store, and `RecordingCqrsDispatcher`.
 
 **Platform & internals**
 - [Native AOT](native-aot.md) — the AOT story, what is and isn't AOT-safe, and how to verify.
