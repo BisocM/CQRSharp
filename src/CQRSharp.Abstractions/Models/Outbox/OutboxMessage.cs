@@ -24,6 +24,10 @@ namespace CQRSharp.Pipelines;
 ///     The W3C <c>traceparent</c> of the request that produced this message, captured at enqueue time so the outbox
 ///     dispatch span can link back to the originating trace. Null when no trace was active.
 /// </param>
+/// <param name="Claim">
+///     The lease <see cref="IOutboxStore.GetPendingAsync" /> took on this message; present only on a claimed message,
+///     and required by every store operation that finalizes or reschedules it. Null on a message being stored.
+/// </param>
 public sealed record OutboxMessage(
     Guid Id,
     string NotificationType,
@@ -34,5 +38,6 @@ public sealed record OutboxMessage(
     string? LastError,
     int AttemptCount = 0,
     DateTime? NextRetryAt = null,
-    string? TraceParent = null
+    string? TraceParent = null,
+    OutboxClaim? Claim = null
 );

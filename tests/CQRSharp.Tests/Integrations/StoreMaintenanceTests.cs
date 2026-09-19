@@ -33,15 +33,15 @@ public sealed class StoreMaintenanceTests
         var old = Message(time);
         var deadLettered = Message(time);
         await store.StoreAsync([old, deadLettered], CancellationToken.None);
-        await store.GetPendingAsync(10, CancellationToken.None);
-        await store.MarkAsProcessedAsync(old.Id, CancellationToken.None);
-        await store.MarkAsFailedAsync(deadLettered.Id, "poison", CancellationToken.None);
+        var firstBatch = (await store.GetPendingAsync(10, CancellationToken.None)).ToDictionary(m => m.Id, m => m.Claim!.Value);
+        await store.MarkAsProcessedAsync(firstBatch[old.Id], CancellationToken.None);
+        await store.MarkAsFailedAsync(firstBatch[deadLettered.Id], "poison", CancellationToken.None);
 
         time.Advance(TimeSpan.FromDays(8));
         var recent = Message(time);
         await store.StoreAsync([recent], CancellationToken.None);
-        await store.GetPendingAsync(10, CancellationToken.None); // the purge rides on the poll
-        await store.MarkAsProcessedAsync(recent.Id, CancellationToken.None);
+        var secondBatch = (await store.GetPendingAsync(10, CancellationToken.None)).ToList(); // the purge rides on the poll
+        await store.MarkAsProcessedAsync(secondBatch.Single().Claim!.Value, CancellationToken.None);
 
         var remaining = await context.Set<OutboxEntity>().AsNoTracking().Select(e => e.Id).ToListAsync();
         remaining.Should().BeEquivalentTo([deadLettered.Id, recent.Id]);

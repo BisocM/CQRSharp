@@ -97,8 +97,10 @@ idempotency store, or any other mix.
 
 Both store contracts are small and documented:
 
-- [`IOutboxStore`](outbox.md#custom-stores) — `StoreAsync`, `GetPendingAsync` (atomic claim),
-  `MarkAsProcessedAsync`, `IncrementAttemptAsync` (retry/back-off), `MarkAsFailedAsync` (dead-letter).
+- [`IOutboxStore`](outbox.md#custom-stores) — `StoreAsync`, `GetPendingAsync` (atomic claim, issuing an
+  `OutboxClaim` per message), and the claim-checked `MarkAsProcessedAsync`, `IncrementAttemptAsync`
+  (retry/back-off), `MarkAsFailedAsync` (dead-letter), `RenewAsync` and `ReleaseAsync`. Run the shared
+  contract suite against your store — see [Claims and leases](outbox.md#claims-and-leases).
 - [`IIdempotencyStore`](idempotency-and-resilience.md#idempotency) — `TryClaimAsync`, `ReleaseAsync`.
 
 Register a custom store through the `UseStore(Action<IServiceCollection>)` hook on either builder:

@@ -22,17 +22,25 @@ public sealed class OutboxProcessorTests
     private readonly Mock<INotificationSerializer> _serializer = new(MockBehavior.Strict);
     private readonly Mock<IOutboxStore> _store = new(MockBehavior.Strict);
 
-    private static OutboxMessage Message(int attemptCount = 0, string type = "outbox.proc.test") => new(
-        Guid.NewGuid(),
-        type,
-        "{}"u8.ToArray(),
-        DateTime.UtcNow,
-        OutboxMessageStatus.InProgress,
-        null,
-        null,
-        attemptCount,
-        null,
-        null);
+    private static OutboxMessage Message(int attemptCount = 0, string type = "outbox.proc.test")
+    {
+        var id = Guid.NewGuid();
+        return new OutboxMessage(
+            id,
+            type,
+            "{}"u8.ToArray(),
+            DateTime.UtcNow,
+            OutboxMessageStatus.InProgress,
+            null,
+            null,
+            attemptCount,
+            null,
+            null,
+            // A generous lease: these tests run one short cycle, so the processor never needs to renew.
+            new OutboxClaim(id, "test-claim", DateTime.UtcNow.AddMinutes(5)));
+    }
+
+    private static OutboxClaim ClaimOf(OutboxMessage message) => message.Claim!.Value;
 
     private OutboxProcessor CreateProcessor(int maxRetryAttempts = 3)
     {
@@ -84,17 +92,17 @@ public sealed class OutboxProcessorTests
             .Returns(notification);
         _dispatcher.Setup(d => d.Publish(notification, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _store.Setup(s => s.MarkAsProcessedAsync(message.Id, It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask)
+        _store.Setup(s => s.MarkAsProcessedAsync(ClaimOf(message), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
             .Callback(() => processed.TrySetResult());
 
         // Act
         await RunOneCycleAsync(CreateProcessor(), processed.Task);
 
         // Assert
-        _store.Verify(s => s.MarkAsProcessedAsync(message.Id, It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _store.Verify(s => s.MarkAsFailedAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsProcessedAsync(ClaimOf(message), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsFailedAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact(DisplayName = "Outbox: handler throwing below the limit records a retry attempt (no dead-letter)")]
@@ -114,7 +122,7 @@ public sealed class OutboxProcessorTests
             .Returns(notification);
         _dispatcher.Setup(d => d.Publish(notification, It.IsAny<CancellationToken>()))
             .ThrowsAsync(handlerError);
-        _store.Setup(s => s.IncrementAttemptAsync(message.Id, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.IncrementAttemptAsync(ClaimOf(message), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1)
             .Callback(() => incremented.TrySetResult());
 
@@ -122,16 +130,18 @@ public sealed class OutboxProcessorTests
         await RunOneCycleAsync(CreateProcessor(3), incremented.Task);
 
         // Assert
-        _store.Verify(s => s.IncrementAttemptAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("handler boom")), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()),
+        _store.Verify(s => s.IncrementAttemptAsync(ClaimOf(message), It.Is<string?>(e => e != null && e.Contains("handler boom")), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()),
             Times.Once);
-        _store.Verify(s => s.MarkAsFailedAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsFailedAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<OutboxClaim>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact(DisplayName = "Outbox: handler throwing at the retry limit dead-letters the message")]
     public async Task HandlerThrows_AtLimit_MarksAsFailed()
     {
-        // Arrange - IncrementAttemptAsync returns the attempt count that reaches MaxRetryAttempts (3) -> dead-letter.
+        // Arrange - two attempts already recorded, so this failure is the third (== MaxRetryAttempts) -> dead-letter.
+        // The processor dead-letters with ONE claim-checked call: recording the attempt first would return the message
+        // to pending and end the claim, and the follow-up MarkAsFailed under it would be rejected.
         var message = Message(2);
         // Typed as INotification so the mock setup binds the non-generic Publish(INotification, ...) overload the
         // processor actually calls (a 'var' here would bind the generic Publish<T> overload and the strict mock would miss).
@@ -145,19 +155,17 @@ public sealed class OutboxProcessorTests
             .Returns(notification);
         _dispatcher.Setup(d => d.Publish(notification, It.IsAny<CancellationToken>()))
             .ThrowsAsync(handlerError);
-        _store.Setup(s => s.IncrementAttemptAsync(message.Id, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(3); // == MaxRetryAttempts
-        _store.Setup(s => s.MarkAsFailedAsync(message.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask)
+        _store.Setup(s => s.MarkAsFailedAsync(ClaimOf(message), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
             .Callback(() => failed.TrySetResult());
 
         // Act
         await RunOneCycleAsync(CreateProcessor(3), failed.Task);
 
         // Assert
-        _store.Verify(s => s.IncrementAttemptAsync(message.Id, It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.MarkAsFailedAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("terminal boom")), It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsFailedAsync(ClaimOf(message), It.Is<string?>(e => e != null && e.Contains("terminal boom")), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<OutboxClaim>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact(DisplayName = "Outbox: unknown notification type (deserialize returns null) fails immediately without retry")]
@@ -171,17 +179,17 @@ public sealed class OutboxProcessorTests
             .ReturnsAsync(new[] { message });
         _serializer.Setup(s => s.Deserialize(message.NotificationType, message.Payload))
             .Returns((INotification?)null);
-        _store.Setup(s => s.MarkAsFailedAsync(message.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask)
+        _store.Setup(s => s.MarkAsFailedAsync(ClaimOf(message), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
             .Callback(() => failed.TrySetResult());
 
         // Act
         await RunOneCycleAsync(CreateProcessor(), failed.Task);
 
         // Assert
-        _store.Verify(s => s.MarkAsFailedAsync(message.Id, It.Is<string?>(e => e != null && e.Contains(message.NotificationType)), It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsFailedAsync(ClaimOf(message), It.Is<string?>(e => e != null && e.Contains(message.NotificationType)), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<OutboxClaim>(), It.IsAny<CancellationToken>()), Times.Never);
         // The dispatcher must never be touched for an undeserializable message.
         _dispatcher.Verify(d => d.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -199,8 +207,8 @@ public sealed class OutboxProcessorTests
             .ReturnsAsync(new[] { message });
         _serializer.Setup(s => s.Deserialize(message.NotificationType, message.Payload))
             .Throws(jsonError);
-        _store.Setup(s => s.MarkAsFailedAsync(message.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask)
+        _store.Setup(s => s.MarkAsFailedAsync(ClaimOf(message), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
             .Callback(() => failed.TrySetResult());
 
         // Act
@@ -209,10 +217,10 @@ public sealed class OutboxProcessorTests
         // Assert - the JsonException path records the exception's own text (jsonEx.ToString()), not the generic
         // "Failed to deserialize" message used for the unknown-type (null) path.
         _store.Verify(
-            s => s.MarkAsFailedAsync(message.Id, It.Is<string?>(e => e != null && e.Contains("Unexpected token while reading outbox payload.")), It.IsAny<CancellationToken>()),
+            s => s.MarkAsFailedAsync(ClaimOf(message), It.Is<string?>(e => e != null && e.Contains("Unexpected token while reading outbox payload.")), It.IsAny<CancellationToken>()),
             Times.Once);
-        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.IncrementAttemptAsync(It.IsAny<OutboxClaim>(), It.IsAny<string?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _store.Verify(s => s.MarkAsProcessedAsync(It.IsAny<OutboxClaim>(), It.IsAny<CancellationToken>()), Times.Never);
         _dispatcher.Verify(d => d.Publish(It.IsAny<INotification>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -234,23 +242,23 @@ public sealed class OutboxProcessorTests
 
         _serializer.Setup(s => s.Deserialize(corrupt.NotificationType, corrupt.Payload))
             .Throws(new JsonException("corrupt"));
-        _store.Setup(s => s.MarkAsFailedAsync(corrupt.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+        _store.Setup(s => s.MarkAsFailedAsync(ClaimOf(corrupt), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("store is down")); // store failure on the failure path
 
         _serializer.Setup(s => s.Deserialize(healthy.NotificationType, healthy.Payload))
             .Returns(notification);
         _dispatcher.Setup(d => d.Publish(notification, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _store.Setup(s => s.MarkAsProcessedAsync(healthy.Id, It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask)
+        _store.Setup(s => s.MarkAsProcessedAsync(ClaimOf(healthy), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true)
             .Callback(() => secondProcessed.TrySetResult());
 
         // Act
         await RunOneCycleAsync(CreateProcessor(), secondProcessed.Task);
 
         // Assert - the store failure on message #1 was swallowed and message #2 still completed successfully.
-        _store.Verify(s => s.MarkAsFailedAsync(corrupt.Id, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
-        _store.Verify(s => s.MarkAsProcessedAsync(healthy.Id, It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.MarkAsFailedAsync(ClaimOf(corrupt), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _store.Verify(s => s.MarkAsProcessedAsync(ClaimOf(healthy), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A minimal notification used only as the deserializer's return value; its concrete shape is irrelevant here.

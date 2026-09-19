@@ -39,6 +39,7 @@ internal sealed class RedisOutboxStore : IOutboxStore
     private const string FieldAttempts = "attempts";
     private const string FieldNextRetry = "nextRetry";
     private const string FieldTrace = "trace";
+    private const string FieldClaim = "claim";
 
     // Numeric status codes stored in the hash, mirroring the ordinals of OutboxMessageStatus
     // (Pending=0, Processed=1, Failed=2, InProgress=3), so Lua can compare without string parsing. Held as string
@@ -94,53 +95,62 @@ while ARGV[i] ~= nil do
 end
 return 1";
 
-    // The heart: atomically claim due messages. ARGV[1]=now, ARGV[2]=batch, ARGV[3]=lease horizon (now+visibility).
-    // For each due id we re-ZADD it at the lease horizon (so it stays invisible until the lease elapses or it is
-    // finalized), flip its hash status to InProgress, and return its full HGETALL. Because the score is rewritten
-    // inside the same atomic script, a concurrent claimant scanning the same window cannot also pick it up.
+    // Shared Lua prelude: "does the caller still hold this message?" — it exists, is in progress, and carries the token
+    // the caller was given when it claimed it. A reclaim after the lease expired writes a new token, so a late finalize
+    // or attempt report from the previous claimant fails this check and changes nothing.
+    private const string OwnedFunction = @"
+local function owned(key, token)
+    if redis.call('EXISTS', key) == 0 then return false end
+    if tonumber(redis.call('HGET', key, '" + FieldStatus + @"')) ~= " + StatusInProgress + @" then return false end
+    return redis.call('HGET', key, '" + FieldClaim + @"') == token
+end
+";
+
+    // The heart: atomically claim due messages. ARGV[1]=now, ARGV[2]=batch, ARGV[3]=lease horizon (now+visibility),
+    // ARGV[4]=this claim's token. For each due id we re-ZADD it at the lease horizon (so it stays invisible until the
+    // lease elapses or it is finalized), flip its hash status to InProgress, stamp the claim token, and return its full
+    // HGETALL. Because the score is rewritten inside the same atomic script, a concurrent claimant scanning the same
+    // window cannot also pick it up.
     private const string ClaimScript = @"
 local prefix = KEYS[1]
 local now = ARGV[1]
 local batch = tonumber(ARGV[2])
 local lease = ARGV[3]
+local token = ARGV[4]
 local ids = redis.call('ZRANGEBYSCORE', prefix .. 'due', '-inf', now, 'LIMIT', 0, batch)
 local result = {}
 for _, id in ipairs(ids) do
     redis.call('ZADD', prefix .. 'due', lease, id)
-    redis.call('HSET', prefix .. 'msg:' .. id, '" + FieldStatus + @"', '" + StatusInProgress + @"')
+    redis.call('HSET', prefix .. 'msg:' .. id, '" + FieldStatus + @"', '" + StatusInProgress + @"', '" + FieldClaim + @"', token)
     result[#result + 1] = id
     result[#result + 1] = redis.call('HGETALL', prefix .. 'msg:' .. id)
 end
 return result";
 
-    // Mark processed (terminal). Idempotent: a missing/already-terminal message is a no-op, so a late mark from a
-    // claimant whose lease expired can never flip a dead-lettered message to processed (or back). Removes the due entry
-    // so it is never reclaimed, records the processed timestamp, and applies the retention TTL.
-    private const string ProcessedScript = @"
+    // Mark processed (terminal). Returns 1 when finalized, 0 when the message is missing, already terminal, or the claim
+    // was lost. Removes the due entry so it is never reclaimed, records the processed timestamp, and applies the
+    // retention TTL. ARGV: id, now, retention, token.
+    private const string ProcessedScript = OwnedFunction + @"
 local prefix = KEYS[1]
 local id = ARGV[1]
-local now = ARGV[2]
-local retention = tonumber(ARGV[3])
 local key = prefix .. 'msg:' .. id
-if redis.call('EXISTS', key) == 0 then return 0 end
-local status = tonumber(redis.call('HGET', key, '" + FieldStatus + @"'))
-if status == " + StatusProcessed + @" or status == " + StatusFailed + @" then return 0 end
+if not owned(key, ARGV[4]) then return 0 end
 redis.call('ZREM', prefix .. 'due', id)
-redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusProcessed + @"', '" + FieldProcessed + @"', now)
-redis.call('PEXPIRE', key, retention)
+redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusProcessed + @"', '" + FieldProcessed + @"', ARGV[2])
+redis.call('HDEL', key, '" + FieldClaim + @"')
+redis.call('PEXPIRE', key, tonumber(ARGV[3]))
 return 1";
 
-    // Record a failed attempt and reschedule to Pending. Returns the new attempt count, or 0 if the message is missing
-    // or already terminal (so a stale attempt from a crashed claimant can never resurrect a finalized message).
-    // ARGV: id, error, nextRetry (unix-ms, or '' for immediately eligible), readyBand. A null back-off scores the
-    // message into the ready band by its stored CreatedAt, exactly like a freshly stored message.
-    private const string IncrementScript = @"
+    // Record a failed attempt and reschedule to Pending. Returns the new attempt count, or 0 if the message is missing,
+    // terminal, or the claim was lost (so a stale attempt from a stalled claimant can never yank a message out from
+    // under the processor that holds it now). ARGV: id, error, nextRetry (unix-ms, or '' for immediately eligible),
+    // readyBand, token. A null back-off scores the message into the ready band by its stored CreatedAt, exactly like a
+    // freshly stored message.
+    private const string IncrementScript = OwnedFunction + @"
 local prefix = KEYS[1]
 local id = ARGV[1]
 local key = prefix .. 'msg:' .. id
-if redis.call('EXISTS', key) == 0 then return 0 end
-local status = tonumber(redis.call('HGET', key, '" + FieldStatus + @"'))
-if status == " + StatusProcessed + @" or status == " + StatusFailed + @" then return 0 end
+if not owned(key, ARGV[5]) then return 0 end
 local attempts = tonumber(redis.call('HGET', key, '" + FieldAttempts + @"')) + 1
 local nextRetry = ARGV[3]
 local score
@@ -154,23 +164,52 @@ redis.call('HSET', key,
     '" + FieldError + @"', ARGV[2],
     '" + FieldNextRetry + @"', nextRetry,
     '" + FieldStatus + @"', '" + StatusPending + @"')
+redis.call('HDEL', key, '" + FieldClaim + @"')
 redis.call('ZADD', prefix .. 'due', score, id)
 return attempts";
 
-    // Dead-letter (terminal). Idempotent no-op on a missing or already-terminal message. Removes the due entry, records
-    // the error, and applies the retention TTL. ARGV: id, error, retention.
-    private const string FailedScript = @"
+    // Dead-letter (terminal). Returns 1 when dead-lettered, 0 when missing, terminal, or the claim was lost. Counts the
+    // exhausting attempt, removes the due entry, records the error, and applies the retention TTL.
+    // ARGV: id, error, retention, token.
+    private const string FailedScript = OwnedFunction + @"
 local prefix = KEYS[1]
 local id = ARGV[1]
-local retention = tonumber(ARGV[3])
 local key = prefix .. 'msg:' .. id
-if redis.call('EXISTS', key) == 0 then return 0 end
-local status = tonumber(redis.call('HGET', key, '" + FieldStatus + @"'))
-if status == " + StatusProcessed + @" or status == " + StatusFailed + @" then return 0 end
+if not owned(key, ARGV[4]) then return 0 end
 redis.call('ZREM', prefix .. 'due', id)
+redis.call('HINCRBY', key, '" + FieldAttempts + @"', 1)
 redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusFailed + @"', '" + FieldError + @"', ARGV[2])
-redis.call('PEXPIRE', key, retention)
+redis.call('HDEL', key, '" + FieldClaim + @"')
+redis.call('PEXPIRE', key, tonumber(ARGV[3]))
 return 1";
+
+    // Extend the lease: move the due entry to the new horizon. The token is unchanged. ARGV: id, newLease, token.
+    private const string RenewScript = OwnedFunction + @"
+local prefix = KEYS[1]
+local id = ARGV[1]
+if not owned(prefix .. 'msg:' .. id, ARGV[3]) then return 0 end
+redis.call('ZADD', prefix .. 'due', ARGV[2], id)
+return 1";
+
+    // Give claimed messages back without counting an attempt: pending again and immediately due, in CreatedAt order.
+    // ARGV: readyBand, then (id, token) pairs. Lost claims are skipped.
+    private const string ReleaseScript = OwnedFunction + @"
+local prefix = KEYS[1]
+local band = tonumber(ARGV[1])
+local released = 0
+local i = 2
+while ARGV[i] ~= nil do
+    local id = ARGV[i]
+    local key = prefix .. 'msg:' .. id
+    if owned(key, ARGV[i + 1]) then
+        redis.call('HSET', key, '" + FieldStatus + @"', '" + StatusPending + @"')
+        redis.call('HDEL', key, '" + FieldClaim + @"')
+        redis.call('ZADD', prefix .. 'due', tonumber(redis.call('HGET', key, '" + FieldCreated + @"')) + band, id)
+        released = released + 1
+    end
+    i = i + 2
+end
+return released";
 
     public async Task StoreAsync(IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
     {
@@ -203,46 +242,76 @@ return 1";
     {
         var now = ToUnixMs(_timeProvider.GetUtcNow().UtcDateTime);
         var lease = now + _visibilityMs;
+        var token = Guid.NewGuid().ToString("N");
         var result = await EvalAsync(ClaimScript,
-            [now, batchSize, lease]).ConfigureAwait(false);
+            [now, batchSize, lease, token]).ConfigureAwait(false);
 
         if (result.IsNull)
             return [];
 
         // The script returns a flat [id, hash, id, hash, ...] array where each hash is itself an array of HGETALL pairs.
         var pairs = (RedisResult[])result!;
+        var leasedUntil = FromUnixMs(lease);
         var claimed = new List<OutboxMessage>(pairs.Length / 2);
         for (var i = 0; i + 1 < pairs.Length; i += 2)
         {
             var id = (string)pairs[i]!;
             var hash = (RedisValue[])pairs[i + 1]!;
-            claimed.Add(MapFromHash(id, hash));
+            var message = MapFromHash(id, hash);
+            claimed.Add(message with { Claim = new OutboxClaim(message.Id, token, leasedUntil) });
         }
 
         return claimed;
     }
 
-    public async Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken)
+    public async Task<bool> MarkAsProcessedAsync(OutboxClaim claim, CancellationToken cancellationToken)
     {
         var now = ToUnixMs(_timeProvider.GetUtcNow().UtcDateTime);
-        await EvalAsync(ProcessedScript,
-            [messageId.ToString("N"), now, _retentionMs]).ConfigureAwait(false);
+        var result = await EvalAsync(ProcessedScript,
+            [claim.MessageId.ToString("N"), now, _retentionMs, claim.Token]).ConfigureAwait(false);
+        return (int)result == 1;
     }
 
-    public async Task<int> IncrementAttemptAsync(Guid messageId, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
+    public async Task<int> IncrementAttemptAsync(OutboxClaim claim, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
     {
         // A non-null back-off is scheduled at that exact time; a null back-off makes the message immediately eligible
         // and is scored into the ready band by the Lua using the message's stored CreatedAt.
         var nextRetry = nextRetryAt is { } n ? (RedisValue)ToUnixMs(n) : RedisValue.EmptyString;
         var result = await EvalAsync(IncrementScript,
-            [messageId.ToString("N"), error ?? RedisValue.EmptyString, nextRetry, ReadyBand]).ConfigureAwait(false);
+            [claim.MessageId.ToString("N"), error ?? RedisValue.EmptyString, nextRetry, ReadyBand, claim.Token]).ConfigureAwait(false);
         return (int)result;
     }
 
-    public async Task MarkAsFailedAsync(Guid messageId, string? error, CancellationToken cancellationToken)
+    public async Task<bool> MarkAsFailedAsync(OutboxClaim claim, string? error, CancellationToken cancellationToken)
     {
-        await EvalAsync(FailedScript,
-            [messageId.ToString("N"), error ?? RedisValue.EmptyString, _retentionMs]).ConfigureAwait(false);
+        var result = await EvalAsync(FailedScript,
+            [claim.MessageId.ToString("N"), error ?? RedisValue.EmptyString, _retentionMs, claim.Token]).ConfigureAwait(false);
+        return (int)result == 1;
+    }
+
+    public async Task<OutboxClaim?> RenewAsync(OutboxClaim claim, CancellationToken cancellationToken)
+    {
+        var lease = ToUnixMs(_timeProvider.GetUtcNow().UtcDateTime) + _visibilityMs;
+        var result = await EvalAsync(RenewScript,
+            [claim.MessageId.ToString("N"), lease, claim.Token]).ConfigureAwait(false);
+        return (int)result == 1 ? claim with { LeasedUntil = FromUnixMs(lease) } : null;
+    }
+
+    public async Task ReleaseAsync(IReadOnlyCollection<OutboxClaim> claims, CancellationToken cancellationToken)
+    {
+        if (claims.Count == 0)
+            return;
+
+        var args = new RedisValue[1 + claims.Count * 2];
+        args[0] = ReadyBand;
+        var i = 1;
+        foreach (var claim in claims)
+        {
+            args[i++] = claim.MessageId.ToString("N");
+            args[i++] = claim.Token;
+        }
+
+        await EvalAsync(ReleaseScript, args).ConfigureAwait(false);
     }
 
     // Single execution wrapper: try EVALSHA (cached) and fall back to EVAL when the server reports NOSCRIPT, which

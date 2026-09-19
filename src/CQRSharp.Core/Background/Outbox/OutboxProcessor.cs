@@ -84,86 +84,167 @@ internal sealed class OutboxProcessor : BackgroundService
 
         _logger.LogInformation("Fetched {Count} messages from the outbox to process.", outboxMessages.Length);
 
-        foreach (var message in outboxMessages)
+        var claimedAt = _timeProvider.GetUtcNow().UtcDateTime;
+
+        // Declared outside the loop so that a shutdown which interrupts a dispatch can still release the in-flight message
+        // and everything after it.
+        var index = 0;
+        try
         {
-            if (stoppingToken.IsCancellationRequested) break;
-
-            // Restore the originating request's trace context so the outbox dispatch links to the same trace.
-            using var activity = StartOutboxActivity(message);
-
-            try
+            for (; index < outboxMessages.Length; index++)
             {
-                var notification = serializer.Deserialize(message.NotificationType, message.Payload);
-                if (notification is null)
+                if (stoppingToken.IsCancellationRequested)
                 {
-                    // An unknown / undeserializable notification can never succeed; fail it immediately (no retry).
-                    await outboxStore.MarkAsFailedAsync(
-                        message.Id,
-                        $"Failed to deserialize notification '{message.NotificationType}'.",
-                        stoppingToken).ConfigureAwait(false);
+                    // Hand the undispatched rest of the batch back, so a restart does not have to wait out the lease.
+                    await ReleaseRemainingAsync(outboxStore, outboxMessages, index).ConfigureAwait(false);
+                    break;
+                }
+
+                var message = outboxMessages[index];
+                if (message.Claim is not { } claim)
+                {
                     _logger.LogError(
-                        "Failed to deserialize notification {NotificationType} (ID: {MessageId}). Marked as failed.",
-                        message.NotificationType,
-                        message.Id);
+                        "The outbox store returned message {MessageId} without a claim; it cannot be finalized and is skipped. " +
+                        "IOutboxStore.GetPendingAsync must set OutboxMessage.Claim on every message it claims.", message.Id);
                     continue;
                 }
 
-                await using (var messageScope = _scopeFactory.CreateAsyncScope())
-                {
-                    var dispatcher = messageScope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
-                    await dispatcher.Publish(notification, stoppingToken).ConfigureAwait(false);
-                }
+                // Restore the originating request's trace context so the outbox dispatch links to the same trace.
+                using var activity = StartOutboxActivity(message);
 
-                await outboxStore.MarkAsProcessedAsync(message.Id, stoppingToken).ConfigureAwait(false);
-                _logger.LogInformation(
-                    "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
-                    message.NotificationType, message.Id);
-            }
-            catch (JsonException jsonEx)
-            {
-                // A corrupt payload for a known notification type is deterministic; dead-letter it immediately with
-                // the real cause rather than wasting retries. (Unknown types deserialize to null and are handled above.)
-                _logger.LogError(jsonEx, "Corrupt payload for notification {NotificationType} (ID: {MessageId}); marking as failed.",
-                    message.NotificationType, message.Id);
                 try
                 {
-                    await outboxStore.MarkAsFailedAsync(message.Id, jsonEx.ToString(), stoppingToken).ConfigureAwait(false);
-                }
-                catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
-                {
-                    _logger.LogError(storeEx, "Failed to mark corrupt outbox message {MessageId} as failed.", message.Id);
-                }
-            }
-            catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
-            {
-                _logger.LogError(ex, "Failed to process notification {NotificationType} (ID: {MessageId}).",
-                    message.NotificationType, message.Id);
-
-                // Record the failed attempt durably so retry limits survive restarts, and dead-letter the message once
-                // attempts are exhausted. Guard these store calls: if the store itself is the failing dependency we
-                // must not abort the rest of the batch.
-                try
-                {
-                    var attempt = message.AttemptCount + 1;
-                    var recordedAttempts = await outboxStore
-                        .IncrementAttemptAsync(message.Id, ex.ToString(), ComputeNextRetryAt(attempt), stoppingToken)
-                        .ConfigureAwait(false);
-
-                    if (recordedAttempts >= _options.MaxRetryAttempts)
+                    // One lease covers the whole batch but messages are dispatched one by one: once a good part of it is
+                    // gone, extend this message's lease before starting on it, or another processor may pick it up mid-flight.
+                    if (await RenewIfNeededAsync(outboxStore, claim, claimedAt, stoppingToken).ConfigureAwait(false) is not { } current)
                     {
-                        await outboxStore.MarkAsFailedAsync(message.Id, ex.ToString(), stoppingToken).ConfigureAwait(false);
-                        _logger.LogCritical(
-                            "Notification {NotificationType} (ID: {MessageId}) reached {Attempts} attempts and is marked as failed.",
-                            message.NotificationType, message.Id, recordedAttempts);
+                        _logger.LogInformation("Lost the claim on outbox message {MessageId} before dispatch; another processor owns it.", message.Id);
+                        continue;
+                    }
+
+                    claim = current;
+
+                    var notification = serializer.Deserialize(message.NotificationType, message.Payload);
+                    if (notification is null)
+                    {
+                        // An unknown / undeserializable notification can never succeed; fail it immediately (no retry).
+                        await outboxStore.MarkAsFailedAsync(
+                            claim,
+                            $"Failed to deserialize notification '{message.NotificationType}'.",
+                            stoppingToken).ConfigureAwait(false);
+                        _logger.LogError(
+                            "Failed to deserialize notification {NotificationType} (ID: {MessageId}). Marked as failed.",
+                            message.NotificationType,
+                            message.Id);
+                        continue;
+                    }
+
+                    await using (var messageScope = _scopeFactory.CreateAsyncScope())
+                    {
+                        var dispatcher = messageScope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
+                        await dispatcher.Publish(notification, stoppingToken).ConfigureAwait(false);
+                    }
+
+                    if (await outboxStore.MarkAsProcessedAsync(claim, stoppingToken).ConfigureAwait(false))
+                        _logger.LogInformation(
+                            "Successfully processed and dispatched notification {NotificationType} (ID: {MessageId}).",
+                            message.NotificationType, message.Id);
+                    else
+                        // Delivered, but the lease ran out during dispatch and someone else holds the message now: this is
+                        // the at-least-once case. The other processor's outcome stands; ours must not overwrite it.
+                        _logger.LogWarning(
+                            "Dispatched notification {NotificationType} (ID: {MessageId}) but its claim had been lost; it may be delivered again.",
+                            message.NotificationType, message.Id);
+                }
+                catch (JsonException jsonEx)
+                {
+                    // A corrupt payload for a known notification type is deterministic; dead-letter it immediately with
+                    // the real cause rather than wasting retries. (Unknown types deserialize to null and are handled above.)
+                    _logger.LogError(jsonEx, "Corrupt payload for notification {NotificationType} (ID: {MessageId}); marking as failed.",
+                        message.NotificationType, message.Id);
+                    try
+                    {
+                        await outboxStore.MarkAsFailedAsync(claim, jsonEx.ToString(), stoppingToken).ConfigureAwait(false);
+                    }
+                    catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
+                    {
+                        _logger.LogError(storeEx, "Failed to mark corrupt outbox message {MessageId} as failed.", message.Id);
                     }
                 }
-                catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
+                catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
                 {
-                    _logger.LogError(storeEx,
-                        "Failed to record the outbox delivery attempt for message {MessageId}; it will be retried on a later poll.",
-                        message.Id);
+                    _logger.LogError(ex, "Failed to process notification {NotificationType} (ID: {MessageId}).",
+                        message.NotificationType, message.Id);
+
+                    // Record the failed attempt durably so retry limits survive restarts, or dead-letter the message when this
+                    // was its last allowed attempt. One claim-checked call either way: recording the attempt returns the
+                    // message to pending and ends the claim, so a follow-up call under it would be rejected. Guard the store
+                    // call: if the store itself is the failing dependency we must not abort the rest of the batch.
+                    try
+                    {
+                        var attempt = message.AttemptCount + 1;
+                        if (attempt >= _options.MaxRetryAttempts)
+                        {
+                            if (await outboxStore.MarkAsFailedAsync(claim, ex.ToString(), stoppingToken).ConfigureAwait(false))
+                                _logger.LogCritical(
+                                    "Notification {NotificationType} (ID: {MessageId}) reached {Attempts} attempts and is marked as failed.",
+                                    message.NotificationType, message.Id, attempt);
+                        }
+                        else
+                        {
+                            await outboxStore
+                                .IncrementAttemptAsync(claim, ex.ToString(), ComputeNextRetryAt(attempt), stoppingToken)
+                                .ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
+                    {
+                        _logger.LogError(storeEx,
+                            "Failed to record the outbox delivery attempt for message {MessageId}; it will be retried on a later poll.",
+                            message.Id);
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            await ReleaseRemainingAsync(outboxStore, outboxMessages, index).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    // Renews once half of the lease the message was claimed with has elapsed; a short batch never pays for a renewal.
+    // Returns the claim to use, or null when it was already lost.
+    private async Task<OutboxClaim?> RenewIfNeededAsync(IOutboxStore store, OutboxClaim claim, DateTime claimedAt, CancellationToken stoppingToken)
+    {
+        var lease = claim.LeasedUntil - claimedAt;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        if (lease <= TimeSpan.Zero || now < claimedAt + TimeSpan.FromTicks(lease.Ticks / 2))
+            return claim;
+
+        return await store.RenewAsync(claim, stoppingToken).ConfigureAwait(false);
+    }
+
+    private async Task ReleaseRemainingAsync(IOutboxStore store, OutboxMessage[] batch, int fromIndex)
+    {
+        var remaining = new List<OutboxClaim>(batch.Length - fromIndex);
+        for (var i = fromIndex; i < batch.Length; i++)
+            if (batch[i].Claim is { } claim)
+                remaining.Add(claim);
+
+        if (remaining.Count == 0) return;
+
+        try
+        {
+            // The host is already stopping, so its token is cancelled; bound the courtesy call instead.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5), _timeProvider);
+            await store.ReleaseAsync(remaining, timeout.Token).ConfigureAwait(false);
+            _logger.LogInformation("Released {Count} claimed outbox message(s) on shutdown.", remaining.Count);
+        }
+        catch (Exception ex)
+        {
+            // Not fatal: the leases simply expire and the messages are reclaimed after the visibility timeout.
+            _logger.LogWarning(ex, "Could not release {Count} claimed outbox message(s) on shutdown.", remaining.Count);
         }
     }
 

@@ -447,10 +447,12 @@ public sealed class CqrsConfigurationInspectorTests
         public Task StoreAsync(IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IEnumerable<OutboxMessage>> GetPendingAsync(int batchSize, CancellationToken cancellationToken)
             => Task.FromResult<IEnumerable<OutboxMessage>>(Array.Empty<OutboxMessage>());
-        public Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task MarkAsFailedAsync(Guid messageId, string? error, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<int> IncrementAttemptAsync(Guid messageId, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
+        public Task<bool> MarkAsProcessedAsync(OutboxClaim claim, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> MarkAsFailedAsync(OutboxClaim claim, string? error, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<int> IncrementAttemptAsync(OutboxClaim claim, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
             => Task.FromResult(1);
+        public Task<OutboxClaim?> RenewAsync(OutboxClaim claim, CancellationToken cancellationToken) => Task.FromResult<OutboxClaim?>(claim);
+        public Task ReleaseAsync(IReadOnlyCollection<OutboxClaim> claims, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class FakeNotificationSerializer : INotificationSerializer

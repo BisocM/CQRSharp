@@ -159,7 +159,11 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
             try
             {
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return candidates.Select(OutboxEntityMapper.ToMessage).ToList();
+                // The claim token is the row-version this claim wrote. Every later writer bumps it, so "the row still
+                // carries my token" is exactly "nobody has touched this message since I claimed it".
+                return candidates
+                    .Select(e => OutboxEntityMapper.ToMessage(e) with { Claim = new OutboxClaim(e.Id, ClaimToken(e), visibleUntil) })
+                    .ToList();
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < _maxClaimAttempts)
             {
@@ -195,12 +199,10 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public Task MarkAsProcessedAsync(Guid messageId, CancellationToken cancellationToken)
-        // Terminal + idempotent: once Processed or Failed the row is never moved again, so a duplicate or late mark
-        // is a no-op and cannot resurrect a finished message.
-        => MutateAsync(messageId, e =>
+    public Task<bool> MarkAsProcessedAsync(OutboxClaim claim, CancellationToken cancellationToken)
+        => MutateAsync(claim.MessageId, e =>
         {
-            if (IsTerminal(e)) return false;
+            if (!IsOwnedBy(e, claim)) return false;
 
             e.Status = OutboxMessageStatus.Processed;
             e.ProcessedAt = Now();
@@ -211,15 +213,16 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public async Task<int> IncrementAttemptAsync(Guid messageId, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
+    public async Task<int> IncrementAttemptAsync(OutboxClaim claim, string? error, DateTime? nextRetryAt, CancellationToken cancellationToken)
     {
         var newCount = 0;
 
-        await MutateAsync(messageId, e =>
+        await MutateAsync(claim.MessageId, e =>
         {
-            // A message that already reached a terminal state must not be resurrected by a late/duplicate attempt;
-            // newCount stays 0, which the contract uses to mean "not found / not eligible".
-            if (IsTerminal(e)) return false;
+            // Unknown, terminal, or claimed by someone else since: change nothing. newCount is reset because a lost
+            // concurrency race re-runs this callback against the freshly read row.
+            newCount = 0;
+            if (!IsOwnedBy(e, claim)) return false;
 
             newCount = e.AttemptCount + 1;
             e.AttemptCount = newCount;
@@ -236,21 +239,64 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public Task MarkAsFailedAsync(Guid messageId, string? error, CancellationToken cancellationToken)
-        => MutateAsync(messageId, e =>
+    public Task<bool> MarkAsFailedAsync(OutboxClaim claim, string? error, CancellationToken cancellationToken)
+        => MutateAsync(claim.MessageId, e =>
         {
-            if (IsTerminal(e)) return false;
+            if (!IsOwnedBy(e, claim)) return false;
 
+            // The attempt that exhausted the budget is an attempt too; count it so the dead letter tells the whole story.
+            e.AttemptCount++;
             e.Status = OutboxMessageStatus.Failed;
             e.LastError = error;
             e.LockedUntil = null;
             return true;
         }, cancellationToken);
 
-    private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
+    /// <inheritdoc />
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
+    public async Task<OutboxClaim?> RenewAsync(OutboxClaim claim, CancellationToken cancellationToken)
+    {
+        OutboxClaim? renewed = null;
 
-    private static bool IsTerminal(OutboxEntity e)
-        => e.Status is OutboxMessageStatus.Processed or OutboxMessageStatus.Failed;
+        await MutateAsync(claim.MessageId, e =>
+        {
+            renewed = null;
+            if (!IsOwnedBy(e, claim)) return false;
+
+            e.LockedUntil = Now() + _visibilityTimeout;
+            // MutateCore bumps the row-version after this callback, so the renewed claim's token is the next value.
+            renewed = new OutboxClaim(e.Id, (e.RowVersion + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), e.LockedUntil.Value);
+            return true;
+        }, cancellationToken).ConfigureAwait(false);
+
+        return renewed;
+    }
+
+    /// <inheritdoc />
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
+    public async Task ReleaseAsync(IReadOnlyCollection<OutboxClaim> claims, CancellationToken cancellationToken)
+    {
+        foreach (var claim in claims)
+            await MutateAsync(claim.MessageId, e =>
+            {
+                if (!IsOwnedBy(e, claim)) return false;
+
+                // Back to pending without counting an attempt: nothing was tried.
+                e.Status = OutboxMessageStatus.Pending;
+                e.LockedUntil = null;
+                return true;
+            }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string ClaimToken(OutboxEntity e) => e.RowVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // In progress under exactly the row-version the claim recorded: any reclaim, renewal or finalize since has moved it.
+    private static bool IsOwnedBy(OutboxEntity e, OutboxClaim claim)
+        => e.Status == OutboxMessageStatus.InProgress && string.Equals(ClaimToken(e), claim.Token, StringComparison.Ordinal);
+
+    private DateTime Now() => _timeProvider.GetUtcNow().UtcDateTime;
 
     private void DetachRange(IEnumerable<OutboxEntity> entities)
     {
@@ -266,12 +312,12 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
     /// </summary>
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    private async Task MutateAsync(Guid id, Func<OutboxEntity, bool> mutate, CancellationToken cancellationToken)
+    private async Task<bool> MutateAsync(Guid id, Func<OutboxEntity, bool> mutate, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await MutateCoreAsync(id, mutate, cancellationToken).ConfigureAwait(false);
+            return await MutateCoreAsync(id, mutate, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -281,7 +327,7 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
 
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    private async Task MutateCoreAsync(Guid id, Func<OutboxEntity, bool> mutate, CancellationToken cancellationToken)
+    private async Task<bool> MutateCoreAsync(Guid id, Func<OutboxEntity, bool> mutate, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -291,13 +337,13 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
 
             // Missing row: nothing to do (callers treat this as the "not found" case).
             if (entity is null)
-                return;
+                return false;
 
             if (!mutate(entity))
             {
                 // No change requested (e.g. already terminal). Detach so a stale tracked copy can't linger.
                 _context.Entry(entity).State = EntityState.Detached;
-                return;
+                return false;
             }
 
             entity.RowVersion++;
@@ -305,7 +351,7 @@ public sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : 
             try
             {
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                return;
+                return true;
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < _maxClaimAttempts)
             {

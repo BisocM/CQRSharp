@@ -100,7 +100,8 @@ public sealed record OrderPlaced(Guid OrderId, decimal Total) : INotification;
    processors never grab the same message), deserializes each, and dispatches it to its handlers — each
    message in **its own DI scope**, so one handler's scoped state (a `DbContext` left with half-tracked
    entities after a failure) never reaches the next message.
-4. On success the message is marked **processed** (`MarkAsProcessedAsync`). On failure the attempt is
+4. On success the message is marked **processed** (`MarkAsProcessedAsync`), under the claim it was handed
+   out with. On failure the attempt is
    recorded (`IncrementAttemptAsync`) with a **persisted attempt count** and a `NextRetryAt` back-off,
    returning the message to `Pending` for a later retry. When attempts are exhausted, the message is
    **dead-lettered** (`MarkAsFailedAsync`).
@@ -163,6 +164,28 @@ The store is the durable boundary. Pick one to match your deployment:
 
 `IOutboxStore` implementations must make `StoreAsync` atomic with the business transaction and make
 `GetPendingAsync` an atomic claim (`Pending → InProgress`) so concurrent processors never double-claim.
+
+### Claims and leases
+
+Every message `GetPendingAsync` hands out carries an `OutboxClaim` — the message id, an opaque token, and
+`LeasedUntil`. The claim is the processor's proof that it still holds the message, and **every later operation
+must present it**: `MarkAsProcessedAsync(claim)`, `IncrementAttemptAsync(claim, …)`, `MarkAsFailedAsync(claim, …)`.
+
+A message left in progress past its lease (a crashed or stalled processor) is handed out again under a *new*
+claim, and the old one stops matching. So when the stalled processor finally reports in, its operation
+changes nothing and returns `false` / `0` — it cannot flip a message another processor is working on back to
+pending, nor overwrite that processor's outcome. That, not a lock, is what keeps several processors safe.
+
+Two more operations build on the claim:
+
+- `RenewAsync(claim)` extends the lease. One claim covers a whole batch that is then dispatched message by
+  message; the processor renews a message's claim before dispatching it once half of the lease has gone, so a
+  slow batch is not re-delivered by a second instance. A short batch never pays for a renewal.
+- `ReleaseAsync(claims)` gives undispatched messages back without counting an attempt. The processor calls it
+  on shutdown, so a restart does not wait out the visibility timeout for the rest of the batch.
+
+A failed delivery is recorded with **one** claim-checked call: `IncrementAttemptAsync` while attempts
+remain, `MarkAsFailedAsync` for the attempt that exhausts them (which counts that attempt).
 
 ## At-least-once and idempotent handlers
 
