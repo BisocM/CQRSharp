@@ -1,5 +1,6 @@
 using CQRSharp.Abstractions.Interfaces.Context;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Models.Idempotency;
 using CQRSharp.Abstractions.Models.Requests;
 using CQRSharp.Pipelines.Behaviors.Resilience;
 using CQRSharp.Pipelines.Options;
@@ -65,18 +66,59 @@ public class ResilienceBehaviorTests
     {
         var behavior = CreateBehavior<RetryableRequest>();
         var calls = 0;
+        using var caller = new CancellationTokenSource();
+
+        Func<Task> act = () => behavior.Handle(
+            new RetryableRequest(),
+            ct =>
+            {
+                calls++;
+                caller.Cancel();
+                throw new OperationCanceledException(ct);
+            },
+            caller.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        calls.Should().Be(1, "cancellation is terminal and must not be retried");
+    }
+
+    [Fact(DisplayName = "A cancellation the caller did not request (e.g. an HttpClient timeout) is a transient fault and is retried")]
+    public async Task NonCallerCancellation_IsRetried()
+    {
+        var behavior = CreateBehavior<RetryableRequest>();
+        var calls = 0;
+
+        var result = await behavior.Handle(
+            new RetryableRequest(),
+            _ =>
+            {
+                calls++;
+                if (calls == 1) throw new TaskCanceledException("simulated HttpClient timeout");
+                return Task.FromResult<object>("ok");
+            },
+            CancellationToken.None);
+
+        result.Should().Be("ok");
+        calls.Should().Be(2, "the caller's token was never cancelled, so the fault is retryable");
+    }
+
+    [Fact(DisplayName = "A duplicate-request rejection is a verdict, not a fault: it is never retried")]
+    public async Task DuplicateRequest_IsNotRetried()
+    {
+        var behavior = CreateBehavior<RetryableRequest>();
+        var calls = 0;
 
         Func<Task> act = () => behavior.Handle(
             new RetryableRequest(),
             _ =>
             {
                 calls++;
-                throw new OperationCanceledException();
+                throw new DuplicateRequestException("key-1");
             },
             CancellationToken.None);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        calls.Should().Be(1, "cancellation is terminal and must not be retried");
+        await act.Should().ThrowAsync<DuplicateRequestException>();
+        calls.Should().Be(1);
     }
 
     [Fact(DisplayName = "Timeouts are never retried, even for a retryable request")]

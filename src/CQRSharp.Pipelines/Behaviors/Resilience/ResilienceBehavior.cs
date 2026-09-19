@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
+using CQRSharp.Abstractions.Models.Idempotency;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Behaviors.RateLimiting;
 using CQRSharp.Pipelines.Options;
@@ -52,10 +53,20 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
                 activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
                 throw;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Caller-initiated cancellation is terminal: never retry it (mirrors the streaming variant).
+                // Caller-initiated cancellation is terminal: never retry it (mirrors the streaming variant). Any other
+                // OperationCanceledException — an HttpClient timeout, a handler's own linked token — is the classic
+                // transient fault and falls through to the retry path below.
                 activity?.SetStatus(ActivityStatusCode.Error, "Operation canceled.");
+                throw;
+            }
+            catch (DuplicateRequestException)
+            {
+                // The idempotency behavior runs inside this one. A duplicate is a verdict, not a fault: retrying it
+                // only delays the rejection by the whole back-off schedule (and could run the work late if the original
+                // claim is released meanwhile).
+                activity?.SetStatus(ActivityStatusCode.Error, "Duplicate request.");
                 throw;
             }
             catch (TimeoutException timeoutException)

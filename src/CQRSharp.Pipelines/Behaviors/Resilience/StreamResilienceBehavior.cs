@@ -62,8 +62,9 @@ public sealed class StreamResilienceBehavior<TRequest, TItem>(
                             failure = ex;
                             break;
                         }
-                        catch (OperationCanceledException)
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                         {
+                            // Only caller cancellation is terminal; see ResilienceBehavior.
                             throw;
                         }
                         catch (Exception ex)

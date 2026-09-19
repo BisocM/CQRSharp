@@ -59,7 +59,7 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
                 {
                     moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested)
+                catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
                 {
                     logger.LogError("{RequestName} stream timed out", typeof(TRequest).Name);
                     activity?.SetStatus(ActivityStatusCode.Error, "Stream timed out.");

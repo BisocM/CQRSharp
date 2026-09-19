@@ -291,18 +291,20 @@ public class StreamPipelineBehaviorTests
     {
         var behavior = CreateResilienceBehavior<StreamRetryableRequest>();
         var attempts = 0;
+        using var caller = new CancellationTokenSource();
 
         async IAsyncEnumerable<int> Source([EnumeratorCancellation] CancellationToken ct = default)
         {
             attempts++;
             await Task.Yield();
-            throw new OperationCanceledException();
+            caller.Cancel();
+            throw new OperationCanceledException(ct);
 #pragma warning disable CS0162
             yield break;
 #pragma warning restore CS0162
         }
 
-        Func<Task> act = () => Drain(behavior.Handle(new StreamRetryableRequest(), Source, CancellationToken.None));
+        Func<Task> act = () => Drain(behavior.Handle(new StreamRetryableRequest(), Source, caller.Token));
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         attempts.Should().Be(1, "cancellation is terminal and must not be retried");

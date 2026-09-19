@@ -51,7 +51,7 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
             activity?.SetStatus(ActivityStatusCode.Ok);
             return result;
         }
-        catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested)
+        catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             logger.LogError("{CommandName} execution timed out", typeof(TRequest).Name);
             // Mark the activity as failed, indicating the timeout was exceeded.

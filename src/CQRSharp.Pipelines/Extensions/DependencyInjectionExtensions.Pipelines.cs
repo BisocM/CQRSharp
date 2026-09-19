@@ -24,8 +24,8 @@ internal static class DependencyInjectionExtensions
     /// </summary>
     internal static IServiceCollection AddExceptionHandling(this IServiceCollection services)
     {
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamExceptionHandlingBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamExceptionHandlingBehavior<,>)));
         return services;
     }
 
@@ -39,7 +39,7 @@ internal static class DependencyInjectionExtensions
     /// </remarks>
     internal static IServiceCollection AddIdempotency(this IServiceCollection services)
     {
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>)));
         return services;
     }
 
@@ -49,8 +49,8 @@ internal static class DependencyInjectionExtensions
     /// </summary>
     internal static IServiceCollection AddLoggingBehavior(this IServiceCollection services)
     {
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamLoggingBehavior<,>)));
         return services;
     }
 
@@ -70,8 +70,8 @@ internal static class DependencyInjectionExtensions
             .Validate(o => o.BaseDelay >= TimeSpan.Zero, "ResilienceOptions.BaseDelay must be non-negative.")
             .ValidateOnStart();
 
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamResilienceBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamResilienceBehavior<,>)));
 
         return services;
     }
@@ -91,8 +91,8 @@ internal static class DependencyInjectionExtensions
             .Validate(o => o.Timeout > TimeSpan.Zero, "TimeoutOptions.Timeout must be greater than zero.")
             .ValidateOnStart();
 
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamTimeoutBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamTimeoutBehavior<,>)));
 
         return services;
     }
@@ -103,8 +103,8 @@ internal static class DependencyInjectionExtensions
     /// </summary>
     internal static IServiceCollection AddValidationBehavior(this IServiceCollection services)
     {
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamValidationBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamValidationBehavior<,>)));
         return services;
     }
 
@@ -129,8 +129,8 @@ internal static class DependencyInjectionExtensions
             .ValidateOnStart();
 
         services.AddSingleton<RateLimiter>();
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamRateLimitingBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamRateLimitingBehavior<,>)));
 
         return services;
     }
@@ -163,8 +163,8 @@ internal static class DependencyInjectionExtensions
         services.AddScoped<IUnitOfWork>(implementationFactory);
 
         // Register the pipeline behavior.
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>)));
 
         return services;
     }
@@ -176,8 +176,8 @@ internal static class DependencyInjectionExtensions
     {
         services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
         services.AddScoped<IUnitOfWork>(implementationFactory);
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
-        services.AddTransient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>)));
+        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>)));
         return services;
     }
 
