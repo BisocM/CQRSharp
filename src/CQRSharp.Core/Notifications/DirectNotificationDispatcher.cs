@@ -54,11 +54,21 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
         // below is concurrency-safe and never mutates a shared/cached collection.
         var resolvedBehaviors = _services.GetServices<INotificationPipelineBehavior<TNotification>>();
         var behaviors = resolvedBehaviors as INotificationPipelineBehavior<TNotification>[] ?? resolvedBehaviors.ToArray();
+
+        // The overwhelmingly common case — no notification behaviors — goes straight to the handlers. The chain lives in
+        // its own method so that its closure is only allocated when there is a chain to run.
+        return behaviors.Length == 0
+            ? DispatchToHandlers(notification, cancellationToken)
+            : PublishThroughBehaviors(behaviors, notification, cancellationToken);
+    }
+
+    private Task PublishThroughBehaviors<TNotification>(
+        INotificationPipelineBehavior<TNotification>[] behaviors,
+        TNotification notification,
+        CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
         var behaviorCount = behaviors.Length;
-
-        if (behaviorCount == 0)
-            return DispatchToHandlers(notification, cancellationToken);
-
         if (behaviorCount > 1)
             Array.Sort(behaviors, 0, behaviorCount, BehaviorPriorityComparer<TNotification>.Instance);
 
@@ -75,55 +85,81 @@ public class DirectNotificationDispatcher : IDirectNotificationDispatcher
                 nextToken => InvokeBehavior(index + 1, nextToken),
                 ct);
         }
+    }
 
-        async Task DispatchToHandlers(TNotification n, CancellationToken ct)
+    private Task DispatchToHandlers<TNotification>(TNotification notification, CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        var resolved = _services.GetServices<INotificationHandler<TNotification>>();
+        var handlers = resolved as INotificationHandler<TNotification>[] ?? resolved.ToArray();
+
+        switch (handlers.Length)
         {
-            var resolved = _services.GetServices<INotificationHandler<TNotification>>();
-            var handlers = resolved as INotificationHandler<TNotification>[] ?? resolved.ToArray();
-            if (handlers.Length == 0) return;
-
-            // Sequential: invoke handlers one at a time, in order, stopping at the first failure.
-            if (_publishStrategy == PublishStrategy.Sequential)
-            {
-                foreach (var handler in handlers)
-                    await handler.Handle(n, ct).ConfigureAwait(false);
-                return;
-            }
-
-            // Parallel strategies: start every handler, isolating a synchronous throw so it doesn't abandon siblings
-            // that already started; capture it as a faulted task and surface it with the rest.
-            var tasks = new List<Task>(handlers.Length);
-            foreach (var handler in handlers)
+            case 0:
+                return Task.CompletedTask;
+            case 1:
+                // One handler: every strategy reduces to "await it", so return its task rather than wrap it in a state
+                // machine. A throw before its first await still surfaces through the task, as it does for several.
                 try
                 {
-                    tasks.Add(handler.Handle(n, ct));
+                    return handlers[0].Handle(notification, cancellationToken) ?? Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
-                    tasks.Add(Task.FromException(ex));
+                    return Task.FromException(ex);
                 }
+            default:
+                return DispatchToManyAsync(handlers, notification, cancellationToken);
+        }
+    }
 
-            var whenAll = Task.WhenAll(tasks);
+    private async Task DispatchToManyAsync<TNotification>(
+        INotificationHandler<TNotification>[] handlers,
+        TNotification n,
+        CancellationToken ct)
+        where TNotification : INotification
+    {
+        // Sequential: invoke handlers one at a time, in order, stopping at the first failure.
+        if (_publishStrategy == PublishStrategy.Sequential)
+        {
+            foreach (var handler in handlers)
+                await handler.Handle(n, ct).ConfigureAwait(false);
+            return;
+        }
 
-            // Parallel: the first failure surfaces (await's default; siblings are observed via the WhenAll task).
-            if (_publishStrategy == PublishStrategy.Parallel)
-            {
-                await whenAll.ConfigureAwait(false);
-                return;
-            }
-
-            // ParallelWhenAllAggregate (default): surface every failure, since await rethrows only the first.
+        // Parallel strategies: start every handler, isolating a synchronous throw so it doesn't abandon siblings
+        // that already started; capture it as a faulted task and surface it with the rest.
+        var tasks = new List<Task>(handlers.Length);
+        foreach (var handler in handlers)
             try
             {
-                await whenAll.ConfigureAwait(false);
+                tasks.Add(handler.Handle(n, ct));
             }
-            catch
+            catch (Exception ex)
             {
-                var failures = whenAll.Exception?.InnerExceptions;
-                if (failures is { Count: > 1 })
-                    ExceptionDispatchInfo.Capture(new AggregateException(failures)).Throw();
-                throw;
+                tasks.Add(Task.FromException(ex));
             }
+
+        var whenAll = Task.WhenAll(tasks);
+
+        // Parallel: the first failure surfaces (await's default; siblings are observed via the WhenAll task).
+        if (_publishStrategy == PublishStrategy.Parallel)
+        {
+            await whenAll.ConfigureAwait(false);
+            return;
+        }
+
+        // ParallelWhenAllAggregate (default): surface every failure, since await rethrows only the first.
+        try
+        {
+            await whenAll.ConfigureAwait(false);
+        }
+        catch
+        {
+            var failures = whenAll.Exception?.InnerExceptions;
+            if (failures is { Count: > 1 })
+                ExceptionDispatchInfo.Capture(new AggregateException(failures)).Throw();
+            throw;
         }
     }
 

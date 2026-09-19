@@ -37,6 +37,12 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     }
 
     /// <summary>
+    ///     Whether an in-process publish ends in the built-in handler/behavior resolution. Only then can "no handler and
+    ///     no notification behavior is registered" be taken to mean a publish has no observer at all.
+    /// </summary>
+    internal bool DispatchesThroughBuiltInPipeline => _directDispatcher is DirectNotificationDispatcher;
+
+    /// <summary>
     ///     Publishes a notification.
     ///     Depending on the configured <see cref="OutboxMode" />, the notification will either be
     ///     dispatched immediately to its handlers or routed to the outbox for deferred, durable delivery. Inside a

@@ -112,6 +112,40 @@ public sealed partial class CqrsSourceGenerator
         }
     }
 
+    // The hot-path invoker for commands and queries: a static lambda that returns the handler's own Task<TResult>, so a
+    // dispatch neither boxes the result nor pays for the extra async state machine the object-returning invoker needs.
+    // The executor casts it back to Func<object, TRequest, CancellationToken, Task<TResult>> with the same TResult the
+    // generated dispatcher closes ExecuteCommandAsync/ExecuteQueryAsync over.
+    private static void GenerateTypedHandlerRegistry(
+        StringBuilder sb,
+        Dictionary<string, List<HandlerImplModel>> handlerBindingsByRequest,
+        KnownSnapshot known)
+    {
+        sb.AppendLine();
+        sb.AppendLine("            var typedInvokerMappings = new Dictionary<Type, Delegate>();");
+        // The delegate is closed over the un-annotated result type (nullability is erased at runtime, and that is the
+        // type the executor casts to); a handler declared over 'User?' would otherwise warn on the conversion.
+        sb.AppendLine("#pragma warning disable CS8619, CS8620");
+
+        foreach (var kvp in handlerBindingsByRequest.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var bindings = kvp.Value;
+            if (bindings.Count == 0) continue;
+            var selected = SelectDeterministicBinding(bindings);
+            if (selected.Kind == HandlerKind.Stream) continue;
+
+            var resultType = selected.Kind == HandlerKind.Command ? known.CommandResultTypeName : selected.ResultTypeName;
+            if (string.IsNullOrEmpty(resultType)) continue;
+
+            var requestType = selected.RequestTypeName;
+            sb.AppendLine(
+                $"            typedInvokerMappings[typeof({requestType})] = new Func<object, {requestType}, global::System.Threading.CancellationToken, global::System.Threading.Tasks.Task<{resultType}>>(" +
+                $"static (handler, request, ct) => (({selected.InterfaceNameNullable})handler).Handle(request, ct));");
+        }
+
+        sb.AppendLine("#pragma warning restore CS8619, CS8620");
+    }
+
     private static void GenerateContextFactoryRegistry(StringBuilder sb, ImmutableArray<CandidateModel> candidates, KnownSnapshot known)
     {
         sb.AppendLine();

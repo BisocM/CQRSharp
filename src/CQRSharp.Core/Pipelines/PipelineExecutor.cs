@@ -30,33 +30,68 @@ namespace CQRSharp.Core.Pipelines;
 ///     <c>PipelineExecutor.Streaming.cs</c> the streaming equivalents; <c>PipelineExecutor.Interceptors.cs</c> the
 ///     pre/post-handler attributes; and <c>PipelineExecutor.Ordering.cs</c> the priority comparers.
 /// </remarks>
-/// <param name="serviceProvider">The current DI scope service provider.</param>
-/// <param name="requestRegistry">The registry for request metadata.</param>
-/// <param name="handlerRegistry">The registry for compiled handler invokers.</param>
-/// <param name="contextFactoryRegistry">The registry for request context factories.</param>
-/// <param name="dispatcherOptions">Configuration options controlling sync vs queued execution.</param>
-/// <param name="backgroundTaskManager">Background task queue used for queued execution.</param>
-public sealed partial class PipelineExecutor(
-    IServiceProvider serviceProvider,
-    IRequestRegistry requestRegistry,
-    IHandlerRegistry handlerRegistry,
-    IContextFactoryRegistry contextFactoryRegistry,
-    IOptions<DispatcherOptions> dispatcherOptions,
-    IBackgroundTaskManager backgroundTaskManager) : IPipelineExecutor
+public sealed partial class PipelineExecutor : IPipelineExecutor
 {
     private const string CommandActivityName = "CQRS Command";
     private const string QueryActivityName = "CQRS Query";
     private const string StreamActivityName = "CQRS Stream";
 
-    private readonly IBackgroundTaskManager _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
-    private readonly IOptions<DispatcherOptions> _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
-    private readonly IServiceScopeFactory _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+    private readonly IBackgroundTaskManager _backgroundTaskManager;
+    private readonly IOptions<DispatcherOptions> _dispatcherOptions;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _services;
+    private readonly IRequestRegistry _requestRegistry;
+    private readonly IHandlerRegistry _handlerRegistry;
+    private readonly IContextFactoryRegistry _contextFactoryRegistry;
 
-    private readonly IServiceProvider _services = serviceProvider;
+    // The per-provider plan cache (a singleton). An executor built by hand without it — unit tests — gets a private one.
+    private readonly RequestPlanCache _plans;
 
     // Resolved once: with the outbox disabled (the default) the request path never touches the outbox services.
-    private readonly bool _outboxEnabled =
-        serviceProvider.GetService<IOptions<OutboxOptions>>()?.Value.Mode is OutboxMode.Enabled or OutboxMode.Transactional;
+    private readonly bool _outboxEnabled;
+
+    /// <summary>Creates an executor over explicitly supplied registries.</summary>
+    public PipelineExecutor(
+        IServiceProvider serviceProvider,
+        IRequestRegistry requestRegistry,
+        IHandlerRegistry handlerRegistry,
+        IContextFactoryRegistry contextFactoryRegistry,
+        IOptions<DispatcherOptions> dispatcherOptions,
+        IBackgroundTaskManager backgroundTaskManager)
+    {
+        _services = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _backgroundTaskManager = backgroundTaskManager ?? throw new ArgumentNullException(nameof(backgroundTaskManager));
+        _dispatcherOptions = dispatcherOptions ?? throw new ArgumentNullException(nameof(dispatcherOptions));
+        _requestRegistry = requestRegistry;
+        _handlerRegistry = handlerRegistry;
+        _contextFactoryRegistry = contextFactoryRegistry;
+        _scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        _plans = serviceProvider.GetService<RequestPlanCache>()
+                 ?? new RequestPlanCache(serviceProvider, requestRegistry, handlerRegistry, contextFactoryRegistry);
+        _outboxEnabled = IsOutboxEnabled(serviceProvider.GetService<IOptions<OutboxOptions>>());
+    }
+
+    // The DI path: an executor is created per scope (per web request), so everything that is the same for every scope
+    // arrives pre-resolved in one singleton instead of being looked up again each time.
+    internal PipelineExecutor(IServiceProvider serviceProvider, PipelineExecutorShared shared)
+    {
+        _services = serviceProvider;
+        _backgroundTaskManager = shared.BackgroundTaskManager;
+        _dispatcherOptions = shared.DispatcherOptions;
+        _requestRegistry = shared.RequestRegistry;
+        _handlerRegistry = shared.HandlerRegistry;
+        _contextFactoryRegistry = shared.ContextFactoryRegistry;
+        _scopeFactory = shared.ScopeFactory;
+        _plans = shared.Plans;
+        _outboxEnabled = shared.OutboxEnabled;
+        Shared = shared;
+    }
+
+    /// <summary>The provider-wide singleton this executor was built from; <c>null</c> for a hand-constructed executor.</summary>
+    internal PipelineExecutorShared? Shared { get; }
+
+    internal static bool IsOutboxEnabled(IOptions<OutboxOptions>? options)
+        => options?.Value.Mode is OutboxMode.Enabled or OutboxMode.Transactional;
 
     /// <summary>
     ///     Executes a query. When <see cref="RunMode.Queued" /> is configured the work is handed to the background
@@ -176,14 +211,55 @@ public sealed partial class PipelineExecutor(
         return await ExecuteInProviderAsync<TRequest, TResult>(activityName, request, scope.ServiceProvider, ct).ConfigureAwait(false);
     }
 
-    private async Task<TResult> ExecuteInProviderAsync<TRequest, TResult>(
+    private Task<TResult> ExecuteInProviderAsync<TRequest, TResult>(
         string activityName,
         TRequest request,
         IServiceProvider provider,
         CancellationToken ct)
         where TRequest : IRequest
     {
-        using var activity = CqrsActivitySource.StartRequest(activityName, typeof(TRequest));
+        var activity = CqrsActivitySource.StartRequest(activityName, typeof(TRequest));
+
+        // Untraced with the outbox off (the defaults) there is nothing to settle when the request ends, so nothing needs
+        // to wrap the pipeline: hand back its task directly. Only an asynchronously hydrated context needs an await.
+        if (activity is null && !_outboxEnabled)
+            try
+            {
+                var plan = _plans.Get<TRequest, TResult>();
+                var contextReady = InitializeRequestContext(plan, request, provider, ct);
+                return contextReady.IsCompletedSuccessfully
+                    ? ExecutePipelineAsync(plan, request, provider.GetRequiredService(plan.HandlerType), provider, ct)
+                    : AwaitContextThenExecuteAsync(plan, contextReady, request, provider, ct);
+            }
+            catch (Exception ex)
+            {
+                return Task.FromException<TResult>(ex);
+            }
+
+        return ExecuteSettledAsync<TRequest, TResult>(activity, request, provider, ct);
+    }
+
+    private async Task<TResult> AwaitContextThenExecuteAsync<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        ValueTask contextReady,
+        TRequest request,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : IRequest
+    {
+        await contextReady.ConfigureAwait(false);
+        return await ExecutePipelineAsync(plan, request, provider.GetRequiredService(plan.HandlerType), provider, ct).ConfigureAwait(false);
+    }
+
+    // The traced and/or outbox-owning path: the activity status and the outbox buffer are settled when the request ends.
+    private async Task<TResult> ExecuteSettledAsync<TRequest, TResult>(
+        Activity? startedActivity,
+        TRequest request,
+        IServiceProvider provider,
+        CancellationToken ct)
+        where TRequest : IRequest
+    {
+        using var activity = startedActivity;
 
         // The request owns the scoped outbox for its duration: whatever a unit-of-work behavior does not drain is
         // persisted on success and discarded on failure, so a buffered notification is never silently dropped.
@@ -191,9 +267,10 @@ public sealed partial class PipelineExecutor(
         var outboxSettled = false;
         try
         {
-            await InitializeRequestContextAsync(request, provider, ct).ConfigureAwait(false);
-            var handler = GetHandler(typeof(TRequest), provider);
-            var result = await ExecutePipelineAsync<TRequest, TResult>(request, handler, provider, ct).ConfigureAwait(false);
+            var plan = _plans.Get<TRequest, TResult>();
+            await InitializeRequestContext(plan, request, provider, ct).ConfigureAwait(false);
+            var handler = provider.GetRequiredService(plan.HandlerType);
+            var result = await ExecutePipelineAsync(plan, request, handler, provider, ct).ConfigureAwait(false);
 
             outboxSettled = true;
             if (outboxScope is { } completedScope)
@@ -225,12 +302,52 @@ public sealed partial class PipelineExecutor(
     private object GetHandler(Type requestType, IServiceProvider scopedProvider)
     {
         // Find the handler type from the source-generated registry.
-        var handlerType = requestRegistry.TryGetHandlerType(requestType)
+        var handlerType = _requestRegistry.TryGetHandlerType(requestType)
                           ?? throw new InvalidOperationException($"Handler for '{requestType.Name}' not found.");
 
         // Resolve the handler instance from the current scope.
         return scopedProvider.GetRequiredService(handlerType)
                ?? throw new InvalidOperationException($"Handler instance '{handlerType.Name}' not available.");
+    }
+
+    // Command/query variant of the context initialization below, driven by the cached plan: no registry lookups, and the
+    // built-in default context is constructed directly rather than through a transient factory resolved from DI.
+    private static ValueTask InitializeRequestContext<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        TRequest request,
+        IServiceProvider services,
+        CancellationToken cancellationToken)
+        where TRequest : IRequest
+    {
+        request.Metadata = plan.Metadata;
+
+        // If the context is already set (e.g., manually by the caller), do nothing.
+        if (request.Context is not null) return default;
+
+        if (plan.UsesDefaultContextFactory)
+        {
+            request.Context = new RequestContextBase();
+            return default;
+        }
+
+        if (plan.ContextFactoryResolver?.Invoke(services) is not IInternalRequestContextFactory contextFactory)
+            throw new InvalidOperationException(
+                $"No IRequestContextFactory<{plan.ContextType.Name}> is registered for context type '{plan.ContextType.FullName}'. " +
+                "Register one in DI, or use the default context (CommandBase/QueryBase without a custom context type).");
+
+        var pending = contextFactory.CreateContextAsync(request, cancellationToken);
+        if (pending.IsCompletedSuccessfully)
+        {
+            request.Context = pending.Result;
+            return default;
+        }
+
+        return new ValueTask(AssignWhenCreated(pending, request));
+
+        static async Task AssignWhenCreated(ValueTask<IRequestContext> creating, TRequest target)
+        {
+            target.Context = await creating.ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -244,7 +361,7 @@ public sealed partial class PipelineExecutor(
     private async ValueTask InitializeRequestContextAsync(IRequest requestBase, IServiceProvider services, CancellationToken cancellationToken)
     {
         // Retrieve and assign source-generated metadata to the request object.
-        if (!requestRegistry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata == null)
+        if (!_requestRegistry.TryGetRequestMetadata(requestBase.GetType(), out var metadata) || metadata == null)
             throw new InvalidOperationException($"No metadata for request '{requestBase.GetType().Name}'.");
 
         requestBase.Metadata = metadata;
@@ -256,7 +373,7 @@ public sealed partial class PipelineExecutor(
         var contextType = metadata.ContextType ?? typeof(RequestContextBase);
 
         // Find the appropriate factory for creating an instance of the context.
-        var factoryObj = contextFactoryRegistry.TryGetFactory(contextType, services);
+        var factoryObj = _contextFactoryRegistry.TryGetFactory(contextType, services);
 
         if (factoryObj is not IInternalRequestContextFactory contextFactory)
             throw new InvalidOperationException(

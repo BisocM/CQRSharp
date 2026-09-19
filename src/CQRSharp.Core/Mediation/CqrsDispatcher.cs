@@ -3,6 +3,7 @@ using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Mediation;
 
@@ -11,9 +12,30 @@ namespace CQRSharp.Core.Mediation;
 /// </summary>
 public sealed class CqrsDispatcher : ICqrsDispatcher
 {
-    private readonly INotificationDispatcher _notificationDispatcher;
-    private readonly IRequestDispatcher _requestDispatcher;
-    private readonly IStreamRequestDispatcher _streamRequestDispatcher;
+    // Resolved on first use when created from a provider: a scope that only ever sends a command should not also pay to
+    // build the streaming and notification dispatchers (and everything they depend on).
+    private readonly IServiceProvider? _services;
+    private INotificationDispatcher? _notificationDispatcher;
+    private IRequestDispatcher? _requestDispatcher;
+    private IStreamRequestDispatcher? _streamRequestDispatcher;
+
+    /// <summary>
+    ///     Creates the façade over a DI scope; each underlying dispatcher is resolved from it the first time it is needed.
+    /// </summary>
+    /// <param name="services">The current scope's service provider.</param>
+    public CqrsDispatcher(IServiceProvider services)
+    {
+        _services = services ?? throw new ArgumentNullException(nameof(services));
+    }
+
+    private IRequestDispatcher Requests
+        => _requestDispatcher ??= _services!.GetRequiredService<IRequestDispatcher>();
+
+    private IStreamRequestDispatcher Streams
+        => _streamRequestDispatcher ??= _services!.GetRequiredService<IStreamRequestDispatcher>();
+
+    private INotificationDispatcher Notifications
+        => _notificationDispatcher ??= _services!.GetRequiredService<INotificationDispatcher>();
 
     /// <summary>
     ///     Initializes a new <see cref="CqrsDispatcher" /> that forwards requests, streams, and notifications
@@ -40,7 +62,7 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         if (request is IStreamRequest)
             throw new InvalidOperationException("Stream requests must be executed via Stream(...) instead of Send(...).");
 
-        return _requestDispatcher.ExecuteAsync(request, cancellationToken);
+        return Requests.ExecuteAsync(request, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -54,14 +76,14 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         if (typedRequest is IStreamRequest)
             throw new InvalidOperationException("Stream requests must be executed via Stream(...) instead of Send(...).");
 
-        return _requestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
+        return Requests.ExecuteAsync(typedRequest, cancellationToken);
     }
 
     /// <inheritdoc />
     public IAsyncEnumerable<TItem> Stream<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return _streamRequestDispatcher.ExecuteAsync(request, cancellationToken);
+        return Streams.ExecuteAsync(request, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -72,7 +94,7 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         if (request is not IStreamRequest typedRequest)
             throw new ArgumentException($"Request must implement {nameof(IStreamRequest)}.", nameof(request));
 
-        return _streamRequestDispatcher.ExecuteAsync(typedRequest, cancellationToken);
+        return Streams.ExecuteAsync(typedRequest, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -80,6 +102,6 @@ public sealed class CqrsDispatcher : ICqrsDispatcher
         where TNotification : INotification
     {
         ArgumentNullException.ThrowIfNull(notification);
-        return _notificationDispatcher.Publish(notification, cancellationToken);
+        return Notifications.Publish(notification, cancellationToken);
     }
 }

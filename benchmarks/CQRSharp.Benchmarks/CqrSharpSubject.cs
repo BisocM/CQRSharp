@@ -31,7 +31,7 @@ public sealed class PassThroughBehavior<TRequest, TResult> : IPipelineBehavior<T
 
 public static class CqrSharpSubject
 {
-    public static ICqrsDispatcher Create(bool withBehavior)
+    public static ServiceProvider CreateProvider(bool withBehavior)
     {
         var services = new ServiceCollection();
         services.AddCqrsGenerated();
@@ -39,6 +39,9 @@ public static class CqrSharpSubject
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(PassThroughBehavior<,>));
 
         // Every subject dispatches from one long-lived scope, mirroring a request scope in a real host.
-        return services.BuildServiceProvider().CreateScope().ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+        return services.BuildServiceProvider();
     }
+
+    public static ICqrsDispatcher Create(bool withBehavior)
+        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<ICqrsDispatcher>();
 }

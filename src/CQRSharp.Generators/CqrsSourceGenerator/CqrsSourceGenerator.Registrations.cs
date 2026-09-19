@@ -109,6 +109,7 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata> __requestMetadata = __BuildRequestMetadata();");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, HandlerInvokerDelegate> __handlerInvokers = __BuildHandlerInvokers();");
+        sb.AppendLine("        private static readonly Dictionary<Type, Delegate> __typedHandlerInvokers = __BuildTypedHandlerInvokers();");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, object?>> __contextFactories = __BuildContextFactories();");
         sb.AppendLine("        private static readonly ConcurrentDictionary<Type, global::CQRSharp.Core.Exceptions.RequestExceptionHookInvoker> __exceptionHooks = __BuildExceptionHooks();");
         EmitTypeArray(sb, "__requestTypes", requestTypes);
@@ -121,6 +122,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        public IReadOnlyDictionary<Type, global::CQRSharp.Abstractions.Models.Requests.RequestMetadata> RequestMetadata => __requestMetadata;");
         sb.AppendLine("        /// <inheritdoc />");
         sb.AppendLine("        public IReadOnlyDictionary<Type, HandlerInvokerDelegate> HandlerInvokers => __handlerInvokers;");
+        sb.AppendLine("        /// <inheritdoc />");
+        sb.AppendLine("        public IReadOnlyDictionary<Type, Delegate> TypedHandlerInvokers => __typedHandlerInvokers;");
+        sb.AppendLine("        /// <inheritdoc />");
+        sb.AppendLine("        public IReadOnlyDictionary<Type, RequestRoute> RequestRoutes => GeneratedRequestDispatcher.Routes;");
+        sb.AppendLine("        /// <inheritdoc />");
+        sb.AppendLine("        public IReadOnlyDictionary<Type, UntypedRequestRoute> UntypedRequestRoutes => GeneratedRequestDispatcher.UntypedRoutes;");
         sb.AppendLine("        /// <inheritdoc />");
         sb.AppendLine("        public IReadOnlyDictionary<Type, Func<IServiceProvider, object?>> ContextFactories => __contextFactories;");
         sb.AppendLine("        /// <inheritdoc />");
@@ -160,6 +167,12 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        {");
         GenerateHandlerRegistry(sb, handlerBindingsByRequest);
         sb.AppendLine("            return handlerInvokerMappings;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        private static Dictionary<Type, Delegate> __BuildTypedHandlerInvokers()");
+        sb.AppendLine("        {");
+        GenerateTypedHandlerRegistry(sb, handlerBindingsByRequest, known);
+        sb.AppendLine("            return typedInvokerMappings;");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        private static ConcurrentDictionary<Type, Func<IServiceProvider, object?>> __BuildContextFactories()");

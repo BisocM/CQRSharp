@@ -15,4 +15,11 @@ public interface IContextFactoryRegistry
     ///     An instance of the corresponding context factory if one is registered; otherwise, null.
     /// </returns>
     object? TryGetFactory(Type contextType, IServiceProvider serviceProvider);
+
+    /// <summary>
+    ///     Returns the resolver for <paramref name="contextType" /> so a caller can look it up once and reuse it, instead
+    ///     of paying a registry lookup on every request. <c>null</c> when no factory is registered for the type.
+    /// </summary>
+    Func<IServiceProvider, object?>? TryGetResolver(Type contextType)
+        => serviceProvider => TryGetFactory(contextType, serviceProvider);
 }

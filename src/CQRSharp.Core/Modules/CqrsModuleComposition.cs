@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 using CQRSharp.Abstractions.Interfaces.Notifications;
@@ -43,7 +44,9 @@ public static class CqrsModuleComposition
 
         services.RemoveAll<IHandlerRegistry>();
         services.AddSingleton<IHandlerRegistry>(sp =>
-            new HandlerRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers)));
+            new HandlerRegistry(
+                Merge(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers),
+                Merge(sp.GetServices<ICqrsModule>(), m => m.TypedHandlerInvokers)));
 
         services.RemoveAll<IContextFactoryRegistry>();
         services.AddSingleton<IContextFactoryRegistry>(sp =>
@@ -53,18 +56,28 @@ public static class CqrsModuleComposition
         services.AddSingleton<IRequestExceptionHookRegistry>(sp =>
             new RequestExceptionHookRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.ExceptionHooks)));
 
-        // Dispatchers: scoped composites that route by runtime type to the owning module's generated dispatcher.
+        // Dispatchers carry the resolving scope's executor/provider (transient: the scoped ICqrsDispatcher façade keeps
+        // the one it resolves), but the routing itself is a singleton table
+        // built once from the modules. Creating a DI scope — every HTTP request — must not rebuild a dictionary of every
+        // request type in the application.
+        services.RemoveAll<ModuleRouteTable>();
+        services.AddSingleton(sp => new ModuleRouteTable(sp.GetServices<ICqrsModule>()));
+
         services.RemoveAll<IRequestDispatcher>();
-        services.AddScoped<IRequestDispatcher>(sp =>
-            new CompositeRequestDispatcher(sp.GetServices<ICqrsModule>(), sp.GetRequiredService<IPipelineExecutor>()));
+        services.AddTransient<IRequestDispatcher>(sp =>
+        {
+            var executor = sp.GetRequiredService<IPipelineExecutor>();
+            var table = (executor as PipelineExecutor)?.Shared?.RouteTable ?? sp.GetRequiredService<ModuleRouteTable>();
+            return new CompositeRequestDispatcher(table, executor);
+        });
 
         services.RemoveAll<IStreamRequestDispatcher>();
-        services.AddScoped<IStreamRequestDispatcher>(sp =>
-            new CompositeStreamRequestDispatcher(sp.GetServices<ICqrsModule>(), sp.GetRequiredService<IPipelineExecutor>()));
+        services.AddTransient<IStreamRequestDispatcher>(sp =>
+            new CompositeStreamRequestDispatcher(sp.GetRequiredService<ModuleRouteTable>(), sp.GetRequiredService<IPipelineExecutor>()));
 
         services.RemoveAll<IDirectNotificationDispatcher>();
         services.AddScoped<IDirectNotificationDispatcher>(sp =>
-            new CompositeDirectNotificationDispatcher(sp.GetServices<ICqrsModule>(), sp));
+            new CompositeDirectNotificationDispatcher(sp.GetRequiredService<ModuleRouteTable>(), sp));
 
         // Notification surface + diagnostics built from the merged modules.
         services.RemoveAll<ICqrsNotificationRegistry>();
@@ -103,60 +116,98 @@ public static class CqrsModuleComposition
 }
 
 /// <summary>
-///     Routes a request to the owning module's source-generated dispatcher by runtime type. Built once per scope from
-///     every registered module; the per-module dispatchers carry the AOT-safe typed switch.
+///     The application's routing, built once per provider from every registered module: request type to generated route,
+///     and — for the surfaces that are still dispatched per module — request/notification type to owning module.
 /// </summary>
-internal sealed class CompositeRequestDispatcher : IRequestDispatcher
+internal sealed class ModuleRouteTable
 {
-    private readonly Dictionary<Type, IRequestDispatcher> _byRequestType = new();
-
-    public CompositeRequestDispatcher(IEnumerable<ICqrsModule> modules, IPipelineExecutor pipelineExecutor)
+    public ModuleRouteTable(IEnumerable<ICqrsModule> modules)
     {
+        var routes = new Dictionary<Type, RequestRoute>();
+        var untypedRoutes = new Dictionary<Type, UntypedRequestRoute>();
+        var requestModules = new Dictionary<Type, ICqrsModule>();
+        var streamModules = new Dictionary<Type, ICqrsModule>();
+        var notificationModules = new Dictionary<Type, ICqrsModule>();
+
+        // Last module wins, matching the pre-5.0 composite dispatchers.
         foreach (var module in modules)
         {
-            if (module.RequestTypes.Count == 0) continue;
-            var dispatcher = module.CreateRequestDispatcher(pipelineExecutor);
-            foreach (var requestType in module.RequestTypes)
-                _byRequestType[requestType] = dispatcher;
+            foreach (var requestType in module.RequestTypes) requestModules[requestType] = module;
+            foreach (var route in module.RequestRoutes) routes[route.Key] = route.Value;
+            foreach (var route in module.UntypedRequestRoutes) untypedRoutes[route.Key] = route.Value;
+            foreach (var streamType in module.StreamRequestTypes) streamModules[streamType] = module;
+            foreach (var notificationType in module.HandledNotificationTypes) notificationModules[notificationType] = module;
         }
+
+        // A request whose winning module offers no route must not be served by another module's route.
+        foreach (var owner in requestModules)
+        {
+            if (!owner.Value.RequestRoutes.ContainsKey(owner.Key)) routes.Remove(owner.Key);
+            if (!owner.Value.UntypedRequestRoutes.ContainsKey(owner.Key)) untypedRoutes.Remove(owner.Key);
+        }
+
+        Routes = routes.ToFrozenDictionary();
+        UntypedRoutes = untypedRoutes.ToFrozenDictionary();
+        RequestModules = requestModules.ToFrozenDictionary();
+        StreamModules = streamModules.ToFrozenDictionary();
+        NotificationModules = notificationModules.ToFrozenDictionary();
     }
+
+    public FrozenDictionary<Type, RequestRoute> Routes { get; }
+    public FrozenDictionary<Type, UntypedRequestRoute> UntypedRoutes { get; }
+    public FrozenDictionary<Type, ICqrsModule> RequestModules { get; }
+    public FrozenDictionary<Type, ICqrsModule> StreamModules { get; }
+    public FrozenDictionary<Type, ICqrsModule> NotificationModules { get; }
+}
+
+/// <summary>
+///     Dispatches a request through its source-generated route: one lookup by exact runtime type in the provider-wide
+///     <see cref="ModuleRouteTable" />, then a direct call into the executor. Constructing one per scope costs nothing.
+/// </summary>
+internal sealed class CompositeRequestDispatcher(ModuleRouteTable table, IPipelineExecutor pipelineExecutor) : IRequestDispatcher
+{
+    // Only for modules that expose no routes: their own dispatcher, created on first use in this scope.
+    private Dictionary<ICqrsModule, IRequestDispatcher>? _moduleDispatchers;
 
     public Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return Resolve(request.GetType()).ExecuteAsync(request, cancellationToken);
+
+        return table.Routes.TryGetValue(request.GetType(), out var route)
+            ? (Task<TResponse>)route(pipelineExecutor, request, cancellationToken)
+            : ResolveModuleDispatcher(request.GetType()).ExecuteAsync(request, cancellationToken);
     }
 
     public Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return Resolve(request.GetType()).ExecuteAsync(request, cancellationToken);
+
+        return table.UntypedRoutes.TryGetValue(request.GetType(), out var route)
+            ? route(pipelineExecutor, request, cancellationToken)
+            : ResolveModuleDispatcher(request.GetType()).ExecuteAsync(request, cancellationToken);
     }
 
-    private IRequestDispatcher Resolve(Type requestType)
-        => _byRequestType.TryGetValue(requestType, out var dispatcher)
-            ? dispatcher
-            : throw new InvalidOperationException(
+    private IRequestDispatcher ResolveModuleDispatcher(Type requestType)
+    {
+        if (!table.RequestModules.TryGetValue(requestType, out var module))
+            throw new InvalidOperationException(
                 $"No handler or pipeline found for request type '{requestType.FullName}'. Ensure it's public or internal, has a corresponding handler, and its assembly's CQRSharp module is registered.");
+
+        _moduleDispatchers ??= new Dictionary<ICqrsModule, IRequestDispatcher>();
+        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
+            _moduleDispatchers[module] = dispatcher = module.CreateRequestDispatcher(pipelineExecutor);
+
+        return dispatcher;
+    }
 }
 
 /// <summary>
-///     Routes a streaming request to the owning module's source-generated stream dispatcher by runtime type.
+///     Routes a streaming request to the owning module's source-generated stream dispatcher by runtime type. The
+///     per-module dispatcher is created on first use in a scope, not eagerly for every module.
 /// </summary>
-internal sealed class CompositeStreamRequestDispatcher : IStreamRequestDispatcher
+internal sealed class CompositeStreamRequestDispatcher(ModuleRouteTable table, IPipelineExecutor pipelineExecutor) : IStreamRequestDispatcher
 {
-    private readonly Dictionary<Type, IStreamRequestDispatcher> _byRequestType = new();
-
-    public CompositeStreamRequestDispatcher(IEnumerable<ICqrsModule> modules, IPipelineExecutor pipelineExecutor)
-    {
-        foreach (var module in modules)
-        {
-            if (module.StreamRequestTypes.Count == 0) continue;
-            var dispatcher = module.CreateStreamDispatcher(pipelineExecutor);
-            foreach (var requestType in module.StreamRequestTypes)
-                _byRequestType[requestType] = dispatcher;
-        }
-    }
+    private Dictionary<ICqrsModule, IStreamRequestDispatcher>? _moduleDispatchers;
 
     public IAsyncEnumerable<TItem> ExecuteAsync<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)
     {
@@ -171,10 +222,17 @@ internal sealed class CompositeStreamRequestDispatcher : IStreamRequestDispatche
     }
 
     private IStreamRequestDispatcher Resolve(Type requestType)
-        => _byRequestType.TryGetValue(requestType, out var dispatcher)
-            ? dispatcher
-            : throw new InvalidOperationException(
+    {
+        if (!table.StreamModules.TryGetValue(requestType, out var module))
+            throw new InvalidOperationException(
                 $"No stream handler or pipeline found for request type '{requestType.FullName}'. Ensure it's public or internal, has a corresponding handler, and its assembly's CQRSharp module is registered.");
+
+        _moduleDispatchers ??= new Dictionary<ICqrsModule, IStreamRequestDispatcher>();
+        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
+            _moduleDispatchers[module] = dispatcher = module.CreateStreamDispatcher(pipelineExecutor);
+
+        return dispatcher;
+    }
 }
 
 /// <summary>
@@ -182,28 +240,23 @@ internal sealed class CompositeStreamRequestDispatcher : IStreamRequestDispatche
 ///     <c>Publish&lt;T&gt;</c> path is inherited from <see cref="DirectNotificationDispatcher" /> and already spans
 ///     assemblies via DI handler resolution, so only the runtime-typed bridge needs per-module routing.
 /// </summary>
-internal sealed class CompositeDirectNotificationDispatcher : DirectNotificationDispatcher
+internal sealed class CompositeDirectNotificationDispatcher(ModuleRouteTable table, IServiceProvider services)
+    : DirectNotificationDispatcher(services)
 {
-    private readonly Dictionary<Type, IDirectNotificationDispatcher> _byNotificationType = new();
-
-    public CompositeDirectNotificationDispatcher(IEnumerable<ICqrsModule> modules, IServiceProvider services)
-        : base(services)
-    {
-        foreach (var module in modules)
-        {
-            if (module.HandledNotificationTypes.Count == 0) continue;
-            var dispatcher = module.CreateNotificationDispatcher(services);
-            foreach (var notificationType in module.HandledNotificationTypes)
-                _byNotificationType[notificationType] = dispatcher;
-        }
-    }
+    private readonly IServiceProvider _scope = services;
+    private Dictionary<ICqrsModule, IDirectNotificationDispatcher>? _moduleDispatchers;
 
     public override Task Publish(INotification notification, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(notification);
-        return _byNotificationType.TryGetValue(notification.GetType(), out var dispatcher)
-            ? dispatcher.Publish(notification, cancellationToken)
-            : Task.CompletedTask;
+        if (!table.NotificationModules.TryGetValue(notification.GetType(), out var module))
+            return Task.CompletedTask;
+
+        _moduleDispatchers ??= new Dictionary<ICqrsModule, IDirectNotificationDispatcher>();
+        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
+            _moduleDispatchers[module] = dispatcher = module.CreateNotificationDispatcher(_scope);
+
+        return dispatcher.Publish(notification, cancellationToken);
     }
 }
 

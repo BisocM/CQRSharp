@@ -25,13 +25,16 @@ public sealed class PassThroughBehavior<TMessage, TResponse> : IPipelineBehavior
 
 public static class MediatorSubject
 {
-    public static IMediator Create(bool withBehavior)
+    public static ServiceProvider CreateProvider(bool withBehavior)
     {
         var services = new ServiceCollection();
         services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
         if (withBehavior)
             services.AddScoped(typeof(IPipelineBehavior<,>), typeof(PassThroughBehavior<,>));
 
-        return services.BuildServiceProvider().CreateScope().ServiceProvider.GetRequiredService<IMediator>();
+        return services.BuildServiceProvider();
     }
+
+    public static IMediator Create(bool withBehavior)
+        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<IMediator>();
 }

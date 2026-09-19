@@ -25,7 +25,7 @@ public sealed class PassThroughBehavior<TRequest, TResponse> : IPipelineBehavior
 
 public static class MediatRSubject
 {
-    public static IMediator Create(bool withBehavior)
+    public static ServiceProvider CreateProvider(bool withBehavior)
     {
         var services = new ServiceCollection();
         services.AddMediatR(cfg =>
@@ -35,6 +35,9 @@ public static class MediatRSubject
             if (withBehavior) cfg.AddOpenBehavior(typeof(PassThroughBehavior<,>));
         });
 
-        return services.BuildServiceProvider().CreateScope().ServiceProvider.GetRequiredService<IMediator>();
+        return services.BuildServiceProvider();
     }
+
+    public static IMediator Create(bool withBehavior)
+        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<IMediator>();
 }

@@ -18,6 +18,13 @@ public interface IHandlerRegistry
     ///     True if a handler delegate for the specified request type exists; otherwise, false.
     /// </returns>
     public bool TryGetHandlerDelegate(Type requestType, out HandlerInvokerDelegate? invokerDelegate);
+
+    /// <summary>
+    ///     The source-generated typed invoker for a command/query: a
+    ///     <c>Func&lt;object, TRequest, CancellationToken, Task&lt;TResult&gt;&gt;</c> that returns the handler's own task,
+    ///     so the hot path neither boxes the result nor adds a state machine. <c>null</c> when none was generated.
+    /// </summary>
+    public Delegate? TryGetTypedInvoker(Type requestType) => null;
 }
 
 /// <summary>

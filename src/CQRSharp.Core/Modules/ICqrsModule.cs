@@ -26,8 +26,26 @@ public interface ICqrsModule
     /// <summary>Per-request compiled handler invokers discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, HandlerInvokerDelegate> HandlerInvokers { get; }
 
+    /// <summary>
+    ///     Typed command/query invokers keyed by request type: each is a
+    ///     <c>Func&lt;object, TRequest, CancellationToken, Task&lt;TResult&gt;&gt;</c> that returns the handler's own task.
+    ///     The executor prefers these over <see cref="HandlerInvokers" /> (which box the result behind an extra state
+    ///     machine); empty for a module emitted by a generator that predates them.
+    /// </summary>
+    IReadOnlyDictionary<Type, Delegate> TypedHandlerInvokers => System.Collections.Immutable.ImmutableDictionary<Type, Delegate>.Empty;
+
     /// <summary>Per-context-type factory resolvers discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, Func<IServiceProvider, object?>> ContextFactories { get; }
+
+    /// <summary>
+    ///     This module's command/query routes keyed by exact request type. The composition merges every module's routes
+    ///     into one table, so a dispatch is a single lookup; empty for a module that only offers
+    ///     <see cref="CreateRequestDispatcher" />.
+    /// </summary>
+    IReadOnlyDictionary<Type, RequestRoute> RequestRoutes => System.Collections.Immutable.ImmutableDictionary<Type, RequestRoute>.Empty;
+
+    /// <summary>The boxed-result counterpart of <see cref="RequestRoutes" />, for the untyped <c>Send(object)</c> path.</summary>
+    IReadOnlyDictionary<Type, UntypedRequestRoute> UntypedRequestRoutes => System.Collections.Immutable.ImmutableDictionary<Type, UntypedRequestRoute>.Empty;
 
     /// <summary>Per-request exception-hook invokers discovered in this assembly.</summary>
     IReadOnlyDictionary<Type, RequestExceptionHookInvoker> ExceptionHooks { get; }

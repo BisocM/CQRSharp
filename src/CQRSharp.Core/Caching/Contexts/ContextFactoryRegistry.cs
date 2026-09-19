@@ -26,6 +26,10 @@ public sealed class ContextFactoryRegistry : IContextFactoryRegistry
     }
 
     /// <inheritdoc />
+    public Func<IServiceProvider, object?>? TryGetResolver(Type contextType)
+        => _factoryMappings.TryGetValue(contextType, out var resolver) ? resolver : null;
+
+    /// <inheritdoc />
     public object? TryGetFactory(Type contextType, IServiceProvider serviceProvider)
     {
         return _factoryMappings.TryGetValue(contextType, out var resolver)

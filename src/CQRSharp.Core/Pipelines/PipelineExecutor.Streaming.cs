@@ -264,7 +264,7 @@ public sealed partial class PipelineExecutor
         object handler,
         CancellationToken cancellationToken)
     {
-        if (!handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
+        if (!_handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
             throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
 
         var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);

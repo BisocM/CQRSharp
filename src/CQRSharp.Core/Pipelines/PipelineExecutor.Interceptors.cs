@@ -43,6 +43,25 @@ public sealed partial class PipelineExecutor
             await postHandlers[i].OnAfterHandle(request, outcome, sp, ct).ConfigureAwait(false);
     }
 
+    // Command/query path: the interceptors come pre-sorted from the request plan.
+    private static async Task InvokePostHandlers(IPostHandlerAttribute[] postHandlers, IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
+    {
+        for (var i = 0; i < postHandlers.Length; i++)
+            await postHandlers[i].OnAfterHandle(request, outcome, sp, ct).ConfigureAwait(false);
+    }
+
+    private static async Task InvokePostHandlersIsolated(IPostHandlerAttribute[] postHandlers, IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
+    {
+        try
+        {
+            await InvokePostHandlers(postHandlers, request, outcome, sp, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Swallow: the original failure must surface, not a post-handler's.
+        }
+    }
+
     // The exception-path variant: outcome-aware post-handlers also observe a thrown failure, but an audit/post-handler
     // error must never mask the original exception that is about to propagate.
     private static async Task InvokePostHandleAttributesIsolated(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)

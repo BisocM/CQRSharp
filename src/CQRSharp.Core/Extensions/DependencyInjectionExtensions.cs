@@ -77,14 +77,21 @@ public static class DependencyInjectionExtensions
         services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
         services.TryAddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
 
-        services.TryAddScoped<IPipelineExecutor, PipelineExecutor>();
+        // Per-scope objects are built from factories over pre-resolved singletons: creating a DI scope and dispatching
+        // once (every web request) should cost a few allocations, not a series of container lookups.
+        services.TryAddSingleton<RequestPlanCache>();
+        services.TryAddSingleton<PipelineExecutorShared>();
+        // Transient, not scoped: the executor holds no per-scope state beyond the provider it was resolved from, and the
+        // (scoped) ICqrsDispatcher keeps the instance it resolves — so a scope still ends up with one, without paying the
+        // scope's resolved-services cache for it.
+        services.TryAddTransient<IPipelineExecutor>(sp => new PipelineExecutor(sp, sp.GetRequiredService<PipelineExecutorShared>()));
         services.TryAddSingleton<IRequestExceptionHookRegistry, RequestExceptionHookRegistry>();
 
         services.TryAddScoped<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
         services.TryAddScoped<INotificationDispatcher, NotificationDispatcher>();
 
         // Single CQRSharp façade: inject one thing (scoped to preserve DI scope semantics).
-        services.TryAddScoped<ICqrsDispatcher, CqrsDispatcher>();
+        services.TryAddScoped<ICqrsDispatcher>(sp => new CqrsDispatcher(sp));
 
         // Readiness signal so a RunMode.Queued dispatch can detect a started consumer (and fail loudly, not hang,
         // when the host never starts it).

@@ -47,16 +47,22 @@ public sealed partial class PipelineExecutor
     /// </summary>
     /// <typeparam name="TRequest">The type of the request entering the pipeline.</typeparam>
     /// <typeparam name="TResult">The result type of the request.</typeparam>
+    /// <param name="plan">The cached per-provider plan for this request type.</param>
     /// <param name="request">The request instance entering the pipeline.</param>
     /// <param name="handler">The resolved handler instance for the request.</param>
     /// <param name="services">The scoped service provider for resolving dependencies.</param>
     /// <param name="cancellationToken">A cancellation token for the request.</param>
     private Task<TResult> ExecutePipelineAsync<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
         TRequest request,
         object handler,
         IServiceProvider services,
         CancellationToken cancellationToken) where TRequest : IRequest
     {
+        // The provider has no IPipelineBehavior<TRequest, TResult> registration at all: skip the enumerable resolution.
+        if (!plan.MayHaveBehaviors)
+            return ExecuteFinalActionAsync(plan, request, handler, services, cancellationToken);
+
         // GetServices returns a freshly-allocated array per resolution (Microsoft DI), so the in-place exemption
         // filter and priority sort below are concurrency-safe: each dispatch owns its array and never mutates a shared
         // or cached collection. (Verified by the hot-path contention stress tests.) Do not change this to a cached array.
@@ -64,7 +70,7 @@ public sealed partial class PipelineExecutor
         var behaviors = resolved as IPipelineBehavior<TRequest, TResult>[] ?? resolved.ToArray();
 
         // Filter out behaviors that are exempted by request metadata (supports closed and open generic exemptions).
-        var exemptions = request.Metadata?.PipelineExemptions;
+        var exemptions = plan.Metadata.PipelineExemptions;
         var behaviorCount = behaviors.Length;
         if (exemptions is { Length: > 0 } && behaviorCount > 0)
         {
@@ -80,17 +86,47 @@ public sealed partial class PipelineExecutor
         }
 
         if (behaviorCount == 0)
-            return ExecuteFinalActionAsync<TRequest, TResult>(request, handler, services, cancellationToken);
+            return ExecuteFinalActionAsync(plan, request, handler, services, cancellationToken);
 
-        if (behaviorCount > 1)
-            Array.Sort(behaviors, 0, behaviorCount, BehaviorPriorityComparer<TRequest, TResult>.Instance);
+        // The chains live in their own methods: a closure is allocated where its captured variables are declared, so
+        // keeping the lambdas here would charge every behavior-less dispatch for one it never uses.
+        return behaviorCount == 1
+            ? RunSingleBehavior(plan, behaviors[0], request, handler, services, cancellationToken)
+            : RunBehaviorChain(plan, behaviors, behaviorCount, request, handler, services, cancellationToken);
+    }
+
+    // The common single-behavior chain needs one delegate, not the general recursive closure.
+    private Task<TResult> RunSingleBehavior<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        IPipelineBehavior<TRequest, TResult> behavior,
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken) where TRequest : IRequest
+    {
+        return behavior.Handle(
+            request,
+            nextToken => ExecuteFinalActionAsync(plan, request, handler, services, nextToken),
+            cancellationToken);
+    }
+
+    private Task<TResult> RunBehaviorChain<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        IPipelineBehavior<TRequest, TResult>[] behaviors,
+        int behaviorCount,
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken) where TRequest : IRequest
+    {
+        Array.Sort(behaviors, 0, behaviorCount, BehaviorPriorityComparer<TRequest, TResult>.Instance);
 
         return InvokeBehavior(0, cancellationToken);
 
         Task<TResult> InvokeBehavior(int index, CancellationToken ct)
         {
             if (index >= behaviorCount)
-                return ExecuteFinalActionAsync<TRequest, TResult>(request, handler, services, ct);
+                return ExecuteFinalActionAsync(plan, request, handler, services, ct);
 
             var behavior = behaviors[index];
             return behavior.Handle(
@@ -100,24 +136,44 @@ public sealed partial class PipelineExecutor
         }
     }
 
-    private async Task<TResult> ExecuteFinalActionAsync<TRequest, TResult>(
+    private Task<TResult> ExecuteFinalActionAsync<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
         TRequest request,
         object handler,
         IServiceProvider services,
         CancellationToken cancellationToken) where TRequest : IRequest
     {
-        var notificationDispatcher = services.GetRequiredService<INotificationDispatcher>();
+        // Nothing brackets the handler — no interceptors, no lifecycle subscribers, no outbox buffer to roll back — so
+        // the final action IS the handler call: return its task as-is instead of wrapping it in a state machine.
+        if (plan.IsBareHandler && !_outboxEnabled)
+            return InvokeHandler(plan, request, handler, cancellationToken);
 
-        switch (request)
-        {
-            // Publish notifications to signal the start of command/query handling.
-            case ICommand cmd:
-                await notificationDispatcher.Publish(new CommandInitiatedNotification(cmd), cancellationToken).ConfigureAwait(false);
-                break;
-            case IQuery<TResult> qry:
-                await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(qry), cancellationToken).ConfigureAwait(false);
-                break;
-        }
+        return ExecuteBracketedFinalActionAsync(plan, request, handler, services, cancellationToken);
+    }
+
+    private async Task<TResult> ExecuteBracketedFinalActionAsync<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        TRequest request,
+        object handler,
+        IServiceProvider services,
+        CancellationToken cancellationToken) where TRequest : IRequest
+    {
+        // Lifecycle notifications are skipped only when the provider can prove nothing subscribes to them.
+        var notificationDispatcher = plan.MayHaveLifecycleSubscribers
+            ? services.GetRequiredService<INotificationDispatcher>()
+            : null;
+
+        if (notificationDispatcher is not null)
+            switch (request)
+            {
+                // Publish notifications to signal the start of command/query handling.
+                case ICommand cmd:
+                    await notificationDispatcher.Publish(new CommandInitiatedNotification(cmd), cancellationToken).ConfigureAwait(false);
+                    break;
+                case IQuery<TResult> qry:
+                    await notificationDispatcher.Publish(new QueryInitiatedNotification<TResult>(qry), cancellationToken).ConfigureAwait(false);
+                    break;
+            }
 
         // A failed attempt's buffered notifications describe work that did not happen: remember where this attempt
         // starts so they can be discarded without touching an outer request's (or an earlier retry attempt's) buffer.
@@ -130,32 +186,37 @@ public sealed partial class PipelineExecutor
         try
         {
             // Execute any pre-handler logic defined via attributes on the request class.
-            await InvokePreHandleAttributes(request, services, cancellationToken).ConfigureAwait(false);
+            var preHandlers = plan.PreHandlers;
+            for (var i = 0; i < preHandlers.Length; i++)
+                await preHandlers[i].OnBeforeHandle(request, services, cancellationToken).ConfigureAwait(false);
 
             // Invoke the actual handler to process the request.
-            result = await HandleRequest<TResult>(request, handler, cancellationToken).ConfigureAwait(false);
+            result = await InvokeHandler(plan, request, handler, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             outbox?.TruncateTo(outboxMark);
-            await PublishFailedIsolatedAsync<TResult>(notificationDispatcher, request, ex, cancellationToken).ConfigureAwait(false);
-            await InvokePostHandleAttributesIsolated(request, RequestOutcome.FromException(ex), services, cancellationToken).ConfigureAwait(false);
+            if (notificationDispatcher is not null)
+                await PublishFailedIsolatedAsync<TResult>(notificationDispatcher, request, ex, cancellationToken).ConfigureAwait(false);
+            await InvokePostHandlersIsolated(plan.PostHandlers, request, RequestOutcome.FromException(ex), services, cancellationToken).ConfigureAwait(false);
             throw;
         }
 
         // Execute any post-handler logic defined via attributes, handing them the successful result as the outcome.
-        await InvokePostHandleAttributes(request, RequestOutcome.FromResult(result), services, cancellationToken).ConfigureAwait(false);
+        if (plan.PostHandlers.Length > 0)
+            await InvokePostHandlers(plan.PostHandlers, request, RequestOutcome.FromResult(result), services, cancellationToken).ConfigureAwait(false);
 
-        switch (request)
-        {
-            // Publish notifications to signal the completion of command/query handling.
-            case ICommand cmdResult:
-                await notificationDispatcher.Publish(new CommandCompletedNotification(cmdResult, (result as CommandResult)!), cancellationToken).ConfigureAwait(false);
-                break;
-            case IQuery<TResult> qryResult:
-                await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(qryResult, result), cancellationToken).ConfigureAwait(false);
-                break;
-        }
+        if (notificationDispatcher is not null)
+            switch (request)
+            {
+                // Publish notifications to signal the completion of command/query handling.
+                case ICommand cmdResult:
+                    await notificationDispatcher.Publish(new CommandCompletedNotification(cmdResult, (result as CommandResult)!), cancellationToken).ConfigureAwait(false);
+                    break;
+                case IQuery<TResult> qryResult:
+                    await notificationDispatcher.Publish(new QueryCompletedNotification<TResult>(qryResult, result), cancellationToken).ConfigureAwait(false);
+                    break;
+            }
 
         return result;
     }
@@ -187,17 +248,63 @@ public sealed partial class PipelineExecutor
     }
 
     /// <summary>
-    ///     Invokes the handler for a given request using a pre-compiled delegate from the handler registry.
+    ///     Invokes the handler. With the generator's typed invoker this returns the handler's own task: no boxing, and no
+    ///     state machine unless the handler is genuinely asynchronous (where a null result still has to be checked).
     /// </summary>
-    /// <typeparam name="TResult">The expected result type.</typeparam>
-    /// <param name="request">The request object.</param>
-    /// <param name="handler">The resolved handler instance.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task containing the result from the handler.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if a handler delegate is not found for the request type.</exception>
-    private async Task<TResult> HandleRequest<TResult>(object request, object handler, CancellationToken cancellationToken)
+    private Task<TResult> InvokeHandler<TRequest, TResult>(
+        RequestPlan<TRequest, TResult> plan,
+        TRequest request,
+        object handler,
+        CancellationToken cancellationToken) where TRequest : IRequest
     {
-        if (!handlerRegistry.TryGetHandlerDelegate(request.GetType(), out var handlerDelegate) || handlerDelegate is null)
+        if (plan.TypedInvoker is not { } invoke)
+            return HandleRequest<TResult>(request, handler, plan.LegacyInvoker, cancellationToken);
+
+        Task<TResult>? task;
+        try
+        {
+            task = invoke(handler, request, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // A handler that throws before its first await: surface it through the task, as an async handler would.
+            return Task.FromException<TResult>(ex);
+        }
+
+        if (task is null)
+            return Task.FromException<TResult>(NullResult(request));
+
+        if (!task.IsCompletedSuccessfully)
+            return AwaitAndValidate(task, request);
+
+        return IsInvalidNull(task.Result, request) ? Task.FromException<TResult>(NullResult(request)) : task;
+
+        static async Task<TResult> AwaitAndValidate(Task<TResult> pending, TRequest awaitedRequest)
+        {
+            var result = await pending.ConfigureAwait(false);
+            return IsInvalidNull(result, awaitedRequest) ? throw NullResult(awaitedRequest) : result;
+        }
+    }
+
+    // A command must produce a CommandResult and a non-nullable value-type result cannot be null; a query may
+    // legitimately return null for a nullable/reference result.
+    private static bool IsInvalidNull<TResult>(TResult result, IRequest request)
+        => result is null && (request is ICommand || default(TResult) is not null);
+
+    private static InvalidOperationException NullResult(IRequest request)
+        => new($"Handler returned null for request '{request.GetType().Name}'.");
+
+    /// <summary>
+    ///     Invokes the handler through the object-returning delegate from the handler registry (modules emitted without
+    ///     typed invokers).
+    /// </summary>
+    private static async Task<TResult> HandleRequest<TResult>(
+        IRequest request,
+        object handler,
+        Caching.Handlers.HandlerInvokerDelegate? handlerDelegate,
+        CancellationToken cancellationToken)
+    {
+        if (handlerDelegate is null)
             throw new InvalidOperationException($"No handler delegate found for request '{request.GetType().Name}'.");
 
         var result = await handlerDelegate(handler, request, cancellationToken).ConfigureAwait(false);
@@ -205,7 +312,7 @@ public sealed partial class PipelineExecutor
         if (result is null)
         {
             if (request is ICommand || default(TResult) is not null)
-                throw new InvalidOperationException($"Handler returned null for request '{request.GetType().Name}'.");
+                throw NullResult(request);
 
             return default!;
         }
