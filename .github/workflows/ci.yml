@@ -1,7 +1,8 @@
 name: CI
 
-# Validates a change BEFORE it reaches the Release branch, where the publish pipeline is the first thing to build it.
-# Same gates as the release build (zero warnings, full test suite, Redis-backed contract tests); no packing, no publish.
+# Validates a change BEFORE it reaches the Release branch. Runs the same gate the release pipeline runs (validate.yml:
+# zero warnings, all three target frameworks, Redis-backed contract tests, Native AOT, pack + package validation, template
+# smoke test) and additionally builds and tests on Windows and macOS. Nothing is published.
 on:
   pull_request:
   push:
@@ -20,49 +21,44 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  build-test:
-    name: Build and test
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  validate:
+    name: Validate
+    uses: ./.github/workflows/validate.yml
 
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
+  cross-platform:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, macos-latest ]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
+      - name: Setup .NET SDKs
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
-          cache: true
-          cache-dependency-path: |
-            **/*.csproj
-            nuget.config
-
-      - name: Restore
-        run: dotnet restore CQRSharp.sln
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
 
       - name: Build (zero-warning gate)
-        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore /p:ContinuousIntegrationBuild=true /p:GeneratePackageOnBuild=false -warnaserror
+        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} -p:GeneratePackageOnBuild=false -warnaserror
 
-      - name: Test
-        run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx;LogFileName=test_results.trx" --results-directory artifacts/test-results
+      # Service containers are Linux-only, so there is no Redis here: the Redis contract tests skip (they run in the
+      # validate job). Everything else - including the EF Core stores on SQLite - runs on every OS.
+      - name: Test (net8.0, net9.0, net10.0)
+        run: dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build --logger "trx" --results-directory artifacts/test-results
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.os }}
           path: artifacts/test-results
 
       - name: Run Sample self-test
