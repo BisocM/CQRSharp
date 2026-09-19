@@ -11,6 +11,19 @@ internal sealed class Outbox : IOutbox
 {
     private readonly List<INotification> _notifications = new();
 
+    /// <summary>The number of buffered notifications; a mark for <see cref="TruncateTo" />.</summary>
+    internal int Count => _notifications.Count;
+
+    /// <summary>
+    ///     Discards everything buffered after <paramref name="mark" /> — the notifications of a failed handler
+    ///     attempt — while keeping what was buffered before it (an outer request, or an earlier successful attempt).
+    /// </summary>
+    internal void TruncateTo(int mark)
+    {
+        if (mark < 0 || mark >= _notifications.Count) return;
+        _notifications.RemoveRange(mark, _notifications.Count - mark);
+    }
+
     /// <inheritdoc />
     public void Add(INotification notification)
     {

@@ -21,6 +21,9 @@ public static class CqrsActivitySource
     /// </summary>
     internal static Activity? StartRequest(string operation, Type requestType)
     {
+        // Checked first so an untraced dispatch (the common case) does not pay to format a span name nobody reads.
+        if (!Instance.HasListeners()) return null;
+
         var activity = Instance.StartActivity($"{operation} {requestType.Name}");
         activity?.SetTag("cqrsharp.request_type", requestType.FullName);
         return activity;

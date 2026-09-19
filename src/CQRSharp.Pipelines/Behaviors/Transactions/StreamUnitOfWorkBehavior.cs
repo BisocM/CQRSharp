@@ -5,7 +5,7 @@ using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
@@ -43,26 +43,33 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
         var isTransactional = request is ITransactionalCommand or ITransactionalQuery;
         if (!isTransactional) return next(cancellationToken);
 
-        using var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
-        activity?.SetTag("cqrsharp.request_type", typeof(TRequest).Name);
-
+        // The activity is started inside each iterator: a "using" here would stop it as soon as this (non-iterator)
+        // method returns, before the stream is enumerated, leaving a zero-length span.
         if (unitOfWork is IExplicitUnitOfWork explicitUow)
-            return HandleExplicitTransaction(request, next, cancellationToken, activity, explicitUow);
+            return HandleExplicitTransaction(request, next, cancellationToken, explicitUow);
 
-        return HandleImplicitTransaction(request, next, cancellationToken, activity);
+        return HandleImplicitTransaction(request, next, cancellationToken);
+    }
+
+    private static Activity? StartTransactionActivity(TRequest request)
+    {
+        var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
+        activity?.SetTag("cqrsharp.request_type", typeof(TRequest).Name);
+        return activity;
     }
 
     private IAsyncEnumerable<TItem> HandleExplicitTransaction(
         TRequest request,
         StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken,
-        Activity? activity,
         IExplicitUnitOfWork explicitUow)
     {
         return ExecuteAsync();
 
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
+            using var activity = StartTransactionActivity(request);
+
             if (explicitUow.HasActiveTransaction)
             {
                 logger.LogTrace("Participating in existing transaction for {RequestName}", typeof(TRequest).Name);
@@ -127,17 +134,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
                         activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to incomplete stream consumption.");
                     }
 
-                    try
-                    {
-                        await explicitUow.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                        activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
-                    }
-                    catch (Exception rollbackEx)
-                    {
-                        // A failing rollback must not mask the original failure (rethrown after this finally block).
-                        logger.LogError(rollbackEx, "Rollback failed for {RequestName} after a streaming transaction error.",
-                            typeof(TRequest).Name);
-                    }
+                    await RollbackAsync(explicitUow, activity).ConfigureAwait(false);
                 }
             }
 
@@ -149,24 +146,57 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
                 yield break;
             }
 
-            await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
+            // A failed outbox save or commit must roll back too; otherwise the transaction stays open and every later
+            // transactional request in this scope silently "participates" in it and is never committed.
+            try
+            {
+                await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
+                await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception commitEx)
+            {
+                logger.LogError(commitEx, "Commit failed for {RequestName}. Rolling back.", typeof(TRequest).Name);
+                activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to a commit failure.");
+                await RollbackAsync(explicitUow, activity).ConfigureAwait(false);
+                throw;
+            }
 
-            await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
             activity?.AddEvent(new ActivityEvent("Transaction Committed"));
             activity?.SetStatus(ActivityStatusCode.Ok);
+        }
+    }
+
+    private async Task RollbackAsync(IExplicitUnitOfWork explicitUow, Activity? activity)
+    {
+        // The rolled-back work never happened, so neither did its notifications.
+        outbox.Drain();
+
+        try
+        {
+            // Never the caller's token: it is typically what ended the stream, and a rollback that is cancelled before
+            // it starts leaves the transaction open for every later request in this scope.
+            await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
+        }
+        catch (Exception rollbackEx)
+        {
+            // A failing rollback must not mask the original failure (rethrown by the caller).
+            logger.LogError(rollbackEx, "Rollback failed for {RequestName} after a streaming transaction error.",
+                typeof(TRequest).Name);
         }
     }
 
     private IAsyncEnumerable<TItem> HandleImplicitTransaction(
         TRequest request,
         StreamHandlerDelegate<TItem> next,
-        CancellationToken cancellationToken,
-        Activity? activity)
+        CancellationToken cancellationToken)
     {
         return ExecuteAsync();
 
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
+            using var activity = StartTransactionActivity(request);
+
             logger.LogTrace("Beginning implicit transaction for {RequestName}", typeof(TRequest).Name);
 
             Exception? failure = null;
@@ -201,6 +231,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
             {
                 logger.LogError(failure, "Implicit transaction failed for {RequestName}. The operation will be rolled back.", typeof(TRequest).Name);
                 activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction failed.");
+                outbox.Drain();
                 ExceptionDispatchInfo.Capture(failure).Throw();
                 yield break;
             }
@@ -239,18 +270,7 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
             throw new InvalidOperationException(
                 "IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
 
-        var traceParent = Activity.Current?.Id;
-        var messages = notifications.Select(n => new OutboxMessage(
-            Guid.NewGuid(),
-            serializer.GetNotificationName(n.GetType()),
-            serializer.Serialize(n),
-            _timeProvider.GetUtcNow().UtcDateTime,
-            OutboxMessageStatus.Pending,
-            null,
-            null,
-            TraceParent: traceParent
-        ));
-
+        var messages = OutboxMessageFactory.Create(notifications, serializer, _timeProvider);
         await outboxStore.StoreAsync(messages, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -72,6 +72,7 @@ public static class DependencyInjectionExtensions
         services.TryAddSingleton(TimeProvider.System);
 
         services.TryAddScoped<IOutbox, Outbox>();
+        services.TryAddScoped<OutboxBufferingState>();
 
         services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
         services.TryAddTransient<IRequestContextFactory, DefaultRequestContextFactory>();

@@ -1,7 +1,7 @@
-﻿using System.Collections.Concurrent;
-using CQRSharp.Abstractions.Interfaces.Notifications;
+﻿using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
+using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Options;
 using CQRSharp.Core.Options.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,8 +16,6 @@ namespace CQRSharp.Core.Notifications;
 /// </summary>
 public sealed class NotificationDispatcher : INotificationDispatcher
 {
-    private static readonly ConcurrentDictionary<Type, bool> HasStableNameCache = new();
-
     private readonly IDirectNotificationDispatcher _directDispatcher;
     private readonly OutboxOptions _outboxOptions;
     private readonly IServiceProvider _provider;
@@ -41,8 +39,10 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     /// <summary>
     ///     Publishes a notification.
     ///     Depending on the configured <see cref="OutboxMode" />, the notification will either be
-    ///     dispatched immediately to its handlers or added to a scoped <see cref="IOutbox" />
-    ///     for deferred processing.
+    ///     dispatched immediately to its handlers or routed to the outbox for deferred, durable delivery. Inside a
+    ///     request it is buffered in the scoped <see cref="IOutbox" /> and persisted when the request succeeds
+    ///     (atomically with the transaction when a unit of work owns one); outside a request nothing would drain that
+    ///     buffer, so it is written straight to the <see cref="IOutboxStore" />.
     /// </summary>
     /// <typeparam name="TNotification">The type of the notification.</typeparam>
     /// <param name="notification">The notification instance to publish.</param>
@@ -54,15 +54,12 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
         where TNotification : INotification
     {
-        var uow = _provider.GetService<IUnitOfWork>();
-        var explicitUow = uow as IExplicitUnitOfWork;
-        var isInTransaction = explicitUow?.HasActiveTransaction ?? false;
-
+        // The unit of work is only consulted in Transactional mode. With the outbox disabled (the default) this is the
+        // hot path of every request's lifecycle notifications, so it must not pay for a DI lookup it never uses.
         var useOutbox = _outboxOptions.Mode switch
         {
             OutboxMode.Enabled => true,
-            OutboxMode.Disabled => false,
-            OutboxMode.Transactional => isInTransaction,
+            OutboxMode.Transactional => _provider.GetService<IUnitOfWork>() is IExplicitUnitOfWork { HasActiveTransaction: true },
             _ => false
         };
 
@@ -74,15 +71,16 @@ public sealed class NotificationDispatcher : INotificationDispatcher
 
         // Durable storage requires a stable notification name. We treat this as the opt-in signal
         // for the outbox (keeps internal/framework notifications in-process and avoids fragile serialization).
-        var notificationType = notification.GetType();
-        if (!HasStableNameCache.TryGetValue(notificationType, out var hasStableName))
-        {
-            hasStableName = stableNameProvider.TryGetStableName(notificationType, out _);
-            HasStableNameCache.TryAdd(notificationType, hasStableName);
-        }
-
-        if (!hasStableName)
+        // Asked per provider, never cached statically: two hosts in one process may register different modules.
+        if (!stableNameProvider.TryGetStableName(notification.GetType(), out _))
             return _directDispatcher.Publish(notification, cancellationToken);
+
+        // Buffer only while a request is executing in this scope — that is what guarantees a flush. A publish from
+        // outside a request (a controller, a hosted service) has no flush owner, so it goes straight to the store
+        // rather than into a buffer that is dropped when the scope ends.
+        var buffering = _provider.GetService<OutboxBufferingState>();
+        if (buffering is { IsActive: false })
+            return RequestOutboxScope.StoreAsync(_provider, [notification], cancellationToken);
 
         var outbox = _provider.GetService<IOutbox>();
         if (outbox is null)

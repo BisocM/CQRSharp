@@ -4,7 +4,7 @@ using CQRSharp.Abstractions.Interfaces.Markers.Request;
 using CQRSharp.Abstractions.Interfaces.Notifications;
 using CQRSharp.Abstractions.Interfaces.Outbox;
 using CQRSharp.Abstractions.Interfaces.Transactions;
-using CQRSharp.Abstractions.Models.Outbox;
+using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Pipelines.Options;
 using CQRSharp.Pipelines.Telemetry;
@@ -80,9 +80,15 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
             logger.LogError(ex, "Transaction failed for {RequestName}. Rolling back.", typeof(TRequest).Name);
             activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to an exception.");
 
+            // The rolled-back work never happened, so neither did its notifications: drop them rather than leave them
+            // in the scoped outbox for a retry attempt (or the next command in this scope) to persist.
+            outbox.Drain();
+
             try
             {
-                await explicitUow.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                // Never the caller's token: it is typically what caused the failure, and a rollback that is cancelled
+                // before it starts leaves the transaction open for every later request in this scope.
+                await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
             }
             catch (Exception rollbackEx)
@@ -119,6 +125,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         {
             logger.LogError(ex, "Implicit transaction failed for {RequestName}. The operation will be rolled back.", typeof(TRequest).Name);
             activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction failed.");
+            outbox.Drain();
             throw;
         }
     }
@@ -141,18 +148,7 @@ public sealed class UnitOfWorkBehavior<TRequest, TResult>(
         if (outboxStore is null || serializer is null)
             throw new InvalidOperationException("IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
 
-        var traceParent = Activity.Current?.Id;
-        var messages = notifications.Select(n => new OutboxMessage(
-            Guid.NewGuid(),
-            serializer.GetNotificationName(n.GetType()),
-            serializer.Serialize(n),
-            _timeProvider.GetUtcNow().UtcDateTime,
-            OutboxMessageStatus.Pending,
-            null,
-            null,
-            TraceParent: traceParent
-        ));
-
+        var messages = OutboxMessageFactory.Create(notifications, serializer, _timeProvider);
         await outboxStore.StoreAsync(messages, cancellationToken).ConfigureAwait(false);
     }
 }
