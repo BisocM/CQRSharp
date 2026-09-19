@@ -25,4 +25,13 @@ public sealed class IdempotencyEntity
     ///     instead made race-safe by the unique primary key, not this token.)
     /// </summary>
     public uint RowVersion { get; set; }
+
+    /// <summary>
+    ///     Whether the request that claimed the key ran to completion. A live, completed key answers a duplicate with
+    ///     <see cref="Result" />; a live key that is not completed means the original is still running (or crashed).
+    /// </summary>
+    public bool Completed { get; set; }
+
+    /// <summary>The serialized result to replay to duplicates; null when the completed request stored none.</summary>
+    public byte[]? Result { get; set; }
 }

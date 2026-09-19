@@ -86,7 +86,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    public Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
+    public Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken)
         => WithContextAsync(async context =>
         {
             await PurgeExpiredAsync(context, cancellationToken).ConfigureAwait(false);
@@ -141,7 +141,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
 
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
-    private async Task<bool> ClaimAsync(TContext context, string key, CancellationToken cancellationToken)
+    private async Task<IdempotencyClaim> ClaimAsync(TContext context, string key, CancellationToken cancellationToken)
     {
         // Bounded INSERT/take-over retry. Each attempt: read the row; if absent, INSERT it and win; if present but
         // expired, take it over (refresh ExpiresAt) and win; if present and live, lose as a duplicate. A concurrent
@@ -170,7 +170,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
                     await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     context.Entry(entity).State = EntityState.Detached;
                     _heldClaims[key] = expiresAt;
-                    return true;
+                    return IdempotencyClaim.Claimed;
                 }
                 catch (DbUpdateException ex) when (attempt < MaxClaimAttempts)
                 {
@@ -196,13 +196,15 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
             {
                 // Detach so the live row we only read does not linger as tracked state on the shared context.
                 context.Entry(existing).State = EntityState.Detached;
-                return false;
+                return existing.Completed ? IdempotencyClaim.Completed(existing.Result) : IdempotencyClaim.InProgress;
             }
 
             // Take over the expired row: refresh its expiry and bump the concurrency token so the save only lands for
             // the process that still held the row-version it read. Without this bump the UPDATE carries no version
             // predicate, so two processes reading the same expired row would BOTH save and BOTH wrongly win the claim.
             existing.ExpiresAt = expiresAt;
+            existing.Completed = false;
+            existing.Result = null;
             existing.RowVersion++;
 
             try
@@ -210,7 +212,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
                 await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 context.Entry(existing).State = EntityState.Detached;
                 _heldClaims[key] = expiresAt;
-                return true;
+                return IdempotencyClaim.Claimed;
             }
             catch (DbUpdateConcurrencyException ex) when (attempt < MaxClaimAttempts)
             {
@@ -233,6 +235,28 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
     /// <inheritdoc />
     [RequiresDynamicCode(AotMessage)]
     [RequiresUnreferencedCode(AotMessage)]
+    public Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken)
+    {
+        // Same ownership rule as ReleaseAsync: only while the row is still the claim this process made. The claim is
+        // forgotten either way — a completed key can no longer be released.
+        if (!_heldClaims.TryRemove(key, out var claimedExpiry))
+            return Task.CompletedTask;
+
+        return WithContextAsync(async context =>
+        {
+            var updated = await context.Set<IdempotencyEntity>()
+                .Where(e => e.Key == key && e.ExpiresAt == claimedExpiry && !e.Completed)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(e => e.Completed, true).SetProperty(e => e.Result, result),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return updated > 0;
+        }, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    [RequiresDynamicCode(AotMessage)]
+    [RequiresUnreferencedCode(AotMessage)]
     public Task ReleaseAsync(string key, CancellationToken cancellationToken)
     {
         // Only a claim this process made can be released, and only while the row is still that very claim: an unknown,
@@ -243,7 +267,7 @@ internal sealed class EfCoreIdempotencyStore<TContext> : IIdempotencyStore where
         return WithContextAsync(async context =>
         {
             var deleted = await context.Set<IdempotencyEntity>()
-                .Where(e => e.Key == key && e.ExpiresAt == claimedExpiry)
+                .Where(e => e.Key == key && e.ExpiresAt == claimedExpiry && !e.Completed)
                 .ExecuteDeleteAsync(cancellationToken)
                 .ConfigureAwait(false);
             return deleted > 0;

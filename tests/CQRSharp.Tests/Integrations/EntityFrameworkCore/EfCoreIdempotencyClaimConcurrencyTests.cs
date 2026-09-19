@@ -44,7 +44,7 @@ public sealed class EfCoreIdempotencyClaimConcurrencyTests
             var results = await Task.WhenAll(
                 stores.Select(s => Task.Run(() => s.TryClaimAsync(key, CancellationToken.None))));
 
-            results.Count(claimed => claimed).Should().Be(1,
+            results.Count(claim => claim.IsClaimed).Should().Be(1,
                 "the unique primary key must let exactly one concurrent insert of a fresh key win");
         }
         finally
@@ -88,7 +88,7 @@ public sealed class EfCoreIdempotencyClaimConcurrencyTests
             var results = await Task.WhenAll(
                 stores.Select(s => Task.Run(() => s.TryClaimAsync(key, CancellationToken.None))));
 
-            results.Count(claimed => claimed).Should().Be(1,
+            results.Count(claim => claim.IsClaimed).Should().Be(1,
                 "the RowVersion concurrency token must let exactly one caller take over an expired key");
         }
         finally
@@ -112,12 +112,12 @@ public sealed class EfCoreIdempotencyClaimConcurrencyTests
 
         var key = $"expiry:{Guid.NewGuid():N}";
 
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue("a fresh key is claimable");
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeFalse("still within the retention window");
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeTrue("a fresh key is claimable");
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeFalse("still within the retention window");
 
         // Past retention the row is expired; the next claim drives the take-over UPDATE branch end to end and wins.
         time.Advance(Retention + TimeSpan.FromSeconds(1));
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue(
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeTrue(
             "an expired key is taken over and re-claimed");
     }
 

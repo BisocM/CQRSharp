@@ -13,6 +13,32 @@ namespace CQRSharp.Pipelines;
 public sealed class IdempotencyStoreBuilder
 {
     private Action<IServiceCollection>? _storeRegistration;
+    private Action<IServiceCollection>? _serializerRegistration;
+
+    /// <summary>
+    ///     Replays value-carrying results (<c>CommandResult&lt;T&gt;</c>, query results) to duplicate requests, serialized
+    ///     with System.Text.Json through the type metadata <paramref name="options" /> resolve. For Native AOT, pass
+    ///     options whose <c>TypeInfoResolver</c> is your source-generated <c>JsonSerializerContext</c>; a result type the
+    ///     options cannot resolve is not replayed (its duplicate is rejected with <c>DuplicateRequestException</c>).
+    /// </summary>
+    /// <remarks>A plain <c>CommandResult</c> is always replayed and needs none of this.</remarks>
+    /// <param name="options">The JSON options (and type metadata) to serialize results with.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    public IdempotencyStoreBuilder ReplayResultsWith(System.Text.Json.JsonSerializerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return ReplayResultsWith(new Core.Idempotency.JsonIdempotencyResultSerializer(options));
+    }
+
+    /// <summary>Replays value-carrying results to duplicate requests using a custom serializer.</summary>
+    /// <param name="serializer">The serializer that stores and restores results.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    public IdempotencyStoreBuilder ReplayResultsWith(IIdempotencyResultSerializer serializer)
+    {
+        ArgumentNullException.ThrowIfNull(serializer);
+        _serializerRegistration = services => services.AddSingleton(serializer);
+        return this;
+    }
 
     /// <summary>
     ///     Uses the in-process, non-durable in-memory idempotency store (development, tests, single-node demos only;
@@ -39,5 +65,7 @@ public sealed class IdempotencyStoreBuilder
             _storeRegistration(services);
         else
             services.AddInMemoryIdempotencyStore();
+
+        _serializerRegistration?.Invoke(services);
     }
 }

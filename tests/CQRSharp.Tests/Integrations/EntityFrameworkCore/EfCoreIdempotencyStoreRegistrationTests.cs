@@ -38,11 +38,11 @@ public sealed class EfCoreIdempotencyStoreRegistrationTests
 
         var store = provider.GetRequiredService<IIdempotencyStore>();
 
-        (await store.TryClaimAsync("order-42", CancellationToken.None)).Should().BeTrue();
-        (await store.TryClaimAsync("order-42", CancellationToken.None)).Should().BeFalse("the key is already claimed");
+        (await store.TryClaimAsync("order-42", CancellationToken.None)).IsClaimed.Should().BeTrue();
+        (await store.TryClaimAsync("order-42", CancellationToken.None)).IsClaimed.Should().BeFalse("the key is already claimed");
 
         await store.ReleaseAsync("order-42", CancellationToken.None);
-        (await store.TryClaimAsync("order-42", CancellationToken.None)).Should().BeTrue("a released key is claimable again");
+        (await store.TryClaimAsync("order-42", CancellationToken.None)).IsClaimed.Should().BeTrue("a released key is claimable again");
     }
 
     private sealed class RegistrationDbContext(DbContextOptions<RegistrationDbContext> options) : DbContext(options)

@@ -45,10 +45,12 @@ public sealed class StreamIdempotencyBehavior<TRequest, TItem>(
             throw new InvalidOperationException(
                 $"{typeof(TRequest).Name} implements {nameof(IIdempotentRequest)} but supplied an empty {nameof(IIdempotentRequest.IdempotencyKey)}.");
 
-        if (!await store.TryClaimAsync(key, cancellationToken).ConfigureAwait(false))
+        // A stream's items are not stored, so a completed stream cannot be replayed: any duplicate is rejected.
+        var claim = await store.TryClaimAsync(key, cancellationToken).ConfigureAwait(false);
+        if (!claim.IsClaimed)
         {
             logger.LogInformation("Rejected duplicate streaming request {RequestName} with idempotency key {Key}.", typeof(TRequest).Name, key);
-            throw new DuplicateRequestException(key);
+            throw new DuplicateRequestException(key, claim.Status == IdempotencyClaimStatus.InProgress);
         }
 
         var completed = false;
@@ -79,7 +81,9 @@ public sealed class StreamIdempotencyBehavior<TRequest, TItem>(
         {
             // Runs on a fault and also when the consumer disposes the enumerator early: either way the request did not
             // complete. A non-cancellable token so the cleanup happens even though the request itself was cancelled.
-            if (!completed)
+            if (completed)
+                await store.CompleteAsync(key, null, CancellationToken.None).ConfigureAwait(false);
+            else
                 await store.ReleaseAsync(key, CancellationToken.None).ConfigureAwait(false);
         }
 

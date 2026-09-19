@@ -53,14 +53,14 @@ public sealed class RedisIdempotencyStoreContractTests : CQRSharp.Testing.Idempo
 
         var key = $"selfheal:{Guid.NewGuid():N}";
 
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue("a fresh key is claimable");
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should()
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeTrue("a fresh key is claimable");
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should()
             .BeFalse("the key is still within its retention TTL");
 
         // Wait past the real TTL so Redis expires the key, then re-claim must succeed without any explicit release.
         await Task.Delay(retention + TimeSpan.FromMilliseconds(500));
 
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should()
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should()
             .BeTrue("the claim's EX TTL expired, so the key self-heals and is claimable again");
     }
 }

@@ -76,7 +76,10 @@ public sealed class StreamIdempotencyBehaviorTests
     {
         private readonly ConcurrentDictionary<string, byte> _claimed = new();
 
-        public Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken) => Task.FromResult(_claimed.TryAdd(key, 0));
+        public Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken)
+            => Task.FromResult(_claimed.TryAdd(key, 0) ? IdempotencyClaim.Claimed : IdempotencyClaim.InProgress);
+
+        public Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task ReleaseAsync(string key, CancellationToken cancellationToken)
         {

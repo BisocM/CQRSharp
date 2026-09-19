@@ -23,12 +23,28 @@ internal sealed class RedisIdempotencyStore : IIdempotencyStore
     // The token of each claim this process currently holds, so ReleaseAsync(key) can prove ownership to Redis.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _heldClaims = new(StringComparer.Ordinal);
 
+    // The key's value is "p:<token>" while the request is in flight and "c:<result bytes>" once it completed.
+    private const string PendingPrefix = "p:";
+    private const byte CompletedMarker = (byte)'c';
+
     // Compare-and-delete: remove the key only while it still carries this claimant's token.
     private const string ReleaseScript = @"
 if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
 end
 return 0";
+
+    // Compare-and-complete: swap this claimant's in-flight value for the completed one, keeping the key's remaining TTL
+    // (the retention window runs from the claim). PTTL + PX rather than KEEPTTL, which needs Redis 6.
+    private const string CompleteScript = @"
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl > 0 then
+    redis.call('SET', KEYS[1], ARGV[2], 'PX', ttl)
+else
+    redis.call('SET', KEYS[1], ARGV[2])
+end
+return 1";
 
     public RedisIdempotencyStore(IConnectionMultiplexer mux, IOptions<RedisIdempotencyOptions> options)
     {
@@ -39,17 +55,49 @@ return 0";
         _retention = opts.Retention;
     }
 
-    public async Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken)
+    public async Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken)
     {
         // SET NX EX is atomically duplicate-safe on its own: the write lands iff the key was absent, so the boolean it
         // returns is exactly "newly claimed". The retention TTL doubles as the dedup window and the crash self-heal.
         var db = _mux.GetDatabase(_database);
-        var token = Guid.NewGuid().ToString("N");
-        if (!await db.StringSetAsync(_keyPrefix + key, token, _retention, When.NotExists).ConfigureAwait(false))
-            return false;
+        var token = PendingPrefix + Guid.NewGuid().ToString("N");
+        var redisKey = (RedisKey)(_keyPrefix + key);
 
-        _heldClaims[key] = token;
-        return true;
+        // Bounded loop: the key can expire between a lost SET NX and the GET that inspects the winner.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            if (await db.StringSetAsync(redisKey, token, _retention, When.NotExists).ConfigureAwait(false))
+            {
+                _heldClaims[key] = token;
+                return IdempotencyClaim.Claimed;
+            }
+
+            var existing = (byte[]?)await db.StringGetAsync(redisKey).ConfigureAwait(false);
+            if (existing is null) continue;
+
+            if (existing.Length == 0 || existing[0] != CompletedMarker)
+                return IdempotencyClaim.InProgress;
+
+            // "c:" followed by the stored result; nothing after the prefix means the request stored none.
+            return IdempotencyClaim.Completed(existing.Length > 2 ? existing[2..] : null);
+        }
+
+        return IdempotencyClaim.InProgress;
+    }
+
+    public async Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken)
+    {
+        // Only a claim this process made, and only while Redis still holds that very claim.
+        if (!_heldClaims.TryRemove(key, out var token))
+            return;
+
+        var completed = new byte[2 + (result?.Length ?? 0)];
+        completed[0] = CompletedMarker;
+        completed[1] = (byte)':';
+        result?.CopyTo(completed, 2);
+
+        var db = _mux.GetDatabase(_database);
+        await db.ScriptEvaluateAsync(CompleteScript, [(RedisKey)(_keyPrefix + key)], [(RedisValue)token, (RedisValue)completed]).ConfigureAwait(false);
     }
 
     public async Task ReleaseAsync(string key, CancellationToken cancellationToken)

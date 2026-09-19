@@ -27,10 +27,10 @@ public sealed class InMemoryIdempotencyStoreContractTests : IdempotencyStoreCont
             _time, Options.Create(new InMemoryIdempotencyStoreOptions { Retention = _retention }));
         const string key = "retention-key";
 
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue();
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeFalse("still within the retention window");
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeTrue();
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeFalse("still within the retention window");
 
         _time.Advance(_retention + TimeSpan.FromSeconds(1));
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue("the claim aged out of the retention window");
+        (await store.TryClaimAsync(key, CancellationToken.None)).IsClaimed.Should().BeTrue("the claim aged out of the retention window");
     }
 }

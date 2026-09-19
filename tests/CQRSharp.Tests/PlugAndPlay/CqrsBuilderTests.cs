@@ -189,8 +189,8 @@ public sealed class CqrsBuilderTests
         var store = provider.GetService<IIdempotencyStore>();
 
         store.Should().NotBeNull("UseIdempotency(i => i.UseInMemoryStore()) registers the in-memory idempotency store");
-        (await store!.TryClaimAsync("k", CancellationToken.None)).Should().BeTrue();
-        (await store.TryClaimAsync("k", CancellationToken.None)).Should().BeFalse("the key is already claimed");
+        (await store!.TryClaimAsync("k", CancellationToken.None)).IsClaimed.Should().BeTrue();
+        (await store.TryClaimAsync("k", CancellationToken.None)).IsClaimed.Should().BeFalse("the key is already claimed");
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public sealed class CqrsBuilderTests
         var store = provider.GetService<IIdempotencyStore>();
 
         store.Should().NotBeNull("a bare UseIdempotency() falls back to the in-memory store");
-        (await store!.TryClaimAsync("k", CancellationToken.None)).Should().BeTrue();
+        (await store!.TryClaimAsync("k", CancellationToken.None)).IsClaimed.Should().BeTrue();
     }
 
     [Fact]

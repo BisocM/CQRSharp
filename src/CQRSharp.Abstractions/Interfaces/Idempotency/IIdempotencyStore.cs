@@ -28,10 +28,23 @@ public interface IIdempotencyStore
     /// <param name="key">The idempotency key identifying the logical request.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>
-    ///     <c>true</c> if the key was newly claimed and the caller should proceed; <c>false</c> if the key was already
-    ///     claimed (the request is a duplicate).
+    ///     <see cref="IdempotencyClaimStatus.Claimed" /> if the key was newly claimed and the caller should proceed;
+    ///     <see cref="IdempotencyClaimStatus.InProgress" /> if another request holds it and has not completed;
+    ///     <see cref="IdempotencyClaimStatus.Completed" />, with whatever result was stored, if a request with this key
+    ///     already completed.
     /// </returns>
-    Task<bool> TryClaimAsync(string key, CancellationToken cancellationToken);
+    Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>
+    ///     Marks a key this caller claimed as <b>completed</b> and stores the request's result, so a later duplicate can
+    ///     be answered with the original outcome instead of being run again or rejected. The key keeps its original
+    ///     expiry: the retention window is how long a duplicate is recognised, not how long after completion.
+    /// </summary>
+    /// <remarks>Like <see cref="ReleaseAsync" />, this only affects a claim the caller still owns.</remarks>
+    /// <param name="key">The idempotency key to complete.</param>
+    /// <param name="result">The serialized result to replay to duplicates, or <c>null</c> when there is nothing to store.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken);
 
     /// <summary>
     ///     Releases a previously-claimed <paramref name="key" /> so the request can be processed again — used when a

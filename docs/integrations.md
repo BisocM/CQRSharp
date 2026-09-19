@@ -69,6 +69,9 @@ The outbox store participates in your `DbContext`'s transaction, which is what m
 outbox** atomic with your business writes. Configure your `DbContext` to include the outbox/idempotency
 entities per the package's model setup.
 
+> **Schema change in 5.0.** `CqrsIdempotencyKeys` gained two columns — `Completed` (bool, not null) and `Result`
+> (binary, nullable) — so a completed request's outcome can be replayed. Add a migration when upgrading from 4.x.
+
 The idempotency store is deliberately the opposite: it resolves a **fresh `DbContext` per claim/release**
 (through a DI scope), so a claim never joins — or flushes — the unit of work of the request it guards.
 

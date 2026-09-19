@@ -30,21 +30,42 @@ services.AddCqrsGenerated(b => b.UseIdempotency(i => i.UseInMemoryStore()));   /
 ```
 
 When a request implementing `IIdempotentRequest` is dispatched, the behavior **claims** its key before
-the handler runs:
+the handler runs. `IIdempotencyStore.TryClaimAsync(key)` answers one of three things:
 
-1. `IIdempotencyStore.TryClaimAsync(key)` is called. If it returns `false`, the key is already claimed —
-   the request is a duplicate and the behavior throws `DuplicateRequestException`.
-2. If it returns `true`, the handler runs. On **failure**, the claim is **released**
-   (`ReleaseAsync(key)`) so a later attempt (including a resilience retry) can re-process it; on success
-   the claim stands.
+| Claim status | Meaning | What the caller gets |
+| --- | --- | --- |
+| `Claimed` | The key was free. | The handler runs. On success the key is **completed** (`CompleteAsync`), storing the result; on failure it is **released** (`ReleaseAsync`) so a retry can re-process it. |
+| `Completed` | A request with this key already went through. | **The original result, replayed** — the handler does not run again. This is the case an idempotency key exists for: the client retried because it never saw the response. |
+| `InProgress` | The original is still running (or crashed and its claim has not expired). | `DuplicateRequestException` with `IsInProgress == true`; the caller can retry shortly. |
+
+### What can be replayed
+
+- A plain **`CommandResult`** is always replayed, with no configuration: only a *successful* command ever
+  completes, so the replay is simply `CommandResult.FromSuccess()`.
+- A **value-carrying result** (`CommandResult<T>`, a query result) needs to be stored, so it needs a serializer:
+
+  ```csharp
+  services.AddCqrsGenerated(b => b.UseIdempotency(i => i
+      .UseRedis(connectionString)
+      .ReplayResultsWith(new JsonSerializerOptions { TypeInfoResolver = AppJsonContext.Default })));
+  ```
+
+  Results are serialized only through the type metadata those options resolve, so this is **Native-AOT-safe**
+  with a source-generated `JsonSerializerContext` (list your result types, e.g.
+  `[JsonSerializable(typeof(CommandResult<Receipt>))]`). A result type the options cannot resolve — or any
+  value-carrying result when no serializer is configured — is not replayed: its duplicate gets
+  `DuplicateRequestException` (`IsInProgress == false`), exactly as before 5.0. Implement
+  `IIdempotencyResultSerializer` and pass it to `ReplayResultsWith(...)` for another format.
+- **Streams** are never replayed (their items are not stored); a duplicate is always rejected.
 
 `IIdempotencyStore` is small:
 
 ```csharp
 public interface IIdempotencyStore
 {
-    Task<bool> TryClaimAsync(string key, CancellationToken ct);   // true = newly claimed, proceed
-    Task ReleaseAsync(string key, CancellationToken ct);
+    Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken ct);      // Claimed / InProgress / Completed(+result)
+    Task CompleteAsync(string key, byte[]? result, CancellationToken ct);        // keep the key, remember the outcome
+    Task ReleaseAsync(string key, CancellationToken ct);                         // forget a claim that did not complete
 }
 ```
 

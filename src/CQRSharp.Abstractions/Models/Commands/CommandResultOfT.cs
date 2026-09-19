@@ -12,7 +12,16 @@ namespace CQRSharp;
 /// <typeparam name="TResult">The value produced on success.</typeparam>
 public sealed record CommandResult<TResult> : CommandResult
 {
-    private CommandResult(bool isSuccess, TResult? value, string? errorMessage, int? errorCode)
+    /// <summary>
+    ///     Rebuilds a result from its parts. Prefer <see cref="FromSuccess" /> / <see cref="FromError" /> in handlers; this
+    ///     exists so a serializer — System.Text.Json source generation included, which cannot use a non-public
+    ///     constructor — can round-trip a result, e.g. to replay it to a duplicate idempotent request.
+    /// </summary>
+    /// <param name="isSuccess">Whether the command succeeded.</param>
+    /// <param name="value">The produced value; meaningful only on success.</param>
+    /// <param name="errorMessage">The error message on failure.</param>
+    /// <param name="errorCode">An optional error code on failure.</param>
+    public CommandResult(bool isSuccess, TResult? value, string? errorMessage, int? errorCode)
         : base(isSuccess, errorMessage, errorCode)
         => Value = value;
 
