@@ -50,12 +50,12 @@
         the packed analyzers/dotnet/cs DLL below, which also flows transitively to meta-package consumers.
     -->
     <ItemGroup>
-        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
+        <ProjectReference Include="..\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
                           PrivateAssets="all"
                           ReferenceOutputAssembly="false"/>
     </ItemGroup>
     <ItemGroup>
-        <None Include="..\..\Infrastructure\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
+        <None Include="..\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
               Visible="false"/>

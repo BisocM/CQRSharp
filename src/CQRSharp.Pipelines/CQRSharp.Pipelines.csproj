@@ -31,7 +31,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

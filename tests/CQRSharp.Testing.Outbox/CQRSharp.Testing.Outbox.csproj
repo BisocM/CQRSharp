@@ -27,7 +27,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

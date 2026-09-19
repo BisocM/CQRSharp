@@ -145,7 +145,7 @@ jobs:
           path: ${{ env.TEST_RESULTS }}
 
       - name: Run Sample self-test (framework build)
-        run: dotnet run --project src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
+        run: dotnet run --project samples/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
 
       - name: NativeAOT publish Sample + run
         run: |
@@ -168,7 +168,7 @@ jobs:
           # -warnaserror. This is the whole-graph backstop: capture the ILComp output and fail loud on any trim/AOT
           # (IL) warning attributed to CQRSharp library source (the path filter ignores dependency warnings).
           publish_log="$(mktemp)"
-          dotnet publish src/Presentation/CQRSharp.Sample/CQRSharp.Sample.csproj \
+          dotnet publish samples/CQRSharp.Sample/CQRSharp.Sample.csproj \
             -c "${{ env.CONFIGURATION }}" \
             -f net8.0 \
             -r "${rid}" \
@@ -188,12 +188,12 @@ jobs:
           rm -rf "${{ env.PACKAGE_OUTPUT }}"
           mkdir -p "${{ env.PACKAGE_OUTPUT }}"
 
-          dotnet pack src/Domain/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Domain/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Application/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Integrations/CQRSharp.Redis/CQRSharp.Redis.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Integrations/CQRSharp.EntityFrameworkCore/CQRSharp.EntityFrameworkCore.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
-          dotnet pack src/Application/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp.Abstractions/CQRSharp.Abstractions.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp.Core/CQRSharp.Core.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp.Pipelines/CQRSharp.Pipelines.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp.Redis/CQRSharp.Redis.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp.EntityFrameworkCore/CQRSharp.EntityFrameworkCore.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
+          dotnet pack src/CQRSharp/CQRSharp.csproj -c "${{ env.CONFIGURATION }}" --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}" /p:ContinuousIntegrationBuild=true
 
       - name: Validate package contents
         id: validate

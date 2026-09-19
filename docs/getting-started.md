@@ -70,7 +70,7 @@ public sealed class GreetHandler : IQueryHandler<Greet, string>
 }
 ```
 
-This is the [`CQRSharp.Sample.Minimal`](../src/Presentation/CQRSharp.Sample.Minimal) project verbatim. You can scaffold
+This is the [`CQRSharp.Sample.Minimal`](../samples/CQRSharp.Sample.Minimal) project verbatim. You can scaffold
 the same app in one command with the included template:
 
 ```bash

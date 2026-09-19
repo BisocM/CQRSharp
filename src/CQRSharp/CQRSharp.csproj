@@ -27,13 +27,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
-        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+        <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           PrivateAssets="all"/>
-        <ProjectReference Include="..\..\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
+        <ProjectReference Include="..\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
                           PrivateAssets="all"/>
-        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
@@ -44,11 +44,11 @@
             dependency on Abstractions carries exclude="Analyzers"; the meta-package therefore ships its own copy for its
             direct consumers, who get exactly one (the transitive copy is excluded).
         -->
-        <None Include="..\..\Infrastructure\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
+        <None Include="..\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
               Visible="false"/>
-        <None Include="..\..\Infrastructure\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
+        <None Include="..\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
               Visible="false"/>

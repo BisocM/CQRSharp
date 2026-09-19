@@ -24,8 +24,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
-        <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false"/>
     </ItemGroup>

@@ -30,10 +30,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Domain\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
         <!-- Referenced for the OutboxStoreBuilder/IdempotencyStoreBuilder the UseRedis(...) fluent verbs extend; the
              store impls themselves still target only the Abstractions contracts. -->
-        <ProjectReference Include="..\..\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
