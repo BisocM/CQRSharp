@@ -41,13 +41,13 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.10"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore"/>
         <!-- ToTable/IsRowVersion and the other fluent relational mapping APIs live in the Relational package; the
              base EF Core metapackage does not include it. The outbox is a relational table, so this is required. -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10"/>
-        <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational"/>
+        <PackageReference Include="Microsoft.Extensions.Options"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     </ItemGroup>
 
     <ItemGroup>

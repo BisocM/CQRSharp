@@ -37,9 +37,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="StackExchange.Redis" Version="2.8.16"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
-        <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.2"/>
+        <PackageReference Include="StackExchange.Redis"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Options"/>
     </ItemGroup>
 
     <ItemGroup>

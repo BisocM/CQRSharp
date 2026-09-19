@@ -39,7 +39,7 @@
         types arrived transitively via an unused Microsoft.Extensions.DependencyInjection.Abstractions ref.)
     -->
     <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-        <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2"/>
+        <PackageReference Include="Microsoft.Bcl.AsyncInterfaces"/>
     </ItemGroup>
 
     <!--
