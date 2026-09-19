@@ -23,7 +23,9 @@ public sealed class ValidatorWithoutValidationAnalyzer : DiagnosticAnalyzer
     // verb flips the same pack flag, so the presence of any one means validation is active and there is nothing to warn.
     private static readonly ImmutableHashSet<string> PackEnablingMethods = ImmutableHashSet.Create(
         "UseValidation", "UsePipelinePack", "AddCqrsPipelinePack", "UseLogging", "UseExceptionHandling",
-        "UseRateLimiting", "UseResilience", "UseTimeout", "UseUnitOfWork", "AddValidationBehavior");
+        "UseRateLimiting", "UseResilience", "UseTimeout", "UseUnitOfWork", "AddValidationBehavior",
+        // CQRSharp.FluentValidation: registers its adapter and turns validation on.
+        "UseFluentValidation");
 
     // Presence of one of these marks the compilation as a composition root that actually wires CQRSharp.
     private static readonly ImmutableHashSet<string> RegistrationMethods = ImmutableHashSet.Create(
