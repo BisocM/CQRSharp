@@ -151,6 +151,13 @@ the host starts. If you build the provider without starting the host (a plain co
 `Send(...)` waits up to `BackgroundTaskQueueOptions.ConsumerStartTimeout` (default 10 s) for the consumer and then throws
 a clear error instead of hanging forever.
 
+**Shutdown.** When the host stops, the queue refuses new work immediately, then the consumer keeps running — both the
+work already executing *and* the backlog still queued — for up to `ShutdownTimeout` (default 30 s; keep it under the
+host's own `HostOptions.ShutdownTimeout`). Work the budget does not cover is cancelled: in-flight handlers see their
+`CancellationToken` fire, and callers awaiting an item that never started get an `OperationCanceledException` rather
+than a task that never completes. Set `DrainOnShutdown = false` to cancel the backlog straight away and give the grace
+period to in-flight work only.
+
 ## Hosting & lifetimes
 
 CQRSharp is built for the .NET **Generic Host**. Two consequences are worth knowing for non-standard setups:
