@@ -39,6 +39,9 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
         var commandHandler = known.ICommandHandler2;
         var queryHandler = known.IQueryHandler3;
         var streamHandler = known.IStreamRequestHandler3;
+        // Value-returning command handlers are their own interface family (they do not derive from ICommandHandler), so
+        // without them a same-project ResultCommandBase<T> handler was reported as "no discoverable handler".
+        var resultCommandHandler = known.IResultCommandHandler3;
         var notificationHandler = known.INotificationHandler;
 
         var handledRequests = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
@@ -60,7 +63,7 @@ public sealed class HandlerDiscoveryAnalyzer : DiagnosticAnalyzer
                 if (!iface.IsGenericType) continue;
                 var def = iface.OriginalDefinition;
 
-                if (IsAny(def, commandHandler, queryHandler, streamHandler))
+                if (IsAny(def, commandHandler, queryHandler, streamHandler, resultCommandHandler))
                     lock (gate)
                     {
                         handledRequests.Add(iface.TypeArguments[0]);

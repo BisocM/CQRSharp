@@ -426,17 +426,20 @@ public sealed partial class CqrsSourceGenerator
             _ => "reader.GetInt32()"
         };
 
+    // The underlying type arrives rendered with FullyQualifiedFormat, which prints special types as C# keywords
+    // ("long", not "global::System.Int64"). Matching only the metadata names sent every enum to GetInt32, which throws
+    // on a long/uint/ulong value outside the int range — leaving that outbox message undeliverable.
     private static string EnumReaderMethod(string? enumUnderlyingTypeName) =>
         enumUnderlyingTypeName switch
         {
-            "global::System.Byte" => "GetByte",
-            "global::System.SByte" => "GetSByte",
-            "global::System.Int16" => "GetInt16",
-            "global::System.UInt16" => "GetUInt16",
-            "global::System.Int32" => "GetInt32",
-            "global::System.UInt32" => "GetUInt32",
-            "global::System.Int64" => "GetInt64",
-            "global::System.UInt64" => "GetUInt64",
+            "byte" or "global::System.Byte" => "GetByte",
+            "sbyte" or "global::System.SByte" => "GetSByte",
+            "short" or "global::System.Int16" => "GetInt16",
+            "ushort" or "global::System.UInt16" => "GetUInt16",
+            "int" or "global::System.Int32" => "GetInt32",
+            "uint" or "global::System.UInt32" => "GetUInt32",
+            "long" or "global::System.Int64" => "GetInt64",
+            "ulong" or "global::System.UInt64" => "GetUInt64",
             _ => "GetInt32"
         };
 }

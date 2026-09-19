@@ -29,11 +29,13 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
             var commandHandler = known.ICommandHandler2;
             var queryHandler = known.IQueryHandler3;
             var streamHandler = known.IStreamRequestHandler3;
+            var resultCommandHandler = known.IResultCommandHandler3;
             var requestBase = known.RequestBaseGeneric;
-            if (requestBase is null || (commandHandler is null && queryHandler is null && streamHandler is null)) return;
+            if (requestBase is null ||
+                (commandHandler is null && queryHandler is null && streamHandler is null && resultCommandHandler is null)) return;
 
             start.RegisterSymbolAction(
-                ctx => Analyze(ctx, commandHandler, queryHandler, streamHandler, requestBase),
+                ctx => Analyze(ctx, commandHandler, queryHandler, streamHandler, resultCommandHandler, requestBase),
                 SymbolKind.NamedType);
         });
     }
@@ -43,6 +45,7 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? commandHandler,
         INamedTypeSymbol? queryHandler,
         INamedTypeSymbol? streamHandler,
+        INamedTypeSymbol? resultCommandHandler,
         INamedTypeSymbol requestBase)
     {
         var type = (INamedTypeSymbol)context.Symbol;
@@ -71,6 +74,11 @@ public sealed class HandlerContextMismatchAnalyzer : DiagnosticAnalyzer
                 handlerContext = iface.TypeArguments[2];
             }
             else if (streamHandler is not null && SymbolEqualityComparer.Default.Equals(def, streamHandler))
+            {
+                requestType = iface.TypeArguments[0];
+                handlerContext = iface.TypeArguments[2];
+            }
+            else if (resultCommandHandler is not null && SymbolEqualityComparer.Default.Equals(def, resultCommandHandler))
             {
                 requestType = iface.TypeArguments[0];
                 handlerContext = iface.TypeArguments[2];

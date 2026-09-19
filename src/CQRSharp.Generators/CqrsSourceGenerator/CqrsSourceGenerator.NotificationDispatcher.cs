@@ -26,20 +26,23 @@ public sealed partial class CqrsSourceGenerator
         sb.AppendLine("        public override Task Publish(INotification notification, CancellationToken cancellationToken = default)");
         sb.AppendLine("        {");
         sb.AppendLine("            ArgumentNullException.ThrowIfNull(notification);");
-        sb.AppendLine("            return notification switch");
-        sb.AppendLine("            {");
 
         var notificationTypes = candidates
             .SelectMany(c => c.HandledNotifications)
             .Distinct(System.StringComparer.Ordinal)
-            .OrderBy(t => t)
+            .OrderBy(t => t, System.StringComparer.Ordinal)
             .ToArray();
 
+        // Not a switch expression: a handler for a base type or interface (an audit INotificationHandler<INotification>)
+        // would put an arm that subsumes every later one — CS8510 in the consumer's build. Exact runtime type first, so
+        // a derived notification reaches its own handlers; assignable matches are the fallback.
+        sb.AppendLine("            var type = notification.GetType();");
         foreach (var typeName in notificationTypes)
-            sb.AppendLine($"                {typeName} n => Publish(n, cancellationToken),");
+            sb.AppendLine($"            if (type == typeof({typeName})) return Publish(({typeName})notification, cancellationToken);");
+        foreach (var typeName in notificationTypes)
+            sb.AppendLine($"            if (notification is {typeName}) return Publish(({typeName})notification, cancellationToken);");
 
-        sb.AppendLine("                _ => Task.CompletedTask");
-        sb.AppendLine("            };");
+        sb.AppendLine("            return Task.CompletedTask;");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");

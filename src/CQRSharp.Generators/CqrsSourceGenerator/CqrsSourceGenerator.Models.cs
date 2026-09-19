@@ -62,7 +62,8 @@ public sealed partial class CqrsSourceGenerator
     /// <summary>A pre-/post-handler or pipeline-exemption attribute, rendered to its construction expression.</summary>
     private sealed record AttributeModel(
         string AttributeTypeName,
-        EquatableArray<string> ConstructorArgs);
+        EquatableArray<string> ConstructorArgs,
+        EquatableArray<string> NamedArgs);
 
     /// <summary>
     ///     The request-derived metadata the request registry emits, read from the request type via a handler binding
