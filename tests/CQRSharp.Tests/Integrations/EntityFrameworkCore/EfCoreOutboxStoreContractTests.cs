@@ -1,7 +1,7 @@
 using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
 using CQRSharp.EntityFrameworkCore.Persistence;
-using CQRSharp.Testing.Outbox;
+using CQRSharp.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -70,7 +70,7 @@
                           ReferenceOutputAssembly="true"/>
         <ProjectReference Include="..\..\src\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
-        <ProjectReference Include="..\CQRSharp.Testing.Outbox\CQRSharp.Testing.Outbox.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Testing\CQRSharp.Testing.csproj"/>
         <!-- A second handler-bearing assembly, referenced to exercise CQRSharp's multi-assembly support: its module is
              wired by this assembly's AddCqrsGenerated (see MultiAssemblyTests). -->
         <ProjectReference Include="..\CQRSharp.Tests.ExternalModule\CQRSharp.Tests.ExternalModule.csproj"/>

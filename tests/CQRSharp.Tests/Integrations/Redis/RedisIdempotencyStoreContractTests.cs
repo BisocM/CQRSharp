@@ -7,13 +7,13 @@ using Xunit;
 namespace CQRSharp.Tests.Integrations.Redis;
 
 /// <summary>
-///     Runs the shared <see cref="CQRSharp.Testing.Idempotency.IdempotencyStoreContractTests" /> conformance suite
+///     Runs the shared <see cref="CQRSharp.Testing.IdempotencyStoreContractTests" /> conformance suite
 ///     against the Redis-backed <see cref="RedisIdempotencyStore" />. Every test runs against the live server provided
 ///     by <see cref="RedisFixture" />; when no Redis is reachable each test skips cleanly rather than failing. Each
 ///     instance gets a unique GUID key prefix and a long retention, so a shared Redis never bleeds state across runs and
 ///     the dedup window never trips during the contract tests.
 /// </summary>
-public sealed class RedisIdempotencyStoreContractTests : CQRSharp.Testing.Idempotency.IdempotencyStoreContractTests, IClassFixture<RedisFixture>
+public sealed class RedisIdempotencyStoreContractTests : CQRSharp.Testing.IdempotencyStoreContractTests, IClassFixture<RedisFixture>
 {
     private readonly RedisFixture _fixture;
     private readonly string _prefix = $"cqrsharp:test:idemp:{Guid.NewGuid():N}:";

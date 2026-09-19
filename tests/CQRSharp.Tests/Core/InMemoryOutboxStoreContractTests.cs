@@ -1,6 +1,6 @@
 using CQRSharp.Pipelines;
 using CQRSharp.Core.Background.Outbox.Types;
-using CQRSharp.Testing.Outbox;
+using CQRSharp.Testing;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 

@@ -8,13 +8,13 @@ using Xunit;
 namespace CQRSharp.Tests.Integrations.Redis;
 
 /// <summary>
-///     Runs the shared <see cref="CQRSharp.Testing.Outbox.OutboxStoreContractTests" /> conformance suite against the
+///     Runs the shared <see cref="CQRSharp.Testing.OutboxStoreContractTests" /> conformance suite against the
 ///     Redis-backed <see cref="RedisOutboxStore" />. Every test runs against the live server provided by
 ///     <see cref="RedisFixture" />; when no Redis is reachable each test skips cleanly rather than failing. Each store
 ///     instance gets a unique GUID key prefix and wipes that prefix's keys on creation, so the xUnit-parallel runs and
 ///     repeated test runs never bleed state into one another.
 /// </summary>
-public sealed class RedisOutboxStoreContractTests : CQRSharp.Testing.Outbox.OutboxStoreContractTests, IClassFixture<RedisFixture>
+public sealed class RedisOutboxStoreContractTests : CQRSharp.Testing.OutboxStoreContractTests, IClassFixture<RedisFixture>
 {
     private readonly RedisFixture _fixture;
     private readonly string _prefix = $"cqrsharp:test:{Guid.NewGuid():N}:";

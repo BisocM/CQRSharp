@@ -1,6 +1,6 @@
 using CQRSharp.Pipelines;
 using CQRSharp.Core.Idempotency;
-using CQRSharp.Testing.Idempotency;
+using CQRSharp.Testing;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
