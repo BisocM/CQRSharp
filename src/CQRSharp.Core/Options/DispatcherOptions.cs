@@ -8,13 +8,13 @@ namespace CQRSharp;
 public sealed class DispatcherOptions
 {
     /// <summary>
-    ///     Controls where a dispatched command or query executes. <see cref="Enums.RunMode.Inline" /> (the default) runs
-    ///     the handler inline on the caller's asynchronous flow; <see cref="Enums.RunMode.Queued" /> funnels the dispatch
+    ///     Controls where a dispatched command or query executes. <see cref="CQRSharp.RunMode.Inline" /> (the default) runs
+    ///     the handler inline on the caller's asynchronous flow; <see cref="CQRSharp.RunMode.Queued" /> funnels the dispatch
     ///     through the shared background task queue for centralized throttling and back-pressure. Both modes return the
     ///     handler's result to the caller — the difference is scheduling, not fire-and-forget.
     /// </summary>
     /// <remarks>
-    ///     The default value is <see cref="Enums.RunMode.Inline" />.
+    ///     The default value is <see cref="CQRSharp.RunMode.Inline" />.
     /// </remarks>
     public RunMode RunMode { get; set; } = RunMode.Inline;
 

@@ -83,11 +83,11 @@ public sealed class BackgroundTaskQueueOptions
     public TimeSpan ShutdownTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    ///     How long a <see cref="Enums.RunMode.Queued" /> dispatch waits for the background queue consumer to start
+    ///     How long a <see cref="CQRSharp.RunMode.Queued" /> dispatch waits for the background queue consumer to start
     ///     before failing. The consumer only runs once the Generic Host has started its hosted services; without a
     ///     running host nothing drains the queue, so a queued dispatch would otherwise hang forever. After this timeout
     ///     CQRSharp throws a clear error instead. Default is 10 seconds. (Irrelevant under the default
-    ///     <see cref="Enums.RunMode.Inline" />, where nothing is queued.)
+    ///     <see cref="CQRSharp.RunMode.Inline" />, where nothing is queued.)
     /// </summary>
     public TimeSpan ConsumerStartTimeout { get; set; } = TimeSpan.FromSeconds(10);
 }
