@@ -147,27 +147,30 @@ Apache-2.0 release.
 
 | Scenario | Library | Mean | vs MediatR | Allocated |
 | --- | --- | ---: | ---: | ---: |
-| Request | CQRSharp | 74.24 ns | 1.02× | 152 B |
-| Request | MediatR 12.5 | 72.69 ns | 1.00× | 336 B |
-| Request | Mediator 3.0 (source-gen) | 57.01 ns | 0.78× | 88 B |
-| Request + 1 behavior | CQRSharp | 112.87 ns | 1.09× | 328 B |
-| Request + 1 behavior | MediatR 12.5 | 103.25 ns | 1.00× | 528 B |
-| Request + 1 behavior | Mediator 3.0 (source-gen) | 77.58 ns | 0.75× | 184 B |
-| Notification | CQRSharp | 60.52 ns | 0.79× | 80 B |
-| Notification | MediatR 12.5 | 76.33 ns | 1.00× | 312 B |
-| Notification | Mediator 3.0 (source-gen) | 41.78 ns | 0.55× | 24 B |
-| Request in a new DI scope | CQRSharp | 215.0 ns | 1.56× | 720 B |
-| Request in a new DI scope | MediatR 12.5 | 138.3 ns | 1.00× | 568 B |
-| Request in a new DI scope | Mediator 3.0 (source-gen) | 171.4 ns | 1.24× | 536 B |
+| Request | CQRSharp | 76.61 ns | 1.05× | 152 B |
+| Request | MediatR 12.5 | 72.91 ns | 1.00× | 336 B |
+| Request | Mediator 3.0 (source-gen) | 54.40 ns | 0.75× | 88 B |
+| Request + 1 behavior | CQRSharp | 107.23 ns | 1.00× | 328 B |
+| Request + 1 behavior | MediatR 12.5 | 107.64 ns | 1.00× | 528 B |
+| Request + 1 behavior | Mediator 3.0 (source-gen) | 78.48 ns | 0.73× | 184 B |
+| Notification | CQRSharp | 59.28 ns | 0.81× | 80 B |
+| Notification | MediatR 12.5 | 73.35 ns | 1.00× | 312 B |
+| Notification | Mediator 3.0 (source-gen) | 45.09 ns | 0.61× | 24 B |
+| Stream (3 items) | CQRSharp | 163.80 ns | 0.72× | 176 B |
+| Stream (3 items) | MediatR 12.5 | 226.57 ns | 1.00× | 560 B |
+| Stream (3 items) | Mediator 3.0 (source-gen) | 127.99 ns | 0.57× | 184 B |
+| Request in a new DI scope | CQRSharp | 217.0 ns | 1.57× | 704 B |
+| Request in a new DI scope | MediatR 12.5 | 138.1 ns | 1.00× | 568 B |
+| Request in a new DI scope | Mediator 3.0 (source-gen) | 177.3 ns | 1.28× | 536 B |
 
 <sub>BenchmarkDotNet v0.15.8, Windows 11 (10.0.22631.5039/23H2/2023Update/SunValley3); AMD Ryzen 9 7950X3D 4.20GHz; .NET 8.0.26</sub>
 
-How to read it: **in-scope dispatch is on par with MediatR** (and publishes notifications faster), while allocating
-about half as much; **Mediator is the fastest of the three** and the one to pick if raw in-process throughput is the goal.
+How to read it: **in-scope dispatch is on par with MediatR** (and publishes notifications and streams faster), while
+allocating about half as much; **Mediator is the fastest of the three** and the one to pick if raw in-process throughput is the goal.
 The last row is what a web request actually pays — a fresh DI scope, the dispatcher resolved from it, one dispatch — and
 there CQRSharp is the slowest: `ICqrsDispatcher` is deliberately *scoped* (so a singleton cannot capture one and
 dispatch from the root provider), and MS DI charges the first scoped resolution in a scope for its resolved-services
-cache. It is ~75 ns; next to a handler that does any I/O it is noise, but it is the honest number.
+cache. It is ~80 ns; next to a handler that does any I/O it is noise, but it is the honest number.
 
 Two design points make the in-scope numbers possible without giving anything up: lifecycle notifications and pipeline
 stages are **pay-for-use** (nothing is resolved or published for a stage the container has no registration for), and

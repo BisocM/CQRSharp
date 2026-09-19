@@ -15,8 +15,8 @@ BenchmarkSwitcher.FromAssembly(typeof(DispatchBenchmarks).Assembly).Run(args);
 ///     reusing one would skip work and flatter it). All three dispatch from a single long-lived DI scope.
 /// </summary>
 /// <remarks>
-///     Not an apples-to-apples feature comparison: a CQRSharp dispatch also publishes the *Initiated / *Completed
-///     lifecycle notifications and starts a tracing activity, which the others do not do.
+///     Dispatch overhead, not a feature comparison. A CQRSharp dispatch also creates a request context; its lifecycle
+///     notifications, tracing and metrics are pay-for-use and nothing subscribes to them here.
 /// </remarks>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
@@ -73,6 +73,31 @@ public class DispatchBenchmarks
 
     [BenchmarkCategory("Notification"), Benchmark(Description = "CQRSharp")]
     public Task Notification_CqrSharp() => _cqrSharp.Publish(new Benchmarks.CqrSharp.Pinged());
+
+    // A three-item stream, enumerated to the end: the dispatch plus the per-item cost of whatever wraps the handler's stream.
+    [BenchmarkCategory("Stream (3 items)"), Benchmark(Baseline = true, Description = "MediatR 12.5")]
+    public async Task<int> Stream_MediatR()
+    {
+        var sum = 0;
+        await foreach (var item in _mediatR.CreateStream(new Benchmarks.MediatRLib.PingStream())) sum += item;
+        return sum;
+    }
+
+    [BenchmarkCategory("Stream (3 items)"), Benchmark(Description = "Mediator 3.0 (source-gen)")]
+    public async Task<int> Stream_Mediator()
+    {
+        var sum = 0;
+        await foreach (var item in _mediator.CreateStream(new Benchmarks.MediatorLib.PingStream())) sum += item;
+        return sum;
+    }
+
+    [BenchmarkCategory("Stream (3 items)"), Benchmark(Description = "CQRSharp")]
+    public async Task<int> Stream_CqrSharp()
+    {
+        var sum = 0;
+        await foreach (var item in _cqrSharp.Stream(new Benchmarks.CqrSharp.PingStream())) sum += item;
+        return sum;
+    }
 
     // What a web request actually pays: a fresh DI scope, the dispatcher resolved from it, one dispatch, scope disposed.
     [BenchmarkCategory("Request in a new DI scope"), Benchmark(Baseline = true, Description = "MediatR 12.5")]

@@ -11,6 +11,19 @@ public sealed class PingHandler : IQueryHandler<Ping, int>
     public Task<int> Handle(Ping query, CancellationToken cancellationToken) => Task.FromResult(42);
 }
 
+public sealed class PingStream : StreamRequestBase<int>;
+
+public sealed class PingStreamHandler : IStreamRequestHandler<PingStream, int>
+{
+    public async IAsyncEnumerable<int> Handle(PingStream request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        yield return 1;
+        yield return 2;
+        yield return 3;
+        await Task.CompletedTask;
+    }
+}
+
 public sealed record Pinged : INotification;
 
 public sealed class PingedHandler : INotificationHandler<Pinged>
