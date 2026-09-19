@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        Dispatch-overhead benchmarks: CQRSharp vs MediatR vs Mediator. Deliberately NOT part of CQRSharp.sln — it pulls
+        third-party mediators that the library itself must never depend on, and it is run on demand, not in CI
+        (see benchmarks/README.md for the command).
+
+        MediatR is pinned to 12.5.0, the last release under the Apache-2.0 license (13.0+ is commercially licensed).
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <!-- Three libraries each define IRequest/INotification/IPipelineBehavior; every file names its own explicitly. -->
+        <NoWarn>$(NoWarn);CQRA001;CQRA003</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.15.8"/>
+        <PackageReference Include="MediatR" Version="[12.5.0]"/>
+        <PackageReference Include="Mediator.Abstractions" Version="3.0.2"/>
+        <PackageReference Include="Mediator.SourceGenerator" Version="3.0.2">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Generators\CQRSharp.Generators.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+</Project>
