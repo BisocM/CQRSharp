@@ -31,6 +31,12 @@
         <!-- FakeTimeProvider drives the clock seam deterministically in timing tests (no real Task.Delay). -->
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10"/>
+        <!-- In-memory TestServer for the CQRSharp.AspNetCore integration tests. TestHost must match the shared
+             framework's major: the 8.0 response PipeWriter lacks UnflushedBytes, which System.Text.Json 9+ requires. -->
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.10" Condition="'$(TargetFramework)' == 'net8.0'"/>
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="9.0.2" Condition="'$(TargetFramework)' == 'net9.0'"/>
+        <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.2" Condition="'$(TargetFramework)' == 'net10.0'"/>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
         <PackageReference Include="StackExchange.Redis" Version="2.8.16"/>
         <!-- EF Core Sqlite pulls the SQLitePCLRaw e_sqlite3 native lib in transitively for the EF outbox-store tests;
@@ -71,6 +77,7 @@
         <ProjectReference Include="..\..\src\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.FluentValidation\CQRSharp.FluentValidation.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.AspNetCore\CQRSharp.AspNetCore.csproj"/>
     </ItemGroup>
 
     <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator
