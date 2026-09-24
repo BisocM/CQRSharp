@@ -1,0 +1,24 @@
+<Project>
+
+    <!--
+        CQRSharp packages ship as one family at one version: Core grants its internals to Pipelines, the generated code
+        compiled into a consumer names Core types of this exact release, and the store packages implement contracts that
+        change together. A package's dependency on another CQRSharp package is therefore pinned to the exact version it was
+        built with ([5.0.0], not >= 5.0.0), so NuGet refuses a mixed set at restore instead of it failing at run time.
+        NuGet offers no metadata for a ProjectReference's version range, so the range is rewritten here, after pack has
+        read each referenced project's version and before it writes the nuspec. validate_packages.py checks the result.
+    -->
+    <Target Name="PinCQRSharpDependencies" AfterTargets="_GetProjectReferenceVersions">
+        <ItemGroup>
+            <_CQRSharpPinnedReference Include="@(_ProjectReferencesWithVersions)"
+                                      Condition="$([System.String]::Copy('%(_ProjectReferencesWithVersions.ProjectVersion)').StartsWith('['))" />
+            <_CQRSharpPinnedReference Include="@(_ProjectReferencesWithVersions)"
+                                      Condition="!$([System.String]::Copy('%(_ProjectReferencesWithVersions.ProjectVersion)').StartsWith('['))">
+                <ProjectVersion>[%(_ProjectReferencesWithVersions.ProjectVersion)]</ProjectVersion>
+            </_CQRSharpPinnedReference>
+            <_ProjectReferencesWithVersions Remove="@(_ProjectReferencesWithVersions)" />
+            <_ProjectReferencesWithVersions Include="@(_CQRSharpPinnedReference)" />
+        </ItemGroup>
+    </Target>
+
+</Project>

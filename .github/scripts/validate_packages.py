@@ -116,6 +116,17 @@ def check_analyzers(package_id: str, names: set[str], dependencies: list[Element
              f"every project that references {package_id} (reference it with PrivateAssets that keep analyzers).")
 
 
+def check_pinned(package_id: str, version: str, dependencies: list[ElementTree.Element]) -> None:
+    # The CQRSharp packages ship as one family (shared internals, generated code bound to this release), so each one
+    # depends on its siblings at exactly its own version; src/Directory.Build.targets writes the range.
+    expected = f"[{version}]"
+    for d in dependencies:
+        dependency_id = d.get("id", "")
+        if dependency_id.startswith("CQRSharp") and d.get("version", "") != expected:
+            fail(f"{package_id}: depends on {dependency_id} {d.get('version', '')!r}; CQRSharp packages must pin each "
+                 f"other to exactly {expected}.")
+
+
 def check_meta(names: set[str]) -> None:
     if GENERATOR not in names:
         fail(f"{META}: the meta-package must embed {GENERATOR} for plug-and-play.")
@@ -156,6 +167,7 @@ def main() -> int:
             observed[package_id] = version
             names = set(z.namelist())
             check_analyzers(package_id, names, dependencies)
+            check_pinned(package_id, version, dependencies)
 
             for shared in SHARED_FILES:
                 if shared not in names:
