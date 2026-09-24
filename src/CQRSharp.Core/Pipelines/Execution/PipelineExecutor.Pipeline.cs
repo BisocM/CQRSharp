@@ -136,20 +136,18 @@ internal sealed partial class PipelineExecutor
         CancellationToken cancellationToken) where TRequest : IRequest
     {
         // Lifecycle notifications are skipped only when the provider can prove nothing subscribes to them.
-        var lifecycle = plan.MayHaveLifecycleSubscribers
-            ? services.GetRequiredService<INotificationDispatcher>()
-            : null;
+        var publishesLifecycle = plan.MayHaveLifecycleSubscribers;
 
         var kind = RequestKindOf<TRequest, TResult>.Value;
-        if (lifecycle is not null)
+        if (publishesLifecycle)
             switch (kind)
             {
                 // Every command, a value-returning one (ICommand<T>, dispatched with a CommandResult<T>) included.
                 case RequestKind.Command:
-                    await lifecycle.Publish(new CommandInitiatedNotification((ICommandMarker)request), cancellationToken).ConfigureAwait(false);
+                    await _notifications.Publish(services, new CommandInitiatedNotification((ICommandMarker)request), cancellationToken).ConfigureAwait(false);
                     break;
                 case RequestKind.Query:
-                    await lifecycle.Publish(new QueryInitiatedNotification<TResult>((IQuery<TResult>)request), cancellationToken)
+                    await _notifications.Publish(services, new QueryInitiatedNotification<TResult>((IQuery<TResult>)request), cancellationToken)
                         .ConfigureAwait(false);
                     break;
             }
@@ -170,8 +168,8 @@ internal sealed partial class PipelineExecutor
         catch (Exception ex)
         {
             attempt.Fail();
-            if (lifecycle is not null)
-                await PublishFailedAsync<TRequest, TResult>(lifecycle, request, ex).ConfigureAwait(false);
+            if (publishesLifecycle)
+                await PublishFailedAsync<TRequest, TResult>(services, request, ex).ConfigureAwait(false);
             await InvokePostHandlersAsync<TRequest>(plan.PostHandlers, request, RequestOutcome.FromException(ex), services, cancellationToken)
                 .ConfigureAwait(false);
             throw;
@@ -185,23 +183,23 @@ internal sealed partial class PipelineExecutor
                 .ConfigureAwait(false) is { } postHandlerFailure)
         {
             attempt.Fail();
-            if (lifecycle is not null)
-                await PublishFailedAsync<TRequest, TResult>(lifecycle, request, postHandlerFailure).ConfigureAwait(false);
+            if (publishesLifecycle)
+                await PublishFailedAsync<TRequest, TResult>(services, request, postHandlerFailure).ConfigureAwait(false);
             ExceptionDispatchInfo.Capture(postHandlerFailure).Throw();
         }
 
-        if (lifecycle is not null)
+        if (publishesLifecycle)
             try
             {
                 switch (kind)
                 {
                     // The kind guarantees a CommandResult (a value-returning command's CommandResult<T> derives from it).
                     case RequestKind.Command:
-                        await lifecycle.Publish(new CommandCompletedNotification((ICommandMarker)request, (CommandResult)(object)result!), cancellationToken)
+                        await _notifications.Publish(services, new CommandCompletedNotification((ICommandMarker)request, (CommandResult)(object)result!), cancellationToken)
                             .ConfigureAwait(false);
                         break;
                     case RequestKind.Query:
-                        await lifecycle.Publish(new QueryCompletedNotification<TResult>((IQuery<TResult>)request, result), cancellationToken)
+                        await _notifications.Publish(services, new QueryCompletedNotification<TResult>((IQuery<TResult>)request, result), cancellationToken)
                             .ConfigureAwait(false);
                         break;
                 }
@@ -218,14 +216,14 @@ internal sealed partial class PipelineExecutor
         return result;
     }
 
-    private Task PublishFailedAsync<TRequest, TResult>(INotificationDispatcher lifecycle, TRequest request, Exception failure)
+    private Task PublishFailedAsync<TRequest, TResult>(IServiceProvider services, TRequest request, Exception failure)
         where TRequest : IRequest
         => RequestKindOf<TRequest, TResult>.Value switch
         {
             RequestKind.Command => PublishTerminalFailureAsync<TRequest, CommandFailedNotification>(
-                lifecycle, new CommandFailedNotification((ICommandMarker)request, failure)),
+                services, new CommandFailedNotification((ICommandMarker)request, failure)),
             RequestKind.Query => PublishTerminalFailureAsync<TRequest, QueryFailedNotification<TResult>>(
-                lifecycle, new QueryFailedNotification<TResult>((IQuery<TResult>)request, failure)),
+                services, new QueryFailedNotification<TResult>((IQuery<TResult>)request, failure)),
             _ => Task.CompletedTask
         };
 

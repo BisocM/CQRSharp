@@ -54,25 +54,6 @@ public abstract class NotificationSubscription
     /// </summary>
     public string HandlerName { get; }
 
-    /// <summary>
-    ///     Delivers a notification to this handler alone, in the given scope, wrapped by the notification pipeline
-    ///     behaviors of the notification's runtime type: the outbox's per-handler delivery.
-    /// </summary>
-    /// <param name="services">The scope to resolve the handler and the behaviors from.</param>
-    /// <param name="notification">The notification; assignable to <see cref="NotificationType" />.</param>
-    /// <param name="cancellationToken">A token to cancel the delivery.</param>
-    /// <returns>The delivery's task.</returns>
-    internal Task Invoke(IServiceProvider services, INotification notification, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(notification);
-
-        var routing = services.GetService<NotificationRouting>();
-        return routing?.TryGetRoute(notification.GetType()) is { } route
-            ? route.Deliver(services, routing, notification, this, cancellationToken)
-            : DeliverAsDeclared(services, routing, notification, cancellationToken);
-    }
-
     /// <summary>Runs the handler, without behaviors: one step of a delivery or of an in-process fan-out.</summary>
     internal abstract Task Handle(IServiceProvider services, INotification notification, CancellationToken cancellationToken);
 
@@ -80,7 +61,7 @@ public abstract class NotificationSubscription
     ///     Delivers through the behaviors of the handler's declared type, for a runtime type no module has a route for
     ///     (declared and handled only where the generator does not run).
     /// </summary>
-    internal abstract Task DeliverAsDeclared(IServiceProvider services, NotificationRouting? routing, INotification notification, CancellationToken cancellationToken);
+    internal abstract Task DeliverAsDeclared(NotificationPublisher publisher, IServiceProvider services, INotification notification, CancellationToken cancellationToken);
 
     /// <inheritdoc />
     public override string ToString() => $"{HandlerName} ({NotificationType.Name})";
@@ -93,13 +74,7 @@ public abstract class NotificationSubscription
         internal override Task Handle(IServiceProvider services, INotification notification, CancellationToken cancellationToken)
             => services.GetRequiredService<THandler>().Handle((TNotification)notification, cancellationToken) ?? Task.CompletedTask;
 
-        internal override Task DeliverAsDeclared(IServiceProvider services, NotificationRouting? routing, INotification notification, CancellationToken cancellationToken)
-        {
-            var behaviors = NotificationBehaviors.Resolve<TNotification>(services, routing);
-            return behaviors.Length == 0
-                ? NotificationBehaviors.Start(this, services, notification, cancellationToken)
-                : NotificationBehaviors.Run(behaviors, (TNotification)notification,
-                    ct => NotificationBehaviors.Start(this, services, notification, ct), cancellationToken);
-        }
+        internal override Task DeliverAsDeclared(NotificationPublisher publisher, IServiceProvider services, INotification notification, CancellationToken cancellationToken)
+            => publisher.DeliverAs(services, this, (TNotification)notification, cancellationToken);
     }
 }

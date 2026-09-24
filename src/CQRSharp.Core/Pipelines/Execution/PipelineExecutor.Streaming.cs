@@ -245,12 +245,10 @@ internal sealed partial class PipelineExecutor
         where TRequest : IStreamRequest<TItem>
     {
         // Lifecycle notifications are skipped only when the provider can prove nothing subscribes to them.
-        var lifecycle = plan.MayHaveLifecycleSubscribers
-            ? services.GetRequiredService<INotificationDispatcher>()
-            : null;
+        var publishesLifecycle = plan.MayHaveLifecycleSubscribers;
 
-        if (lifecycle is not null)
-            await lifecycle.Publish(new StreamInitiatedNotification<TItem>(request), cancellationToken).ConfigureAwait(false);
+        if (publishesLifecycle)
+            await _notifications.Publish(services, new StreamInitiatedNotification<TItem>(request), cancellationToken).ConfigureAwait(false);
 
         // As on the command/query path, this attempt owns what it buffers: a stream that fails before its first item
         // and is retried by the resilience behavior leaves only the successful attempt's notifications.
@@ -324,16 +322,16 @@ internal sealed partial class PipelineExecutor
                     .ConfigureAwait(false) is { } postHandlerFailure)
             {
                 attempt.Fail();
-                if (lifecycle is not null)
+                if (publishesLifecycle)
                     await PublishTerminalFailureAsync<TRequest, StreamFailedNotification<TItem>>(
-                        lifecycle, new StreamFailedNotification<TItem>(request, yielded, postHandlerFailure)).ConfigureAwait(false);
+                        services, new StreamFailedNotification<TItem>(request, yielded, postHandlerFailure)).ConfigureAwait(false);
                 ExceptionDispatchInfo.Capture(postHandlerFailure).Throw();
             }
 
-            if (lifecycle is not null)
+            if (publishesLifecycle)
                 try
                 {
-                    await lifecycle.Publish(new StreamCompletedNotification<TItem>(request, yielded), cancellationToken).ConfigureAwait(false);
+                    await _notifications.Publish(services, new StreamCompletedNotification<TItem>(request, yielded), cancellationToken).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -346,9 +344,9 @@ internal sealed partial class PipelineExecutor
         else if (failure is not null)
         {
             attempt.Fail();
-            if (lifecycle is not null)
+            if (publishesLifecycle)
                 await PublishTerminalFailureAsync<TRequest, StreamFailedNotification<TItem>>(
-                    lifecycle, new StreamFailedNotification<TItem>(request, yielded, failure)).ConfigureAwait(false);
+                    services, new StreamFailedNotification<TItem>(request, yielded, failure)).ConfigureAwait(false);
             await InvokePostHandlersAsync(plan.PostHandlers, request, RequestOutcome.FromException(failure), services, cancellationToken)
                 .ConfigureAwait(false);
             ExceptionDispatchInfo.Capture(failure).Throw();

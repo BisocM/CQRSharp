@@ -91,6 +91,7 @@ public sealed class OutboxRollingDeployTests
             logger ?? NullLogger<OutboxProcessor>.Instance,
             provider.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(ProcessorOptions),
+            NotificationPublisher.Create(provider),
             _time);
 
         await processor.StartAsync(CancellationToken.None);

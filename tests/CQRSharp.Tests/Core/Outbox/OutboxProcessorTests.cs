@@ -77,7 +77,9 @@ public sealed class OutboxProcessorTests
         });
 
         var scopeFactory = new OutboxScopeFactory(_store.Object, _serializer.Object, _subscriptions, _handlers);
-        return new OutboxProcessor(NullLogger<OutboxProcessor>.Instance, scopeFactory, options, _time);
+        var publisher = new NotificationPublisher(
+            scopeFactory.CreateScope().ServiceProvider, [], _subscriptions, new NotificationOptions(), new OutboxOptions(), metrics: null);
+        return new OutboxProcessor(NullLogger<OutboxProcessor>.Instance, scopeFactory, options, publisher, _time);
     }
 
     // Subscribes the test's handler (or its sibling) to the test notification, delivering through handle.

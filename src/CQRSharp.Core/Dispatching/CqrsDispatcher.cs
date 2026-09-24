@@ -7,12 +7,11 @@ namespace CQRSharp;
 
 /// <summary>
 ///     The built-in <see cref="ICqrsDispatcher" />: a per-scope façade that routes requests and streams through the
-///     provider-wide route table into this scope's pipeline executor, and hands notifications to the notification
-///     dispatcher.
+///     provider-wide route table into this scope's pipeline executor, and hands notifications, with this scope, to the
+///     provider-wide notification publisher.
 /// </summary>
 internal sealed class CqrsDispatcher : ICqrsDispatcher
 {
-    // Built on first use: a scope that only ever publishes should not also pay for the executor and the routers.
     private readonly IServiceProvider _services;
 
     // Captured with the scope while it is certainly alive, so building the request path later never reads from it: a
@@ -20,8 +19,9 @@ internal sealed class CqrsDispatcher : ICqrsDispatcher
     // request runs in a scope of its own. (Its context is still the caller's: a custom context factory is resolved from
     // the scope, and fails once the scope is gone.)
     private readonly PipelineExecutorShared _shared;
+
+    // Built on first use: a scope that only ever publishes should not also pay for the executor and the routers.
     private PipelineExecutor? _executor;
-    private INotificationDispatcher? _notificationDispatcher;
     private CompositeRequestDispatcher? _requestDispatcher;
     private CompositeStreamRequestDispatcher? _streamRequestDispatcher;
 
@@ -39,9 +39,6 @@ internal sealed class CqrsDispatcher : ICqrsDispatcher
 
     private CompositeStreamRequestDispatcher Streams
         => _streamRequestDispatcher ??= new CompositeStreamRequestDispatcher(_shared.RouteTable, Executor);
-
-    private INotificationDispatcher Notifications
-        => _notificationDispatcher ??= _services.GetRequiredService<INotificationDispatcher>();
 
     /// <inheritdoc />
     public Task<TResponse> Send<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
@@ -91,6 +88,6 @@ internal sealed class CqrsDispatcher : ICqrsDispatcher
         where TNotification : INotification
     {
         ArgumentNullException.ThrowIfNull(notification);
-        return Notifications.Publish(notification, cancellationToken);
+        return _shared.Notifications.Publish(_services, notification, cancellationToken);
     }
 }

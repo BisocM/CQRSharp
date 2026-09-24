@@ -136,10 +136,12 @@ Notifications:
     removed. `AddNotificationSerializer<T>()` replaces the generated serializer entirely, before or after
     `AddCqrsGenerated`, so it must name and serialize every durable notification.
 23. `ICqrsDispatcher` is the one dispatch seam. The notification dispatchers (`NotificationDispatcher`,
-    `DirectNotificationDispatcher` and their interfaces `INotificationDispatcher`, `IDirectNotificationDispatcher`), the
-    subscription registry and the pipeline executor are internal, and `IPipelineExecutor`, `IRequestDispatcher` and
-    `IStreamRequestDispatcher` do not exist: send, stream and publish through `ICqrsDispatcher`, and wrap dispatch with
-    pipeline behaviors rather than by replacing a service in the container.
+    `DirectNotificationDispatcher` and their interfaces `INotificationDispatcher`, `IDirectNotificationDispatcher`) are
+    removed: publishing goes through one internal publisher per service provider, which is handed the publishing scope
+    on every call, so nothing is resolved or allocated per scope to publish. The subscription registry and the pipeline
+    executor are internal, and `IPipelineExecutor`, `IRequestDispatcher` and `IStreamRequestDispatcher` do not exist:
+    send, stream and publish through `ICqrsDispatcher`, and wrap dispatch with pipeline behaviors rather than by
+    replacing a service in the container.
 
 Unit of work:
 

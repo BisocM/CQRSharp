@@ -51,13 +51,13 @@ internal sealed partial class PipelineExecutor
     ///     failure must still be able to run. A subscriber that fails is logged and never replaces the exception the
     ///     request's caller is about to receive.
     /// </summary>
-    private async Task PublishTerminalFailureAsync<TRequest, TNotification>(INotificationDispatcher lifecycle, TNotification notification)
+    private async Task PublishTerminalFailureAsync<TRequest, TNotification>(IServiceProvider services, TNotification notification)
         where TRequest : IRequest
         where TNotification : INotification
     {
         try
         {
-            await lifecycle.Publish(notification, CancellationToken.None).ConfigureAwait(false);
+            await _notifications.Publish(services, notification, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

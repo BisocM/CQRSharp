@@ -47,8 +47,8 @@ public sealed class NotificationPipelineTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var dispatcher = scope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
-        await dispatcher.Publish((INotification)new TestNotification(), TestContext.Current.CancellationToken);
+        var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
+        await dispatcher.Publish<INotification>(new TestNotification(), TestContext.Current.CancellationToken);
 
         provider.GetRequiredService<NotificationTrace>().Snapshot().Should().Equal(
             "A:before",
@@ -120,7 +120,8 @@ public sealed class NotificationPipelineTests
         var registry = provider.GetRequiredService<INotificationSubscriptionRegistry>();
 
         registry.TryGetSubscription(typeof(FanOutOrderPlaced), "tests.fanout.auditor", out var subscription).Should().BeTrue();
-        await subscription!.Invoke(scope.ServiceProvider, new FanOutOrderPlaced(), TestContext.Current.CancellationToken);
+        await provider.GetRequiredService<NotificationPublisher>()
+            .Deliver(scope.ServiceProvider, subscription!, new FanOutOrderPlaced(), TestContext.Current.CancellationToken);
 
         provider.GetRequiredService<NotificationTrace>().Snapshot().Should().Equal(nameof(FanOutOrderPlaced));
         provider.GetRequiredService<FanOutRecorder>().Deliveries.Should().Equal("tests.fanout.auditor");

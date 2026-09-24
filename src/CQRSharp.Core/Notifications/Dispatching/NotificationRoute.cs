@@ -21,46 +21,38 @@ public abstract class NotificationRoute
     public static NotificationRoute For<TNotification>() where TNotification : INotification => Route<TNotification>.Instance;
 
     /// <summary>Publishes the notification in-process, as its own type.</summary>
-    internal abstract Task Publish(DirectNotificationDispatcher dispatcher, INotification notification, CancellationToken cancellationToken);
+    internal abstract Task Publish(NotificationPublisher publisher, IServiceProvider services, INotification notification, CancellationToken cancellationToken);
 
     /// <summary>
     ///     The types of the handlers registered by hand for this notification type, which an outbox delivery never
     ///     reaches: the outbox delivers to subscriptions only.
     /// </summary>
-    internal abstract Type[] HandRegisteredHandlerTypes(IServiceProvider services, NotificationRouting routing);
+    internal abstract Type[] HandRegisteredHandlerTypes(NotificationPublisher publisher, IServiceProvider services);
 
     /// <summary>Delivers the notification to one subscription, through the behaviors of the notification's type.</summary>
     internal abstract Task Deliver(
+        NotificationPublisher publisher,
         IServiceProvider services,
-        NotificationRouting routing,
-        INotification notification,
         NotificationSubscription subscription,
+        INotification notification,
         CancellationToken cancellationToken);
 
     private sealed class Route<TNotification> : NotificationRoute where TNotification : INotification
     {
         public static readonly Route<TNotification> Instance = new();
 
-        internal override Task Publish(DirectNotificationDispatcher dispatcher, INotification notification, CancellationToken cancellationToken)
-            => dispatcher.PublishAs((TNotification)notification, cancellationToken);
+        internal override Task Publish(NotificationPublisher publisher, IServiceProvider services, INotification notification, CancellationToken cancellationToken)
+            => publisher.PublishAsRuntimeType(services, (TNotification)notification, cancellationToken);
 
-        internal override Type[] HandRegisteredHandlerTypes(IServiceProvider services, NotificationRouting routing)
-            => Array.ConvertAll(
-                routing.HandRegisteredHandlers<TNotification>(services, routing.GetSubscriptions(typeof(TNotification))),
-                handler => handler.GetType());
+        internal override Type[] HandRegisteredHandlerTypes(NotificationPublisher publisher, IServiceProvider services)
+            => publisher.HandRegisteredHandlerTypes<TNotification>(services);
 
         internal override Task Deliver(
+            NotificationPublisher publisher,
             IServiceProvider services,
-            NotificationRouting routing,
-            INotification notification,
             NotificationSubscription subscription,
+            INotification notification,
             CancellationToken cancellationToken)
-        {
-            var behaviors = NotificationBehaviors.Resolve<TNotification>(services, routing);
-            return behaviors.Length == 0
-                ? NotificationBehaviors.Start(subscription, services, notification, cancellationToken)
-                : NotificationBehaviors.Run(behaviors, (TNotification)notification,
-                    ct => NotificationBehaviors.Start(subscription, services, notification, ct), cancellationToken);
-        }
+            => publisher.DeliverAs(services, subscription, (TNotification)notification, cancellationToken);
     }
 }

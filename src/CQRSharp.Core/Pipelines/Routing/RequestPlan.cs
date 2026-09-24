@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Registries;
 using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,9 +11,8 @@ namespace CQRSharp.Core.Pipelines;
 ///     the part that makes the common case cheap — which optional stages this provider can skip entirely because
 ///     nothing is registered for them (pipeline behaviors, lifecycle-notification subscribers).
 /// </summary>
-internal abstract class RequestPlanBase
+internal abstract class RequestPlanBase : ProviderPlan
 {
-    public required RequestPlanCache Owner { get; init; }
     public required RequestMetadata Metadata { get; init; }
     public Type HandlerType => Metadata.HandlerType;
 
@@ -73,109 +72,58 @@ internal sealed class RequestPlanCache(
     IServiceProvider rootProvider,
     IRequestRegistry requestRegistry,
     IHandlerRegistry handlerRegistry,
-    IContextFactoryRegistry contextFactoryRegistry) : IDisposable
+    IContextFactoryRegistry contextFactoryRegistry,
+    NotificationPublisher notifications) : IDisposable
 {
-    private readonly ConcurrentDictionary<Type, RequestPlanBase> _plans = new();
-
-    // One reset per static slot this cache ever filled, so disposing the provider (a test host, an in-process restart)
-    // does not leave its plans - and through them the provider's whole graph - rooted by a static for the process life.
-    private readonly ConcurrentBag<Action> _slotResets = new();
+    private readonly ProviderPlanCache _plans = new();
+    private readonly ProviderRegistrations _registrations = new(rootProvider);
     private bool? _usesDefaultContextFactory;
 
-    // Null when the container does not expose registration queries (a non-Microsoft container, a hand-built test
-    // provider). Every "can this stage be skipped?" question then answers "no": every stage runs, which is always correct.
-    private readonly IServiceProviderIsService? _isService = rootProvider.GetService<IServiceProviderIsService>();
-
     public RequestPlan<TRequest, TResult> Get<TRequest, TResult>() where TRequest : IRequest
-    {
-        // One static slot per closed generic remembers the last provider's plan, so the steady state is a reference
-        // comparison rather than a dictionary lookup. A process with several providers falls back to the dictionary.
-        var cached = Slot<RequestPlan<TRequest, TResult>>.Plan;
-        if (cached is not null && ReferenceEquals(cached.Owner, this)) return cached;
-
-        var plan = (RequestPlan<TRequest, TResult>)_plans.GetOrAdd(
-            typeof(TRequest),
-            static (_, self) =>
-            {
-                var built = self.Build<TRequest, TResult>();
-                // Registered once the plan exists: a build that throws (a misconfigured registry) is retried on the next
-                // dispatch and must not leave a reset behind per attempt.
-                self._slotResets.Add(() => Slot<RequestPlan<TRequest, TResult>>.Forget(self));
-                return built;
-            },
-            this);
-
-        Slot<RequestPlan<TRequest, TResult>>.Plan = plan;
-        return plan;
-    }
+        => _plans.Get(this, static (owner, self) => self.Build<TRequest, TResult>(owner));
 
     public StreamPlan<TRequest, TItem> GetStream<TRequest, TItem>() where TRequest : IRequest
-    {
-        var cached = Slot<StreamPlan<TRequest, TItem>>.Plan;
-        if (cached is not null && ReferenceEquals(cached.Owner, this)) return cached;
+        => _plans.Get(this, static (owner, self) => self.BuildStream<TRequest, TItem>(owner));
 
-        var plan = (StreamPlan<TRequest, TItem>)_plans.GetOrAdd(
-            typeof(TRequest),
-            static (_, self) =>
-            {
-                var built = self.BuildStream<TRequest, TItem>();
-                self._slotResets.Add(() => Slot<StreamPlan<TRequest, TItem>>.Forget(self));
-                return built;
-            },
-            this);
+    public void Dispose() => _plans.Dispose();
 
-        Slot<StreamPlan<TRequest, TItem>>.Plan = plan;
-        return plan;
-    }
-
-    public void Dispose()
-    {
-        foreach (var reset in _slotResets) reset();
-        _plans.Clear();
-    }
-
-    private RequestPlan<TRequest, TResult> Build<TRequest, TResult>() where TRequest : IRequest
+    private RequestPlan<TRequest, TResult> Build<TRequest, TResult>(ProviderPlanCache owner) where TRequest : IRequest
     {
         var metadata = Resolve(typeof(TRequest));
-        var discovered = HasDiscoveredBehaviors(typeof(IPipelineBehavior<TRequest, TResult>));
+        var behaviors = _registrations.Behaviors<TResult>(typeof(IPipelineBehavior<TRequest, TResult>));
         return new RequestPlan<TRequest, TResult>
         {
-            Owner = this,
+            Owner = owner,
             Metadata = metadata,
             Invoker = ResolveInvoker<Func<object, TRequest, CancellationToken, Task<TResult>>>(typeof(TRequest)),
             ContextSource = contextFactoryRegistry.TryGetSource(metadata.ContextType),
             UsesDefaultContextFactory = UsesDefaultContextFactory(metadata.ContextType),
-            MayHaveBehaviors = discovered || (UsesClosedBehaviors<TResult>()
-                ? HasClosedBehaviors(typeof(IPipelineBehavior<TRequest, TResult>))
-                : IsRegistered(typeof(IPipelineBehavior<TRequest, TResult>))),
-            MergesDiscoveredBehaviors = discovered,
-            UsesClosedBehaviors = UsesClosedBehaviors<TResult>(),
+            MayHaveBehaviors = behaviors.MayHaveAny,
+            MergesDiscoveredBehaviors = behaviors.MergesDiscovered,
+            UsesClosedBehaviors = behaviors.UsesClosedSet,
             MayHaveLifecycleSubscribers = MayHaveLifecycleSubscribers<TRequest, TResult>(),
             PreHandlers = Sorted(metadata.PreHandlers, PreHandlerComparer.Instance),
             PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance)
         };
     }
 
-    private StreamPlan<TRequest, TItem> BuildStream<TRequest, TItem>() where TRequest : IRequest
+    private StreamPlan<TRequest, TItem> BuildStream<TRequest, TItem>(ProviderPlanCache owner) where TRequest : IRequest
     {
         var metadata = Resolve(typeof(TRequest));
-        var discovered = HasDiscoveredBehaviors(typeof(IStreamPipelineBehavior<TRequest, TItem>));
+        var behaviors = _registrations.Behaviors<TItem>(typeof(IStreamPipelineBehavior<TRequest, TItem>));
         return new StreamPlan<TRequest, TItem>
         {
-            Owner = this,
+            Owner = owner,
             Metadata = metadata,
             Invoker = ResolveInvoker<Func<object, TRequest, CancellationToken, IAsyncEnumerable<TItem>>>(typeof(TRequest)),
             ContextSource = contextFactoryRegistry.TryGetSource(metadata.ContextType),
             UsesDefaultContextFactory = UsesDefaultContextFactory(metadata.ContextType),
-            MayHaveBehaviors = discovered || (UsesClosedBehaviors<TItem>()
-                ? HasClosedBehaviors(typeof(IStreamPipelineBehavior<TRequest, TItem>))
-                : IsRegistered(typeof(IStreamPipelineBehavior<TRequest, TItem>))),
-            MergesDiscoveredBehaviors = discovered,
-            UsesClosedBehaviors = UsesClosedBehaviors<TItem>(),
-            MayHaveLifecycleSubscribers = !CanProveNoSubscribers() ||
-                                          HasSubscribers<StreamInitiatedNotification<TItem>>() ||
-                                          HasSubscribers<StreamCompletedNotification<TItem>>() ||
-                                          HasSubscribers<StreamFailedNotification<TItem>>(),
+            MayHaveBehaviors = behaviors.MayHaveAny,
+            MergesDiscoveredBehaviors = behaviors.MergesDiscovered,
+            UsesClosedBehaviors = behaviors.UsesClosedSet,
+            MayHaveLifecycleSubscribers = notifications.MayReachAnyone<StreamInitiatedNotification<TItem>>() ||
+                                          notifications.MayReachAnyone<StreamCompletedNotification<TItem>>() ||
+                                          notifications.MayReachAnyone<StreamFailedNotification<TItem>>(),
             PreHandlers = Sorted(metadata.PreHandlers, PreHandlerComparer.Instance),
             PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance)
         };
@@ -190,66 +138,26 @@ internal sealed class RequestPlanCache(
         => handlerRegistry.TryGetInvoker(requestType) as TInvoker
            ?? throw new InvalidOperationException($"No handler delegate found for request '{requestType.Name}'.");
 
-    private bool IsRegistered(Type serviceType) => _isService is null || _isService.IsService(serviceType);
-
-    private bool HasDiscoveredBehaviors(Type serviceType) => PipelineBehaviors.MayHaveDiscovered(rootProvider, serviceType);
-
-    private bool HasClosedBehaviors(Type serviceType)
-        => rootProvider.GetService<ClosedBehaviorSet>()?.Has(serviceType) ?? false;
-
-    private bool? _closesValueTypeBehaviors;
-
-    private bool UsesClosedBehaviors<TResult>()
-        => typeof(TResult).IsValueType &&
-           (_closesValueTypeBehaviors ??= rootProvider.GetService<ClosedBehaviorResolution>()?.Enabled ?? false);
-
-    private Notifications.INotificationSubscriptionRegistry? _subscriptions;
-    private bool _subscriptionsResolved;
-
-    // A notification has subscribers when a handler registered by hand or a behavior would run for it, or when a
-    // generated handler subscribes to it: one declared for the notification's own type, a base type or an interface of
-    // it (an INotificationHandler<INotification> audit handler sees every lifecycle notification).
-    private bool HasSubscribers<TNotification>() where TNotification : INotification
-    {
-        if (IsRegistered(typeof(INotificationHandler<TNotification>)) ||
-            IsRegistered(typeof(INotificationPipelineBehavior<TNotification>)) ||
-            HasDiscoveredBehaviors(typeof(INotificationPipelineBehavior<TNotification>)))
-            return true;
-
-        if (!_subscriptionsResolved)
-        {
-            _subscriptions = rootProvider.GetService<Notifications.INotificationSubscriptionRegistry>();
-            _subscriptionsResolved = true;
-        }
-
-        return _subscriptions?.GetSubscriptions(typeof(TNotification)).Count > 0;
-    }
-
-    // Without registration queries nothing can be proven absent, so every lifecycle notification is published.
-    private bool CanProveNoSubscribers() => _isService is not null;
-
+    // Lifecycle notifications go through the notification publisher, so whether one would reach anyone is its plan's
+    // answer: the same rule decides whether it is published and what a publish of it runs.
     private bool MayHaveLifecycleSubscribers<TRequest, TResult>()
-    {
-        if (!CanProveNoSubscribers()) return true;
-
-        return RequestKindOf<TRequest, TResult>.Value switch
+        => RequestKindOf<TRequest, TResult>.Value switch
         {
             // Every command publishes the Command* notifications, a value-returning one (ICommand<T>) included.
-            RequestKind.Command => HasSubscribers<CommandInitiatedNotification>() ||
-                                   HasSubscribers<CommandCompletedNotification>() ||
-                                   HasSubscribers<CommandFailedNotification>(),
-            RequestKind.Query => HasSubscribers<QueryInitiatedNotification<TResult>>() ||
-                                 HasSubscribers<QueryCompletedNotification<TResult>>() ||
-                                 HasSubscribers<QueryFailedNotification<TResult>>(),
+            RequestKind.Command => notifications.MayReachAnyone<CommandInitiatedNotification>() ||
+                                   notifications.MayReachAnyone<CommandCompletedNotification>() ||
+                                   notifications.MayReachAnyone<CommandFailedNotification>(),
+            RequestKind.Query => notifications.MayReachAnyone<QueryInitiatedNotification<TResult>>() ||
+                                 notifications.MayReachAnyone<QueryCompletedNotification<TResult>>() ||
+                                 notifications.MayReachAnyone<QueryFailedNotification<TResult>>(),
             _ => false
         };
-    }
 
     // The default context is "new RequestContextBase(now)" behind a transient factory. When that built-in factory is what
     // the provider resolves, constructing the context directly is identical and skips a DI resolution per request.
     private bool UsesDefaultContextFactory(Type contextType)
     {
-        if (contextType != typeof(RequestContextBase) || _isService is null) return false;
+        if (contextType != typeof(RequestContextBase) || !_registrations.CanProveAbsence) return false;
         if (_usesDefaultContextFactory is { } known) return known;
 
         bool usesDefault;
@@ -274,16 +182,6 @@ internal sealed class RequestPlanCache(
         var sorted = source.ToArray();
         if (sorted.Length > 1) Array.Sort(sorted, comparer);
         return sorted;
-    }
-
-    private static class Slot<TPlan> where TPlan : RequestPlanBase
-    {
-        public static volatile TPlan? Plan;
-
-        public static void Forget(RequestPlanCache owner)
-        {
-            if (Plan is { } plan && ReferenceEquals(plan.Owner, owner)) Plan = null;
-        }
     }
 
     private sealed class PreHandlerComparer : IComparer<IPreHandlerAttribute>

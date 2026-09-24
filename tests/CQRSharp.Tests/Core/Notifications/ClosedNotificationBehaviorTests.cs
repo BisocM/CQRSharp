@@ -37,7 +37,8 @@ public sealed class ClosedNotificationBehaviorTests
         var subscriptions = provider.GetRequiredService<INotificationSubscriptionRegistry>();
         var subscription = subscriptions.GetSubscriptions(typeof(MeterReading)).Should().ContainSingle().Subject;
 
-        await subscription.Invoke(scope.ServiceProvider, new MeterReading(3), TestContext.Current.CancellationToken);
+        await provider.GetRequiredService<NotificationPublisher>()
+            .Deliver(scope.ServiceProvider, subscription, new MeterReading(3), TestContext.Current.CancellationToken);
 
         provider.GetRequiredService<NotificationBehaviorProbe>().Entries.Should().Equal("behavior:MeterReading", "handler:3");
     }

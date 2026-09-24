@@ -107,8 +107,8 @@ internal static class CqrsConfigurationInspector
         // is dispatched in-process although an outbox mode is enabled: a silent bypass of the outbox. The question goes to
         // the serializer the dispatcher asks, so the answer holds for a custom one too. Without any serializer CQRCONF001
         // already names the cause.
-        var routing = services.GetService<NotificationRouting>();
-        if (serializer is not null && subscriptions is not null && routing is not null)
+        var publisher = services.GetService<NotificationPublisher>();
+        if (serializer is not null && subscriptions is not null && publisher is not null)
         {
             // The generated serializer names exactly the [NotificationName] types; a custom one names what it chooses.
             var remedy = serializer is CompositeOutboxNotificationSerializer
@@ -116,7 +116,7 @@ internal static class CqrsConfigurationInspector
                 : $"The registered serializer '{serializer.GetType().FullName}' replaces the generated one, so [NotificationName] " +
                   "alone does not help: have its TryGetNotificationName name the type to route it through the outbox.";
 
-            foreach (var notificationType in routing.RoutedTypes.OrderBy(t => t.FullName, StringComparer.Ordinal))
+            foreach (var notificationType in publisher.RoutedTypes.OrderBy(t => t.FullName, StringComparer.Ordinal))
             {
                 if (subscriptions.GetSubscriptions(notificationType).Count == 0) continue;
                 if (serializer.TryGetNotificationName(notificationType, out _)) continue;
@@ -140,8 +140,8 @@ internal static class CqrsConfigurationInspector
 
         // CQRCONF011: the outbox stores one message per subscription, and a handler registered by hand has none, so a
         // durable notification that goes through the outbox never reaches the handlers registered by hand for it.
-        if (serializer is not null && routing is not null)
-            foreach (var notificationType in routing.RoutedTypes.OrderBy(t => t.FullName, StringComparer.Ordinal))
+        if (serializer is not null && publisher is not null)
+            foreach (var notificationType in publisher.RoutedTypes.OrderBy(t => t.FullName, StringComparer.Ordinal))
             {
                 if (!serializer.TryGetNotificationName(notificationType, out var name)) continue;
 
@@ -151,7 +151,7 @@ internal static class CqrsConfigurationInspector
                 Type[] byHand;
                 try
                 {
-                    byHand = routing.TryGetRoute(notificationType)!.HandRegisteredHandlerTypes(services, routing);
+                    byHand = publisher.HandRegisteredHandlerTypes(notificationType, services);
                 }
                 catch (Exception ex)
                 {

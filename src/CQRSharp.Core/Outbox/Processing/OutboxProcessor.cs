@@ -27,6 +27,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
     private readonly ILogger<OutboxProcessor> _logger;
     private readonly OutboxProcessorOptions _options;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly NotificationPublisher _publisher;
     private readonly TimeProvider _timeProvider;
     private readonly OutboxSignal? _signal;
     private readonly IOptions<OutboxOptions>? _outboxOptions;
@@ -41,6 +42,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
         ILogger<OutboxProcessor> logger,
         IServiceScopeFactory scopeFactory,
         IOptions<OutboxProcessorOptions> options,
+        NotificationPublisher publisher,
         TimeProvider? timeProvider = null,
         OutboxSignal? signal = null,
         IOptions<OutboxOptions>? outboxOptions = null,
@@ -49,6 +51,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
         _logger = logger;
         _scopeFactory = scopeFactory;
         _options = options.Value;
+        _publisher = publisher;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _signal = signal;
         _outboxOptions = outboxOptions;
@@ -446,7 +449,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
                 var inbox = _options.UseInbox ? services.GetService<IInboxStore>() : null;
                 if (inbox is null)
                 {
-                    await subscription.Invoke(services, notification, stoppingToken).ConfigureAwait(false);
+                    await _publisher.Deliver(services, subscription, notification, stoppingToken).ConfigureAwait(false);
                     await SettleAsync(publishes).ConfigureAwait(false);
                     return DeliveryOutcome.Delivered;
                 }
@@ -464,7 +467,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
                     // handler (or whoever owns the transaction it ran in) made it, and nothing the record does can take
                     // it back. What it published is stored before the record, so a crash between the two is a
                     // redelivery, never a delivery recorded without its notifications.
-                    await subscription.Invoke(services, notification, stoppingToken).ConfigureAwait(false);
+                    await _publisher.Deliver(services, subscription, notification, stoppingToken).ConfigureAwait(false);
                     await SettleAsync(publishes).ConfigureAwait(false);
                     return await RecordDeliveredAsync(inbox, message).ConfigureAwait(false);
                 }
@@ -497,7 +500,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
         OutboxCommit? committed = null;
         try
         {
-            await subscription.Invoke(services, notification, stoppingToken).ConfigureAwait(false);
+            await _publisher.Deliver(services, subscription, notification, stoppingToken).ConfigureAwait(false);
 
             // Asked while the transaction is open: whether the record would commit and roll back with it.
             joined = inbox.JoinsUnitOfWork;

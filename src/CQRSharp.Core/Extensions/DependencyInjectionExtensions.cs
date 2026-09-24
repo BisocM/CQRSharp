@@ -60,16 +60,9 @@ public static class DependencyInjectionExtensions
 
         AddValidatedOptions<NotificationOptions, NotificationOptionsValidator>(services);
 
-        // What an in-process publish needs that is the same for every scope, built once from the modules the composition
-        // registers; the scoped dispatcher only adds the scope.
-        services.TryAddSingleton(sp => new NotificationRouting(
-            sp.GetServices<ICqrsModule>(),
-            sp.GetService<INotificationSubscriptionRegistry>(),
-            sp.GetRequiredService<IOptions<NotificationOptions>>().Value.PublishStrategy,
-            sp.GetService<IServiceProviderIsService>(),
-            sp.GetRequiredService<CqrsMetrics>()));
-        services.TryAddScoped<IDirectNotificationDispatcher>(sp => new DirectNotificationDispatcher(sp, sp.GetRequiredService<NotificationRouting>()));
-        services.TryAddScoped<INotificationDispatcher, NotificationDispatcher>();
+        // Publishing is provider-wide: one publisher owns the routes and the per-type plans, and each call is handed the
+        // scope it publishes from, so a scope costs a publish nothing to set up.
+        services.TryAddSingleton(NotificationPublisher.Create);
 
         // Single CQRSharp façade: inject one thing (scoped to preserve DI scope semantics).
         services.TryAddScoped<ICqrsDispatcher>(sp => new CqrsDispatcher(sp));

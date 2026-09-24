@@ -125,7 +125,7 @@ public sealed class PublishStrategyTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
 
-        await scope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>().Publish(new FanOutOrderPlaced(), CancellationToken.None);
+        await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Publish(new FanOutOrderPlaced(), CancellationToken.None);
 
         recorder.Deliveries.Should().Equal(
             "tests.fanout.auditor", "tests.fanout.base", "tests.fanout.both:derived", "tests.fanout.own", "by-hand-1", "by-hand-2");
@@ -147,7 +147,7 @@ public sealed class PublishStrategyTests
         (await act.Should().ThrowAsync<OptionsValidationException>()).WithMessage("*PublishStrategy*");
     }
 
-    [Fact(DisplayName = "Without a host, an undefined PublishStrategy fails the dispatcher's resolution, before any handler can run")]
+    [Fact(DisplayName = "Without a host, an undefined PublishStrategy fails the dispatcher's resolution, before anything can be dispatched")]
     public async Task Undefined_strategy_fails_without_a_host()
     {
         var services = new ServiceCollection();
@@ -156,7 +156,7 @@ public sealed class PublishStrategyTests
         await using var provider = services.BuildServiceProvider();
         await using var scope = provider.CreateAsyncScope();
 
-        var act = () => scope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
+        var act = () => scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
 
         act.Should().Throw<OptionsValidationException>().WithMessage("*PublishStrategy*");
     }
@@ -172,10 +172,10 @@ public sealed class PublishStrategyTests
         {
             _provider = provider;
             _scope = provider.CreateAsyncScope();
-            Dispatcher = _scope.ServiceProvider.GetRequiredService<IDirectNotificationDispatcher>();
+            Dispatcher = _scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
         }
 
-        public IDirectNotificationDispatcher Dispatcher { get; }
+        public ICqrsDispatcher Dispatcher { get; }
 
         public async ValueTask DisposeAsync()
         {

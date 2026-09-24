@@ -9,13 +9,13 @@ using Microsoft.Extensions.Options;
 namespace CQRSharp.Tests.Core;
 
 /// <summary>
-///     Where <see cref="NotificationDispatcher" /> sends a notification: into the outbox when the outbox mode routes it
-///     there and the serializer names it, otherwise in-process through <see cref="IDirectNotificationDispatcher" />. Which
-///     handlers an in-process publish reaches is <see cref="NotificationFanOutTests" />' subject.
+///     Where <see cref="NotificationPublisher.Publish{TNotification}" /> sends a notification: into the outbox when the
+///     outbox mode routes it there and the serializer names it, otherwise in-process to its handlers. Which handlers an
+///     in-process publish reaches is <see cref="NotificationFanOutTests" />' subject.
 /// </summary>
-public sealed class NotificationDispatcherTests
+public sealed class NotificationPublisherOutboxTests
 {
-    private readonly RecordingDirectDispatcher _directDispatcher = new();
+    private readonly InProcessDeliveries _inProcess = new();
     private readonly TestNotification _testNotification = new();
     private readonly UnstableTestNotification _unstableNotification = new();
     private readonly TransactionLog _log = new();
@@ -24,10 +24,13 @@ public sealed class NotificationDispatcherTests
     {
         var services = new ServiceCollection();
         services.Configure<OutboxOptions>(o => o.Mode = mode);
-        services.AddSingleton<IDirectNotificationDispatcher>(_directDispatcher);
+        services.AddSingleton(_inProcess);
+        services.AddTransient<SubscribedHandler>();
+        services.AddTransient<INotificationHandler<UnstableTestNotification>, HandRegisteredHandler>();
         services.AddSingleton<INotificationSerializer>(new SingleTypeNotificationSerializer<TestNotification>("test.notification"));
         services.AddSingleton<INotificationSubscriptionRegistry>(
-            new FakeSubscriptionRegistry(NotificationSubscription.For<StoredOnlyHandler, TestNotification>("Tests.Handler")));
+            new FakeSubscriptionRegistry(NotificationSubscription.For<SubscribedHandler, TestNotification>("Tests.Handler")));
+        services.AddSingleton(NotificationPublisher.Create);
 
         var unitOfWork = new RecordingUnitOfWork(_log);
         services.AddScoped<IUnitOfWork>(_ => unitOfWork);
@@ -38,8 +41,8 @@ public sealed class NotificationDispatcherTests
         return (services.BuildServiceProvider(), store, unitOfWork);
     }
 
-    private NotificationDispatcher Dispatcher(IServiceProvider scope)
-        => new(scope, scope.GetRequiredService<IOptions<OutboxOptions>>(), _directDispatcher);
+    private static Task Publish<TNotification>(IServiceProvider scope, TNotification notification) where TNotification : INotification
+        => scope.GetRequiredService<NotificationPublisher>().Publish(scope, notification, CancellationToken.None);
 
     // As the executor runs a request: registered with the scope's buffer and current for everything the body awaits.
     private static async Task AsRequest(IServiceProvider scope, Func<Task> body)
@@ -55,9 +58,9 @@ public sealed class NotificationDispatcherTests
         await using var _ = provider;
         await using var scope = provider.CreateAsyncScope();
 
-        await AsRequest(scope.ServiceProvider, () => Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None));
+        await AsRequest(scope.ServiceProvider, () => Publish(scope.ServiceProvider, _testNotification));
 
-        _directDispatcher.Published.Should().ContainSingle().Which.Should().BeSameAs(_testNotification);
+        _inProcess.Published.Should().ContainSingle().Which.Should().BeSameAs(_testNotification);
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(0);
         store.Stored.Should().BeEmpty();
     }
@@ -69,11 +72,11 @@ public sealed class NotificationDispatcherTests
         await using var _ = provider;
         await using var scope = provider.CreateAsyncScope();
 
-        await AsRequest(scope.ServiceProvider, () => Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None));
+        await AsRequest(scope.ServiceProvider, () => Publish(scope.ServiceProvider, _testNotification));
 
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(1);
         store.Stored.Should().BeEmpty("the request stores it when it succeeds");
-        _directDispatcher.Published.Should().BeEmpty();
+        _inProcess.Published.Should().BeEmpty();
     }
 
     [Fact(DisplayName = "Enabled: a publish outside any request goes straight to the store, even while another request of the scope runs")]
@@ -91,7 +94,7 @@ public sealed class NotificationDispatcherTests
         });
         await running.Task;
 
-        await Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None);
+        await Publish(scope.ServiceProvider, _testNotification);
 
         store.Stored.Should().ContainSingle();
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(0);
@@ -106,7 +109,7 @@ public sealed class NotificationDispatcherTests
         await using var _ = provider;
         await using var scope = provider.CreateAsyncScope();
 
-        await Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None);
+        await Publish(scope.ServiceProvider, _testNotification);
 
         store.Stored.Should().ContainSingle();
     }
@@ -118,9 +121,9 @@ public sealed class NotificationDispatcherTests
         await using var _ = provider;
         await using var scope = provider.CreateAsyncScope();
 
-        await AsRequest(scope.ServiceProvider, () => Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None));
+        await AsRequest(scope.ServiceProvider, () => Publish(scope.ServiceProvider, _testNotification));
 
-        _directDispatcher.Published.Should().ContainSingle().Which.Should().BeSameAs(_testNotification);
+        _inProcess.Published.Should().ContainSingle().Which.Should().BeSameAs(_testNotification);
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(0);
         store.Stored.Should().BeEmpty();
     }
@@ -133,10 +136,10 @@ public sealed class NotificationDispatcherTests
         await using var scope = provider.CreateAsyncScope();
         unitOfWork.HasActiveTransaction = true;
 
-        await AsRequest(scope.ServiceProvider, () => Dispatcher(scope.ServiceProvider).Publish(_testNotification, CancellationToken.None));
+        await AsRequest(scope.ServiceProvider, () => Publish(scope.ServiceProvider, _testNotification));
 
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(1);
-        _directDispatcher.Published.Should().BeEmpty();
+        _inProcess.Published.Should().BeEmpty();
     }
 
     [Fact(DisplayName = "A publish that goes straight to the store fails clearly when no store is registered")]
@@ -145,9 +148,10 @@ public sealed class NotificationDispatcherTests
         var services = new ServiceCollection();
         services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Enabled);
         services.AddSingleton<INotificationSerializer>(new SingleTypeNotificationSerializer<TestNotification>("test.notification"));
+        services.AddSingleton(NotificationPublisher.Create);
         await using var provider = services.BuildServiceProvider();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Dispatcher(provider).Publish(_testNotification, TestContext.Current.CancellationToken));
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Publish(provider, _testNotification));
         Assert.Contains("IOutboxStore", ex.Message);
     }
 
@@ -158,35 +162,41 @@ public sealed class NotificationDispatcherTests
         await using var _ = provider;
         await using var scope = provider.CreateAsyncScope();
 
-        await AsRequest(scope.ServiceProvider, () => Dispatcher(scope.ServiceProvider).Publish(_unstableNotification, CancellationToken.None));
+        await AsRequest(scope.ServiceProvider, () => Publish(scope.ServiceProvider, _unstableNotification));
 
-        _directDispatcher.Published.Should().ContainSingle().Which.Should().BeSameAs(_unstableNotification);
+        _inProcess.Published.Should().ContainSingle().Which.Should().BeSameAs(_unstableNotification);
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(0);
         store.Stored.Should().BeEmpty();
     }
 
     private sealed record UnstableTestNotification : INotification;
 
-    // Only named by the subscription: these tests store messages and never deliver them.
-    private sealed class StoredOnlyHandler : INotificationHandler<TestNotification>
-    {
-        public Task Handle(TestNotification notification, CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class RecordingDirectDispatcher : IDirectNotificationDispatcher
+    private sealed class InProcessDeliveries
     {
         private readonly List<INotification> _published = [];
 
-        public IReadOnlyList<INotification> Published => _published;
-
-        public Task Publish(INotification notification, CancellationToken cancellationToken = default)
+        public IReadOnlyList<INotification> Published
         {
-            _published.Add(notification);
-            return Task.CompletedTask;
+            get
+            {
+                lock (_published) return _published.ToArray();
+            }
         }
 
-        public Task Publish<TNotification>(TNotification notification, CancellationToken cancellationToken = default)
-            where TNotification : INotification
-            => Publish((INotification)notification, cancellationToken);
+        public Task Add(INotification notification)
+        {
+            lock (_published) _published.Add(notification);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class SubscribedHandler(InProcessDeliveries deliveries) : INotificationHandler<TestNotification>
+    {
+        public Task Handle(TestNotification notification, CancellationToken cancellationToken) => deliveries.Add(notification);
+    }
+
+    private sealed class HandRegisteredHandler(InProcessDeliveries deliveries) : INotificationHandler<UnstableTestNotification>
+    {
+        public Task Handle(UnstableTestNotification notification, CancellationToken cancellationToken) => deliveries.Add(notification);
     }
 }

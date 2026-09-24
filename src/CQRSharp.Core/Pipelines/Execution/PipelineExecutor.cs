@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Diagnostics;
+using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Outbox;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,7 @@ internal sealed partial class PipelineExecutor
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IServiceProvider _services;
     private readonly RequestPlanCache _plans;
+    private readonly NotificationPublisher _notifications;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
     private readonly CqrsMetrics _metrics;
@@ -57,6 +59,7 @@ internal sealed partial class PipelineExecutor
         _dispatcherOptions = shared.DispatcherOptions;
         _scopeFactory = shared.ScopeFactory;
         _plans = shared.Plans;
+        _notifications = shared.Notifications;
         _outboxEnabled = shared.OutboxEnabled;
         _timeProvider = shared.TimeProvider;
         _logger = shared.Logger;

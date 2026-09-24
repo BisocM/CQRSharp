@@ -35,8 +35,7 @@ public sealed class NotificationFanOutTests
                  {
                      sp => sp.GetRequiredService<ICqrsDispatcher>().Publish(new FanOutOrderPlaced(), TestContext.Current.CancellationToken),
                      sp => sp.GetRequiredService<ICqrsDispatcher>().Publish<INotification>(new FanOutOrderPlaced(), TestContext.Current.CancellationToken),
-                     sp => sp.GetRequiredService<ICqrsDispatcher>().Publish<FanOutBaseEvent>(new FanOutOrderPlaced(), TestContext.Current.CancellationToken),
-                     sp => sp.GetRequiredService<IDirectNotificationDispatcher>().Publish((INotification)new FanOutOrderPlaced(), TestContext.Current.CancellationToken)
+                     sp => sp.GetRequiredService<ICqrsDispatcher>().Publish<FanOutBaseEvent>(new FanOutOrderPlaced(), TestContext.Current.CancellationToken)
                  })
         {
             await using var provider = Build();

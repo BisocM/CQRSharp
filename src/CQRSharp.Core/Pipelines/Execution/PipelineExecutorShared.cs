@@ -1,6 +1,7 @@
 using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Modules;
+using CQRSharp.Core.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,7 @@ internal sealed class PipelineExecutorShared(
     IOptions<OutboxOptions> outboxOptions,
     IBackgroundTaskManager backgroundTaskManager,
     RequestPlanCache plans,
+    NotificationPublisher notifications,
     ModuleRouteTable routeTable,
     ILogger<PipelineExecutor> logger,
     CqrsMetrics metrics,
@@ -47,5 +49,8 @@ internal sealed class PipelineExecutorShared(
     public IOptions<DispatcherOptions> DispatcherOptions { get; } = dispatcherOptions;
     public IBackgroundTaskManager BackgroundTaskManager { get; } = backgroundTaskManager;
     public RequestPlanCache Plans { get; } = plans;
+
+    /// <summary>The provider's notification publisher, which every scope's publishes go through with that scope.</summary>
+    public NotificationPublisher Notifications { get; } = notifications;
     public bool OutboxEnabled { get; } = PipelineExecutor.IsOutboxEnabled(outboxOptions);
 }

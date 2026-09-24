@@ -13,17 +13,15 @@ internal static class NotificationBehaviors
     ///     The behaviors for <typeparamref name="TNotification" /> in priority order, on an array the caller owns: from
     ///     the container, or - for a value-type notification on a runtime without dynamic code, where the container cannot
     ///     close an open-generic behavior over it - from the closed set the modules' generated factories build; merged
-    ///     with the closed ones the generator discovered, as a request's are.
+    ///     with the closed ones the generator discovered, as a request's are. Where they come from is the plan's answer.
     /// </summary>
     /// <param name="services">The scope to resolve them from.</param>
-    /// <param name="routing">The provider's routing, which knows whether any was discovered; asked of the container without it.</param>
-    public static INotificationPipelineBehavior<TNotification>[] Resolve<TNotification>(IServiceProvider services, NotificationRouting? routing)
+    /// <param name="plan">The provider's plan for <typeparamref name="TNotification" />.</param>
+    public static INotificationPipelineBehavior<TNotification>[] Resolve<TNotification>(IServiceProvider services, NotificationPlan<TNotification> plan)
         where TNotification : INotification
     {
-        var mergeDiscovered = routing?.MayHaveDiscoveredBehaviors(typeof(INotificationPipelineBehavior<TNotification>))
-                              ?? PipelineBehaviors.MayHaveDiscovered<INotificationPipelineBehavior<TNotification>>(services);
         var behaviors = PipelineBehaviors.ResolveAll<INotificationPipelineBehavior<TNotification>>(
-            services, PipelineBehaviors.UsesClosedBehaviors<TNotification>(services), mergeDiscovered);
+            services, plan.UsesClosedBehaviors, plan.MergesDiscoveredBehaviors);
         if (behaviors.Length > 1) Array.Sort(behaviors, PriorityComparer<TNotification>.Instance);
         return behaviors;
     }
