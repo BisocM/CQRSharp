@@ -46,7 +46,6 @@ updates:
       benchmarks:
         patterns:
           - "BenchmarkDotNet*"
-          - "Mediator.*"
     ignore:
       # The generator and the analyzers must load in older compilers and IDEs, so Roslyn stays on 4.8.x. Patch updates
       # within 4.8 are fine; a minor or major bump raises the minimum Visual Studio / SDK for every consumer.

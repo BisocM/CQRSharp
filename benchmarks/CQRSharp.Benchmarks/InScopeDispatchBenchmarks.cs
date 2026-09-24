@@ -1,7 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using Benchmarks.CqrSharp;
-using Benchmarks.MediatorLib;
 using Benchmarks.MediatRLib;
 using CQRSharp;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +22,6 @@ using Microsoft.Extensions.DependencyInjection;
 public class InScopeDispatchBenchmarks
 {
     private const string MediatRLabel = "MediatR 12.5";
-    private const string MediatorLabel = "Mediator 3.0 (source-gen)";
     private const string CqrSharpLabel = "CQRSharp";
 
     // Disposed in reverse: each scope before its provider.
@@ -31,8 +29,6 @@ public class InScopeDispatchBenchmarks
 
     private ICqrsDispatcher _cqrSharp = null!;
     private ICqrsDispatcher _cqrSharpWithBehavior = null!;
-    private Mediator.IMediator _mediator = null!;
-    private Mediator.IMediator _mediatorWithBehavior = null!;
     private MediatR.IMediator _mediatR = null!;
     private MediatR.IMediator _mediatRWithBehavior = null!;
 
@@ -43,8 +39,6 @@ public class InScopeDispatchBenchmarks
         _cqrSharpWithBehavior = ResolveInScope<ICqrsDispatcher>(CqrSharpSubject.CreateProvider(withBehavior: true));
         _mediatR = ResolveInScope<MediatR.IMediator>(MediatRSubject.CreateProvider(withBehavior: false));
         _mediatRWithBehavior = ResolveInScope<MediatR.IMediator>(MediatRSubject.CreateProvider(withBehavior: true));
-        _mediator = ResolveInScope<Mediator.IMediator>(MediatorSubject.CreateProvider(withBehavior: false));
-        _mediatorWithBehavior = ResolveInScope<Mediator.IMediator>(MediatorSubject.CreateProvider(withBehavior: true));
     }
 
     [GlobalCleanup]
@@ -65,26 +59,17 @@ public class InScopeDispatchBenchmarks
     [BenchmarkCategory("Request"), Benchmark(Baseline = true, Description = MediatRLabel)]
     public Task<int> Request_MediatR() => _mediatR.Send(new Benchmarks.MediatRLib.Ping());
 
-    [BenchmarkCategory("Request"), Benchmark(Description = MediatorLabel)]
-    public ValueTask<int> Request_Mediator() => _mediator.Send(new Benchmarks.MediatorLib.Ping());
-
     [BenchmarkCategory("Request"), Benchmark(Description = CqrSharpLabel)]
     public Task<int> Request_CqrSharp() => _cqrSharp.Send(new Benchmarks.CqrSharp.Ping());
 
     [BenchmarkCategory("Request + 1 behavior"), Benchmark(Baseline = true, Description = MediatRLabel)]
     public Task<int> Behavior_MediatR() => _mediatRWithBehavior.Send(new Benchmarks.MediatRLib.Ping());
 
-    [BenchmarkCategory("Request + 1 behavior"), Benchmark(Description = MediatorLabel)]
-    public ValueTask<int> Behavior_Mediator() => _mediatorWithBehavior.Send(new Benchmarks.MediatorLib.Ping());
-
     [BenchmarkCategory("Request + 1 behavior"), Benchmark(Description = CqrSharpLabel)]
     public Task<int> Behavior_CqrSharp() => _cqrSharpWithBehavior.Send(new Benchmarks.CqrSharp.Ping());
 
     [BenchmarkCategory("Notification"), Benchmark(Baseline = true, Description = MediatRLabel)]
     public Task Notification_MediatR() => _mediatR.Publish(new Benchmarks.MediatRLib.Pinged());
-
-    [BenchmarkCategory("Notification"), Benchmark(Description = MediatorLabel)]
-    public ValueTask Notification_Mediator() => _mediator.Publish(new Benchmarks.MediatorLib.Pinged());
 
     [BenchmarkCategory("Notification"), Benchmark(Description = CqrSharpLabel)]
     public Task Notification_CqrSharp() => _cqrSharp.Publish(new Benchmarks.CqrSharp.Pinged());
@@ -93,9 +78,6 @@ public class InScopeDispatchBenchmarks
     // runtime type instead of the static one.
     [BenchmarkCategory("Notification as INotification"), Benchmark(Baseline = true, Description = MediatRLabel)]
     public Task NotificationAsInterface_MediatR() => _mediatR.Publish<MediatR.INotification>(new Benchmarks.MediatRLib.Pinged());
-
-    [BenchmarkCategory("Notification as INotification"), Benchmark(Description = MediatorLabel)]
-    public ValueTask NotificationAsInterface_Mediator() => _mediator.Publish<Mediator.INotification>(new Benchmarks.MediatorLib.Pinged());
 
     [BenchmarkCategory("Notification as INotification"), Benchmark(Description = CqrSharpLabel)]
     public Task NotificationAsInterface_CqrSharp() => _cqrSharp.Publish<INotification>(new Benchmarks.CqrSharp.Pinged());
@@ -106,14 +88,6 @@ public class InScopeDispatchBenchmarks
     {
         var sum = 0;
         await foreach (var item in _mediatR.CreateStream(new Benchmarks.MediatRLib.PingStream())) sum += item;
-        return sum;
-    }
-
-    [BenchmarkCategory("Stream (3 items)"), Benchmark(Description = MediatorLabel)]
-    public async Task<int> Stream_Mediator()
-    {
-        var sum = 0;
-        await foreach (var item in _mediator.CreateStream(new Benchmarks.MediatorLib.PingStream())) sum += item;
         return sum;
     }
 

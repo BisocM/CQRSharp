@@ -1,7 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using Benchmarks.CqrSharp;
-using Benchmarks.MediatorLib;
 using Benchmarks.MediatRLib;
 using CQRSharp;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 /// </summary>
 /// <remarks>
 ///     The scenarios, handlers and registrations are the ones <see cref="InScopeDispatchBenchmarks" /> uses. Each library
-///     runs with its documented default lifetimes, so what a scope costs differs by design: Mediator's mediator and
-///     handlers are singletons, MediatR's are transient, CQRSharp's dispatcher is scoped and its handlers transient.
+///     runs with its documented default lifetimes, so what a scope costs differs by design: MediatR's mediator and handlers are
+///     transient, CQRSharp's dispatcher is scoped and its handlers transient.
 /// </remarks>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
@@ -22,13 +21,10 @@ using Microsoft.Extensions.DependencyInjection;
 public class NewScopeDispatchBenchmarks
 {
     private const string MediatRLabel = "MediatR 12.5";
-    private const string MediatorLabel = "Mediator 3.0 (source-gen)";
     private const string CqrSharpLabel = "CQRSharp";
 
     private ServiceProvider _cqrSharp = null!;
     private ServiceProvider _cqrSharpWithBehavior = null!;
-    private ServiceProvider _mediator = null!;
-    private ServiceProvider _mediatorWithBehavior = null!;
     private ServiceProvider _mediatR = null!;
     private ServiceProvider _mediatRWithBehavior = null!;
 
@@ -39,14 +35,12 @@ public class NewScopeDispatchBenchmarks
         _cqrSharpWithBehavior = CqrSharpSubject.CreateProvider(withBehavior: true);
         _mediatR = MediatRSubject.CreateProvider(withBehavior: false);
         _mediatRWithBehavior = MediatRSubject.CreateProvider(withBehavior: true);
-        _mediator = MediatorSubject.CreateProvider(withBehavior: false);
-        _mediatorWithBehavior = MediatorSubject.CreateProvider(withBehavior: true);
     }
 
     [GlobalCleanup]
     public async Task Cleanup()
     {
-        foreach (var provider in new[] { _cqrSharp, _cqrSharpWithBehavior, _mediatR, _mediatRWithBehavior, _mediator, _mediatorWithBehavior })
+        foreach (var provider in new[] { _cqrSharp, _cqrSharpWithBehavior, _mediatR, _mediatRWithBehavior })
             await provider.DisposeAsync();
     }
 
@@ -55,13 +49,6 @@ public class NewScopeDispatchBenchmarks
     {
         await using var scope = _mediatR.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<MediatR.IMediator>().Send(new Benchmarks.MediatRLib.Ping());
-    }
-
-    [BenchmarkCategory("Request in a new DI scope"), Benchmark(Description = MediatorLabel)]
-    public async Task<int> Request_Mediator()
-    {
-        await using var scope = _mediator.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<Mediator.IMediator>().Send(new Benchmarks.MediatorLib.Ping());
     }
 
     [BenchmarkCategory("Request in a new DI scope"), Benchmark(Description = CqrSharpLabel)]
@@ -78,13 +65,6 @@ public class NewScopeDispatchBenchmarks
         return await scope.ServiceProvider.GetRequiredService<MediatR.IMediator>().Send(new Benchmarks.MediatRLib.Ping());
     }
 
-    [BenchmarkCategory("Request + 1 behavior in a new DI scope"), Benchmark(Description = MediatorLabel)]
-    public async Task<int> Behavior_Mediator()
-    {
-        await using var scope = _mediatorWithBehavior.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<Mediator.IMediator>().Send(new Benchmarks.MediatorLib.Ping());
-    }
-
     [BenchmarkCategory("Request + 1 behavior in a new DI scope"), Benchmark(Description = CqrSharpLabel)]
     public async Task<int> Behavior_CqrSharp()
     {
@@ -97,13 +77,6 @@ public class NewScopeDispatchBenchmarks
     {
         await using var scope = _mediatR.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<MediatR.IMediator>().Publish(new Benchmarks.MediatRLib.Pinged());
-    }
-
-    [BenchmarkCategory("Notification in a new DI scope"), Benchmark(Description = MediatorLabel)]
-    public async Task Notification_Mediator()
-    {
-        await using var scope = _mediator.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<Mediator.IMediator>().Publish(new Benchmarks.MediatorLib.Pinged());
     }
 
     [BenchmarkCategory("Notification in a new DI scope"), Benchmark(Description = CqrSharpLabel)]
@@ -120,13 +93,6 @@ public class NewScopeDispatchBenchmarks
         await scope.ServiceProvider.GetRequiredService<MediatR.IMediator>().Publish<MediatR.INotification>(new Benchmarks.MediatRLib.Pinged());
     }
 
-    [BenchmarkCategory("Notification as INotification in a new DI scope"), Benchmark(Description = MediatorLabel)]
-    public async Task NotificationAsInterface_Mediator()
-    {
-        await using var scope = _mediator.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<Mediator.IMediator>().Publish<Mediator.INotification>(new Benchmarks.MediatorLib.Pinged());
-    }
-
     [BenchmarkCategory("Notification as INotification in a new DI scope"), Benchmark(Description = CqrSharpLabel)]
     public async Task NotificationAsInterface_CqrSharp()
     {
@@ -140,16 +106,6 @@ public class NewScopeDispatchBenchmarks
         await using var scope = _mediatR.CreateAsyncScope();
         var sum = 0;
         await foreach (var item in scope.ServiceProvider.GetRequiredService<MediatR.IMediator>().CreateStream(new Benchmarks.MediatRLib.PingStream()))
-            sum += item;
-        return sum;
-    }
-
-    [BenchmarkCategory("Stream (3 items) in a new DI scope"), Benchmark(Description = MediatorLabel)]
-    public async Task<int> Stream_Mediator()
-    {
-        await using var scope = _mediator.CreateAsyncScope();
-        var sum = 0;
-        await foreach (var item in scope.ServiceProvider.GetRequiredService<Mediator.IMediator>().CreateStream(new Benchmarks.MediatorLib.PingStream()))
             sum += item;
         return sum;
     }

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <!--
-        Dispatch-overhead benchmarks: CQRSharp vs MediatR vs Mediator. Deliberately NOT part of CQRSharp.sln — it pulls
-        third-party mediators that the library itself must never depend on, and it is run on demand, not in CI
+        Dispatch-overhead benchmarks: CQRSharp vs MediatR. Deliberately NOT part of CQRSharp.sln — it pulls
+        a third-party mediator that the library itself must never depend on, and it is run on demand, not in CI
         (see benchmarks/README.md for the command).
 
         MediatR is pinned to 12.5.0, the last release under the Apache-2.0 license (13.0+ is commercially licensed).
@@ -18,11 +18,6 @@
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet"/>
         <PackageReference Include="MediatR"/>
-        <PackageReference Include="Mediator.Abstractions"/>
-        <PackageReference Include="Mediator.SourceGenerator">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-        </PackageReference>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     </ItemGroup>
 

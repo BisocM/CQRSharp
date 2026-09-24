@@ -9,8 +9,6 @@
         <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
         <PackageVersion Include="FluentAssertions" Version="8.1.1"/>
         <PackageVersion Include="FluentValidation" Version="12.1.1"/>
-        <PackageVersion Include="Mediator.Abstractions" Version="3.0.2"/>
-        <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2"/>
         <PackageVersion Include="MediatR" Version="[12.5.0]"/>
         <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4"/>

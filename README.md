@@ -130,33 +130,30 @@ Which packages work under Native AOT: [Native AOT](https://github.com/BisocM/CQR
 
 ---
 
-## CQRSharp, MediatR and Mediator
+## CQRSharp and MediatR
 
-Three libraries, three different bets. [MediatR](https://github.com/LuckyPennySoftware/MediatR) is the ubiquitous
-runtime mediator; [Mediator](https://github.com/martinothamar/Mediator) is a source-generated, allocation-focused
-reimplementation of that same mediator surface; CQRSharp is a CQRS *framework*: generated dispatch plus the
-infrastructure that usually gets hand-rolled around a mediator.
+[MediatR](https://github.com/LuckyPennySoftware/MediatR) is the ubiquitous runtime mediator; CQRSharp is a CQRS
+*framework*: generated dispatch plus the infrastructure that usually gets hand-rolled around a mediator.
 
-| | CQRSharp | MediatR | Mediator |
-| --- | --- | --- | --- |
-| License | MIT | Commercial since v13 (12.x and earlier remain Apache-2.0) | MIT |
-| Handler discovery | Source generator | Runtime assembly scanning + reflection | Source generator |
-| Native AOT / trimming | Yes, built and run under AOT in CI | Not a design goal | Yes |
-| Missing / duplicate handler | Build-time diagnostic | Runtime exception | Build-time diagnostic |
-| Command / query distinction | First-class (`ICommand`, `IQuery<T>`, `CommandResult`) | One `IRequest<T>` | `ICommand<T>` / `IQuery<T>` / `IRequest<T>` |
-| Pipeline behaviors | Yes, priority-ordered; per-request exemptions | Yes, registration-ordered | Yes, registration-ordered |
-| Streaming requests | Yes, with stream behaviors | Yes | Yes |
-| Notifications | Sequential / parallel strategies, notification behaviors | Pluggable publisher | Pluggable publisher |
-| Built-in validation, retry, timeout, rate limiting | Yes | No, bring your own behaviors | No, bring your own behaviors |
-| Idempotency (in-memory / Redis / EF Core stores), unit of work | Yes, with result replay | No | No |
-| Transactional outbox | Yes, in-memory / Redis / EF Core stores; multi-instance; per-handler delivery; ordered per key | No | No |
-| ASP.NET Core result / ProblemDetails mapping, FluentValidation adapter, test doubles | Yes (separate packages) | No | No |
-| Startup configuration validation | Yes | No | No |
-| Tracing / metrics | Built in (`ActivitySource`, `Meter`) | No | No |
+| | CQRSharp | MediatR |
+| --- | --- | --- |
+| License | MIT | Commercial since v13 (12.x and earlier remain Apache-2.0) |
+| Handler discovery | Source generator | Runtime assembly scanning + reflection |
+| Native AOT / trimming | Yes, built and run under AOT in CI | Not a design goal |
+| Missing / duplicate handler | Build-time diagnostic | Runtime exception |
+| Command / query distinction | First-class (`ICommand`, `IQuery<T>`, `CommandResult`) | One `IRequest<T>` |
+| Pipeline behaviors | Yes, priority-ordered; per-request exemptions | Yes, registration-ordered |
+| Streaming requests | Yes, with stream behaviors | Yes |
+| Notifications | Sequential / parallel strategies, notification behaviors | Pluggable publisher |
+| Built-in validation, retry, timeout, rate limiting | Yes | No, bring your own behaviors |
+| Idempotency (in-memory / Redis / EF Core stores), unit of work | Yes, with result replay | No |
+| Transactional outbox | Yes, in-memory / Redis / EF Core stores; multi-instance; per-handler delivery; ordered per key | No |
+| ASP.NET Core result / ProblemDetails mapping, FluentValidation adapter, test doubles | Yes (separate packages) | No |
+| Startup configuration validation | Yes | No |
+| Tracing / metrics | Built in (`ActivitySource`, `Meter`) | No |
 
-**Choose MediatR** if you want the de-facto standard and its ecosystem, and the licensing fits. **Choose Mediator** if
-you want the thinnest, fastest in-process mediator and will build the rest yourself. **Choose CQRSharp** if you want
-AOT-safe dispatch *and* the outbox, idempotency, resilience and diagnostics from one tested, MIT-licensed place.
+**Choose MediatR** if you want the de-facto standard and its ecosystem, and the licensing fits. **Choose CQRSharp** if
+you want AOT-safe dispatch *and* the outbox, idempotency, resilience and diagnostics from one tested, MIT-licensed place.
 
 ### Dispatch overhead
 
