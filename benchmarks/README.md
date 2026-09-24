@@ -59,6 +59,50 @@ in these benchmarks.
 
 ## Latest results
 
-BenchmarkDotNet prints one table per class, grouped by scenario, with each library's time and allocation as a ratio of
-MediatR's. No results have been published for this harness yet: publish both tables here from a single full run (the
-first command above), with the environment line BenchmarkDotNet prints, and rewrite any summary elsewhere from them.
+BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.4 LTS; 13th Gen Intel Core i9-13900K; .NET 8.0.31 (SDK 10.0.400); three
+launches per benchmark. Compare the ratios: they come from one run, while absolute times depend on the machine.
+
+### In a long-lived scope (the dispatcher resolved once)
+
+| Scenario | Library | Mean | vs MediatR | Allocated |
+| --- | --- | ---: | ---: | ---: |
+| Request | CQRSharp | 57.750 ns | 0.71× | 144 B |
+| Request | MediatR 12.5 | 81.739 ns | 1.00× | 336 B |
+| Request | Mediator 3.0 (source-gen) | 8.033 ns | 0.10× | 24 B |
+| Request + 1 behavior | CQRSharp | 97.140 ns | 0.86× | 320 B |
+| Request + 1 behavior | MediatR 12.5 | 113.572 ns | 1.00× | 528 B |
+| Request + 1 behavior | Mediator 3.0 (source-gen) | 9.799 ns | 0.09× | 24 B |
+| Notification | CQRSharp | 104.092 ns | 1.28× | 72 B |
+| Notification | MediatR 12.5 | 81.537 ns | 1.00× | 312 B |
+| Notification | Mediator 3.0 (source-gen) | 23.013 ns | 0.28× | 24 B |
+| Notification as INotification | CQRSharp | 94.365 ns | 1.21× | 72 B |
+| Notification as INotification | MediatR 12.5 | 77.873 ns | 1.00× | 312 B |
+| Notification as INotification | Mediator 3.0 (source-gen) | 23.124 ns | 0.30× | 24 B |
+| Stream (3 items) | CQRSharp | 110.912 ns | 0.52× | 168 B |
+| Stream (3 items) | MediatR 12.5 | 212.573 ns | 1.00× | 560 B |
+| Stream (3 items) | Mediator 3.0 (source-gen) | 63.394 ns | 0.30× | 120 B |
+
+### Per request (new DI scope, resolve, dispatch, dispose)
+
+| Scenario | Library | Mean | vs MediatR | Allocated |
+| --- | --- | ---: | ---: | ---: |
+| Request | CQRSharp | 179.43 ns | 1.32× | 728 B |
+| Request | MediatR 12.5 | 135.75 ns | 1.00× | 568 B |
+| Request | Mediator 3.0 (source-gen) | 54.22 ns | 0.40× | 224 B |
+| Request + 1 behavior | CQRSharp | 225.89 ns | 1.28× | 904 B |
+| Request + 1 behavior | MediatR 12.5 | 176.47 ns | 1.00× | 760 B |
+| Request + 1 behavior | Mediator 3.0 (source-gen) | 54.99 ns | 0.31× | 224 B |
+| Notification | CQRSharp | 299.89 ns | 2.33× | 520 B |
+| Notification | MediatR 12.5 | 128.61 ns | 1.00× | 472 B |
+| Notification | Mediator 3.0 (source-gen) | 59.14 ns | 0.46× | 152 B |
+| Notification as INotification | CQRSharp | 280.84 ns | 2.20× | 520 B |
+| Notification as INotification | MediatR 12.5 | 127.86 ns | 1.00× | 472 B |
+| Notification as INotification | Mediator 3.0 (source-gen) | 58.76 ns | 0.46× | 152 B |
+| Stream (3 items) | CQRSharp | 225.08 ns | 0.85× | 680 B |
+| Stream (3 items) | MediatR 12.5 | 265.16 ns | 1.00× | 720 B |
+| Stream (3 items) | Mediator 3.0 (source-gen) | 102.87 ns | 0.39× | 248 B |
+
+How to read it: resolved once, CQRSharp dispatches a request, a request with a behavior and a stream faster than MediatR
+and allocates less in every scenario; its notification publish is about a quarter slower. Per request, where a fresh
+scope and the scoped `ICqrsDispatcher` are part of the cost, CQRSharp is slower than MediatR except for streams, most of
+all for notifications. Mediator, fully source-generated with singleton handlers, is the fastest of the three throughout.
