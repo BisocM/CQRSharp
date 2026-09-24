@@ -53,40 +53,39 @@ in these benchmarks.
 
 ## Latest results
 
-BenchmarkDotNet v0.15.8, Linux Ubuntu 24.04.4 LTS; 13th Gen Intel Core i9-13900K; .NET 8.0.31 (SDK 10.0.400); three
+BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS; 13th Gen Intel Core i9-13900K; .NET 8.0.31 (SDK 10.0.400); three
 launches per benchmark. Compare the ratios: they come from one run, while absolute times depend on the machine.
 
 ### In a long-lived scope (the dispatcher resolved once)
 
 | Scenario | Library | Mean | vs MediatR | Allocated |
 | --- | --- | ---: | ---: | ---: |
-| Request | CQRSharp | 57.750 ns | 0.71× | 144 B |
-| Request | MediatR 12.5 | 81.739 ns | 1.00× | 336 B |
-| Request + 1 behavior | CQRSharp | 97.140 ns | 0.86× | 320 B |
-| Request + 1 behavior | MediatR 12.5 | 113.572 ns | 1.00× | 528 B |
-| Notification | CQRSharp | 104.092 ns | 1.28× | 72 B |
-| Notification | MediatR 12.5 | 81.537 ns | 1.00× | 312 B |
-| Notification as INotification | CQRSharp | 94.365 ns | 1.21× | 72 B |
-| Notification as INotification | MediatR 12.5 | 77.873 ns | 1.00× | 312 B |
-| Stream (3 items) | CQRSharp | 110.912 ns | 0.52× | 168 B |
-| Stream (3 items) | MediatR 12.5 | 212.573 ns | 1.00× | 560 B |
+| Request | CQRSharp | 59.33 ns | 0.69× | 144 B |
+| Request | MediatR 12.5 | 86.37 ns | 1.00× | 336 B |
+| Request + 1 behavior | CQRSharp | 98.90 ns | 0.80× | 320 B |
+| Request + 1 behavior | MediatR 12.5 | 123.73 ns | 1.00× | 528 B |
+| Notification | CQRSharp | 39.74 ns | 0.51× | 48 B |
+| Notification | MediatR 12.5 | 77.79 ns | 1.00× | 312 B |
+| Notification as INotification | CQRSharp | 33.88 ns | 0.46× | 48 B |
+| Notification as INotification | MediatR 12.5 | 74.37 ns | 1.00× | 312 B |
+| Stream (3 items) | CQRSharp | 114.55 ns | 0.53× | 168 B |
+| Stream (3 items) | MediatR 12.5 | 215.46 ns | 1.00× | 560 B |
 
 ### Per request (new DI scope, resolve, dispatch, dispose)
 
 | Scenario | Library | Mean | vs MediatR | Allocated |
 | --- | --- | ---: | ---: | ---: |
-| Request | CQRSharp | 179.43 ns | 1.32× | 728 B |
-| Request | MediatR 12.5 | 135.75 ns | 1.00× | 568 B |
-| Request + 1 behavior | CQRSharp | 225.89 ns | 1.28× | 904 B |
-| Request + 1 behavior | MediatR 12.5 | 176.47 ns | 1.00× | 760 B |
-| Notification | CQRSharp | 299.89 ns | 2.33× | 520 B |
-| Notification | MediatR 12.5 | 128.61 ns | 1.00× | 472 B |
-| Notification as INotification | CQRSharp | 280.84 ns | 2.20× | 520 B |
-| Notification as INotification | MediatR 12.5 | 127.86 ns | 1.00× | 472 B |
-| Stream (3 items) | CQRSharp | 225.08 ns | 0.85× | 680 B |
-| Stream (3 items) | MediatR 12.5 | 265.16 ns | 1.00× | 720 B |
+| Request | CQRSharp | 190.2 ns | 1.31× | 728 B |
+| Request | MediatR 12.5 | 145.7 ns | 1.00× | 568 B |
+| Request + 1 behavior | CQRSharp | 234.7 ns | 1.30× | 904 B |
+| Request + 1 behavior | MediatR 12.5 | 180.9 ns | 1.00× | 760 B |
+| Notification | CQRSharp | 139.8 ns | 1.09× | 416 B |
+| Notification | MediatR 12.5 | 128.1 ns | 1.00× | 472 B |
+| Notification as INotification | CQRSharp | 127.9 ns | 1.00× | 416 B |
+| Notification as INotification | MediatR 12.5 | 128.1 ns | 1.00× | 472 B |
+| Stream (3 items) | CQRSharp | 235.1 ns | 0.87× | 680 B |
+| Stream (3 items) | MediatR 12.5 | 270.7 ns | 1.00× | 720 B |
 
-How to read it: resolved once, CQRSharp dispatches a request, a request with a behavior and a stream faster than MediatR
-and allocates less in every scenario; its notification publish is about a quarter slower. Per request, where a fresh
-scope and the scoped `ICqrsDispatcher` are part of the cost, CQRSharp is slower than MediatR except for streams, most of
-all for notifications.
+How to read it: resolved once, CQRSharp dispatches every scenario faster than MediatR and allocates less; a notification
+publish costs about half of MediatR's. Per request, where a fresh scope and the scoped `ICqrsDispatcher` are part of the
+cost, a notification costs about what MediatR's does and a stream less, while a request is about a third slower.

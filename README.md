@@ -171,9 +171,10 @@ run with every library side by side, are published in
 [benchmarks/README.md](https://github.com/BisocM/CQRSharp/blob/Release/benchmarks/README.md#latest-results); compare
 the ratios there, since the absolute times move with the machine.
 
-Two design points keep the per-dispatch cost low: lifecycle notifications and pipeline stages are **pay-for-use** (nothing
-is resolved or published for a stage the container has no registration for), and when nothing wraps a handler `Send`
-returns the handler's own task.
+Three design points keep the per-dispatch cost low: lifecycle notifications and pipeline stages are **pay-for-use**
+(nothing is resolved or published for a stage the container has no registration for, and what is registered is asked
+once per provider and message type, not per dispatch); publishing is provider-wide, so a scope costs a publish nothing to
+set up; and when nothing wraps a handler `Send` returns the handler's own task.
 
 ---
 
