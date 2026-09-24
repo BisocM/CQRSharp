@@ -1,16 +1,17 @@
-using System.Diagnostics;
-using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Pipelines.Behaviors.RateLimiting;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Enforces rate limiting for streaming requests when the request context implements <see cref="IRateLimitedContext" />.
+///     The streaming counterpart of <see cref="RateLimitingBehavior{TRequest, TResult}" />: takes the caller's token when
+///     enumeration starts, and rejects the stream with <see cref="RateLimitExceededException" /> when there is none.
+///     Applies only to requests whose context implements <see cref="IRateLimitedContext" />.
 /// </summary>
+/// <typeparam name="TRequest">The streaming request type.</typeparam>
+/// <typeparam name="TItem">The streamed element type.</typeparam>
 public sealed class StreamRateLimitingBehavior<TRequest, TItem>(
     ILogger<StreamRateLimitingBehavior<TRequest, TItem>> logger,
-    RateLimiter rateLimiter)
+    RequestRateLimiter rateLimiter)
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
@@ -30,43 +31,7 @@ public sealed class StreamRateLimitingBehavior<TRequest, TItem>(
 
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
-            using var activity = PipelineTelemetry.StartActivity("RateLimiting.Check", request);
-
-            if (request.Context is not IRateLimitedContext rateLimitedContext)
-            {
-                activity?.SetStatus(ActivityStatusCode.Ok, "Rate limiting skipped (no IRateLimitedContext).");
-                await foreach (var item in next(cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
-                    yield return item;
-                yield break;
-            }
-
-            if (string.IsNullOrWhiteSpace(rateLimitedContext.UserId) ||
-                string.IsNullOrWhiteSpace(rateLimitedContext.RequestId))
-            {
-                logger.LogError("Rate limiting failed: UserId/RequestId missing from IRateLimitedContext.");
-                activity?.SetStatus(ActivityStatusCode.Error, "User or Request identifier not found in context.");
-                throw new InvalidOperationException("User or Request identifier could not be determined for rate limiting.");
-            }
-
-            activity?.SetTag("ratelimit.user_id", rateLimitedContext.UserId);
-            activity?.SetTag("ratelimit.request_id", rateLimitedContext.RequestId);
-
-            logger.LogInformation("Retrieved user identifier {Identifier} for request {RequestId}.",
-                rateLimitedContext.UserId,
-                rateLimitedContext.RequestId);
-
-            var isAllowed = rateLimiter.AllowRequest(rateLimitedContext.UserId, request.GetType());
-            if (!isAllowed)
-            {
-                logger.LogWarning("Rate limit exceeded for user {Identifier} on request {RequestId} of type {RequestType}.",
-                    rateLimitedContext.UserId, rateLimitedContext.RequestId, request.GetType().Name);
-
-                activity?.AddEvent(new ActivityEvent("RequestThrottled"));
-                activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
-                throw new RateLimitExceededException(rateLimitedContext, "Rate limit exceeded for user.");
-            }
-
-            activity?.SetStatus(ActivityStatusCode.Ok);
+            RateLimitEnforcement.Enforce(request, rateLimiter, logger);
 
             await foreach (var item in next(cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
                 yield return item;

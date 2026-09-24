@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <!--
+        A minimal ASP.NET Core API over CQRSharp and CQRSharp.AspNetCore: result and exception mapping to ProblemDetails,
+        the Idempotency-Key header with replayed results, validation, and a rate limit keyed on the caller. Run it and
+        call it (see Program.cs), or pass it the self-test switch (see Program.cs): it then serves on a free loopback port,
+        drives every endpoint over HTTP, and exits non-zero when a response is not the one expected. CI runs the self-test as a framework
+        build and as a Native AOT binary for net8.0 and net10.0 (.github/workflows/validate.yml).
+    -->
+    <PropertyGroup>
+        <RootNamespace>CQRSharp.Sample.AspNetCore</RootNamespace>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <PublishAot>true</PublishAot>
+        <InvariantGlobalization>true</InvariantGlobalization>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.AspNetCore\CQRSharp.AspNetCore.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -401,9 +401,7 @@ FodyWeavers.xsd
 # Repo-local .NET SDK installs (dotnet-install scripts / toolpath sentinels)
 .dotnet/
 
-# Local NuGet package output (PackageOutputPath) and CI build artifacts
+# Local NuGet package output (PackageOutputPath); CI's artifacts/ output is ignored with the .NET Core entries above.
 .nupkgs/
-artifacts/
-outputfiles.txt
 # Claude planning / working material (never committed)
 .claude/

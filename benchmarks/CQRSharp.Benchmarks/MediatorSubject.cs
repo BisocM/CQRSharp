@@ -36,18 +36,18 @@ public sealed class PassThroughBehavior<TMessage, TResponse> : IPipelineBehavior
         => next(message, cancellationToken);
 }
 
+// Mediator's documented defaults: the Singleton lifetime (its IMediator and handlers are singletons, the configuration
+// its README recommends for performance) and a behavior registered with AddSingleton. Its PipelineBehaviors option is not
+// used: it is read at compile time, so it would apply to the provider without the behavior as well.
 public static class MediatorSubject
 {
     public static ServiceProvider CreateProvider(bool withBehavior)
     {
         var services = new ServiceCollection();
-        services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+        services.AddMediator();
         if (withBehavior)
-            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(PassThroughBehavior<,>));
+            services.AddSingleton(typeof(IPipelineBehavior<,>), typeof(PassThroughBehavior<,>));
 
         return services.BuildServiceProvider();
     }
-
-    public static IMediator Create(bool withBehavior)
-        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<IMediator>();
 }

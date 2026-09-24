@@ -12,6 +12,29 @@
     </PropertyGroup>
 
     <!--
+        A CQRSharp package's dependency on another CQRSharp package passes the Analyzers asset on (NuGet's default for a
+        reference keeps analyzers private). The CQRSharp analyzers ship once, in CQRSharp.Abstractions, and every package
+        depends on it, so this is how they reach a project that references any CQRSharp package. Build and content files
+        stay private, as by default. A reference that sets PrivateAssets itself (the build-order references to the
+        generator and analyzer projects) keeps its own value. validate_packages.py fails a pack that excludes them.
+    -->
+    <ItemDefinitionGroup>
+        <ProjectReference>
+            <PrivateAssets>contentfiles;build</PrivateAssets>
+        </ProjectReference>
+    </ItemDefinitionGroup>
+
+    <!--
+        APIs the library code must not call (BannedSymbols.txt says why, and what to use instead): a banned call is RS0030,
+        a warning, so it fails the zero-warning build. Not the Roslyn components, which run inside the compiler, nor the
+        xUnit contract suites, which are test code.
+    -->
+    <ItemGroup Condition="'$(MSBuildProjectName)' != 'CQRSharp.Generators' and '$(MSBuildProjectName)' != 'CQRSharp.Analyzers' and '$(MSBuildProjectName)' != 'CQRSharp.Testing.Xunit.V3'">
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all"/>
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt"/>
+    </ItemGroup>
+
+    <!--
         Package validation: on pack, checks that every target framework exposes a compatible surface. Once 5.0.0 is on
         NuGet, set PackageValidationBaselineVersion to 5.0.0 here and a breaking change within 5.x fails the pack.
     -->

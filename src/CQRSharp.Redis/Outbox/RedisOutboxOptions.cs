@@ -1,42 +1,54 @@
-namespace CQRSharp.Redis.Outbox;
+namespace CQRSharp.Redis;
 
 /// <summary>
-///     Configuration for the Redis-backed durable outbox store.
+///     Configuration for the Redis-backed durable outbox store and the inbox that pairs with it.
 /// </summary>
 public sealed class RedisOutboxOptions
 {
     /// <summary>
-    ///     Namespace prefix applied to every Redis key the store uses (the due sorted set and the per-message hashes).
-    ///     Isolate independent outboxes by giving them different prefixes; must be non-empty.
+    ///     Namespace prefix applied to every Redis key the store uses (the due sorted set, the per-message hashes, the
+    ///     partition sets, the dead-letter set and the inbox records). Isolate independent outboxes by giving them
+    ///     different prefixes. It must contain a non-empty hash tag (a <c>{...}</c> part); host start fails otherwise.
+    ///     Default: <c>{cqrsharp:outbox}:</c>.
     /// </summary>
     /// <remarks>
-    ///     The store's Lua scripts touch several keys under this prefix atomically. On <b>Redis Cluster</b> those keys
-    ///     must hash to one slot, which the default guarantees with a hash tag (the <c>{...}</c> part). A custom prefix
-    ///     must keep one to work on a cluster. <b>Upgrading from 4.x:</b> the default was <c>cqrsharp:outbox:</c>; set that
-    ///     value explicitly to keep draining messages stored under it.
+    ///     The store's Lua scripts touch several of these keys atomically, which Redis Cluster (and the cluster-aware
+    ///     proxies) allows only when they all hash to one slot. The hash tag is what puts them there: Redis slots a key
+    ///     with a tag by the tag alone. It is required on a single server too, so an outbox keeps working when it moves
+    ///     to a cluster. Changing the prefix does not move messages stored under the old one.
     /// </remarks>
     public string KeyPrefix { get; set; } = "{cqrsharp:outbox}:";
 
     /// <summary>
     ///     How long a claimed message stays leased before it may be reclaimed. A processor that crashes after claiming
     ///     a message but before finalizing it leaves the message invisible only until this timeout elapses, after which
-    ///     it becomes claimable again. Must be greater than zero.
+    ///     it becomes claimable again. At least one millisecond. Default: 5 minutes, as in the EF Core store.
     /// </summary>
     /// <remarks>
-    ///     One lease covers a whole claimed batch, which the processor dispatches sequentially, so this must comfortably
-    ///     exceed <c>BatchSize × the slowest handler</c>; otherwise a second instance reclaims — and re-delivers — the
-    ///     tail of a batch that is still being worked through. The default matches the EF Core store.
+    ///     The processor renews a message's lease just before dispatching it once half of the lease has elapsed, but not
+    ///     while a handler runs, so a delivery must finish within about half of this timeout: set it comfortably above
+    ///     twice your slowest single handler. Longer values only delay recovery after a crash. A message whose lease
+    ///     lapsed and was reclaimed before its turn is skipped, not delivered twice.
     /// </remarks>
     public TimeSpan VisibilityTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    ///     How long the per-message hash is kept after a message reaches a terminal state
-    ///     (processed or failed) before Redis expires them, bounding the store's footprint. Must be greater than zero.
+    ///     How long a <b>dead-lettered</b> message is kept, measured from when it failed. <c>null</c> (the default) keeps
+    ///     dead letters until they are requeued or purged: they are the record of what could not be delivered. When set
+    ///     (at least one millisecond), expired dead letters are dropped as part of the next claim. A processed message is
+    ///     deleted as soon as it is marked processed; the inbox is what recognises a redelivery of it.
     /// </summary>
-    public TimeSpan FinalizedRetention { get; set; } = TimeSpan.FromDays(7);
+    public TimeSpan? DeadLetterRetention { get; set; }
 
     /// <summary>
-    ///     The Redis logical database index to use; -1 selects the connection's default database.
+    ///     How long an inbox record (a completed delivery) is kept, which is how long a redelivery of the same message is
+    ///     recognised and skipped. Must comfortably exceed <see cref="VisibilityTimeout" />, and be at least one
+    ///     millisecond. Default: 7 days.
+    /// </summary>
+    public TimeSpan InboxRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
+    ///     The Redis logical database index to use; -1 (the default) selects the connection's default database.
     /// </summary>
     public int Database { get; set; } = -1;
 }

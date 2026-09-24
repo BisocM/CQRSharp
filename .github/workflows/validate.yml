@@ -1,8 +1,10 @@
 name: Validate
 
-# The full gate, shared by CI (every push / pull request) and the release pipeline (which publishes exactly the packages
-# this produces). Zero-warning build of every target framework, the whole test suite against a real Redis, coverage,
-# the sample as a framework build and as a Native AOT binary, then pack + package validation + a template smoke test.
+# The full gate, shared by CI (every pull request) and the release pipeline (every push to Release, which publishes
+# exactly the packages this produces). The logging contract check, a zero-warning build of every target framework, the
+# whole test suite against a real Redis, PostgreSQL and SQL Server, coverage, the samples' self-tests as a framework
+# build, then pack + package validation + a template smoke test; alongside, the samples published and run as Native AOT
+# binaries for net8.0 and net10.0.
 on:
   workflow_call:
 
@@ -23,7 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
-    # A real Redis, so the CQRSharp.Redis store contract tests run rather than skip.
+    # Real backing services, so the store contract tests run against what they ship to rather than skip: Redis for the
+    # CQRSharp.Redis stores, PostgreSQL and SQL Server for the EF Core stores (SQLite covers them on every OS; these
+    # prove the SQL each provider actually generates). The test fixtures take the connection strings from the
+    # environment below, and fall back to Testcontainers when they are absent (a developer machine with Docker). The
+    # three target frameworks' test processes run at the same time, so each creates and owns its own database on these
+    # servers (<database>_net<major>); the accounts below may create databases.
     services:
       redis:
         image: redis:7-alpine
@@ -34,14 +41,165 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cqrsharp
+          POSTGRES_PASSWORD: cqrsharp
+          POSTGRES_DB: cqrsharp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cqrsharp"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Cqrsharp!Ci2026"
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Cqrsharp!Ci2026' -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # The libraries multi-target net8.0 / net9.0 / net10.0, but only as far as the installed SDK allows - with the
-      # 8.0 SDK alone the packages would silently ship net8.0 only. The newest SDK builds all three; the older
-      # entries bring the runtimes the tests run on. validate_packages.py fails the job if a framework is missing.
+      # Every log line the libraries write is a source-generated [LoggerMessage] method with an event id of its own:
+      # the script fails on a direct ILogger.Log*(...) call under src/ and on an event id two messages of one assembly
+      # share.
+      - name: Check the logging contract
+        run: python3 .github/scripts/check_logging.py
+
+      # The .NET 10 SDK builds every target framework (global.json requires it); the 8 and 9 entries bring the
+      # runtimes the net8.0 and net9.0 tests run on. validate_packages.py fails the job if a framework is missing.
+      - name: Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/*.csproj
+
+      - name: Restore
+        run: dotnet restore CQRSharp.sln
+
+      - name: Build (zero-warning gate)
+        # -warnaserror fails the build on ANY warning, so the exit code is the gate. That covers the compiler, the
+        # trim/AOT analyzers, undocumented public members, and unrecorded public API changes (PublicAPI.*.txt).
+        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore -p:GeneratePackageOnBuild=false -warnaserror
+
+      - name: Test (net8.0, net9.0, net10.0)
+        env:
+          CQRSHARP_TEST_REDIS: localhost:6379
+          CQRSHARP_TEST_POSTGRES: "Host=localhost;Port=5432;Username=cqrsharp;Password=cqrsharp;Database=cqrsharp"
+          CQRSHARP_TEST_SQLSERVER: "Server=localhost,1433;User Id=sa;Password=Cqrsharp!Ci2026;TrustServerCertificate=true;Database=cqrsharp_tests"
+        # Microsoft.Testing.Platform (global.json opts dotnet test into it): TRX results, Cobertura coverage, and a hang
+        # dump that fails a test stuck for 5 minutes instead of letting the job run into its own timeout.
+        run: >-
+          dotnet test --project tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build
+          --results-directory ${{ env.TEST_RESULTS }} --report-trx
+          --coverage --coverage-output-format cobertura
+          --hangdump --hangdump-timeout 5m --hangdump-type Mini
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator \
+            "-reports:${{ env.TEST_RESULTS }}/**/*.cobertura.xml" \
+            "-targetdir:artifacts/coverage" \
+            "-reporttypes:MarkdownSummaryGithub;Cobertura" \
+            "-assemblyfilters:+CQRSharp;+CQRSharp.*;-CQRSharp.Tests;-CQRSharp.Sample*"
+          cat artifacts/coverage/SummaryGithub.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ${{ env.TEST_RESULTS }}
+            artifacts/coverage
+
+      # Each sample exits non-zero when a scenario fails. CQRSharp.Sample drives the runtime from inside the process;
+      # CQRSharp.Sample.AspNetCore serves on a free loopback port and calls its own endpoints over HTTP.
+      - name: Run the samples' self-tests (framework build)
+        run: |
+          set -eo pipefail
+          dotnet run --project samples/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
+          dotnet run --project samples/CQRSharp.Sample.AspNetCore/CQRSharp.Sample.AspNetCore.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build -- --self-test
+
+      - name: Pack
+        # Every packable project in the solution; samples and tests are not packable. --no-build: these are the exact
+        # binaries that were just tested. Package validation (EnablePackageValidation) runs as part of the pack.
+        run: dotnet pack CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Validate package contents
+        run: python3 .github/scripts/validate_packages.py "${{ env.PACKAGE_OUTPUT }}"
+
+      - name: Template smoke test (install, scaffold, run against the packed packages)
+        run: |
+          set -eo pipefail
+          feed="$(pwd)/${{ env.PACKAGE_OUTPUT }}"
+          work="$(mktemp -d)"
+
+          dotnet new install "${feed}"/CQRSharp.Templates.*.nupkg
+          # Every framework choice: each one pins its own Microsoft.Extensions.Hosting major.
+          for framework in net8.0 net9.0 net10.0; do
+            dotnet new cqrsharp -n SmokeApp -o "${work}/${framework}/SmokeApp" --Framework "${framework}"
+          done
+
+          cat > "${work}/nuget.config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="packed" value="${feed}" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+
+          # An isolated package cache, so a CQRSharp 5.x already in the global cache cannot stand in for the packed one.
+          for framework in net8.0 net9.0 net10.0; do
+            NUGET_PACKAGES="${work}/.packages" dotnet run --project "${work}/${framework}/SmokeApp" -c Release
+          done
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ${{ env.PACKAGE_OUTPUT }}
+          if-no-files-found: error
+
+  # The Native AOT canary: both samples published as native binaries and run, on the oldest and the newest target
+  # framework (each has its own ILC and runtime). It needs none of the service containers and none of the validate job's
+  # build, so it runs beside it.
+  aot-canary:
+    name: Native AOT canary (${{ matrix.framework }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [ net8.0, net10.0 ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup .NET SDKs
         uses: actions/setup-dotnet@v4
         with:
@@ -66,45 +224,9 @@ jobs:
           clang --version
           dotnet --info
 
-      - name: Restore
-        run: dotnet restore CQRSharp.sln
-
-      - name: Build (zero-warning gate)
-        # -warnaserror fails the build on ANY warning, so the exit code is the gate. That covers the compiler, the
-        # trim/AOT analyzers, undocumented public members, and unrecorded public API changes (PublicAPI.*.txt).
-        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-restore -p:GeneratePackageOnBuild=false -warnaserror
-
-      - name: Test (net8.0, net9.0, net10.0)
-        run: >-
-          dotnet test tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build
-          --logger "trx" --results-directory ${{ env.TEST_RESULTS }}
-          --collect "XPlat Code Coverage"
-          --blame-hang-timeout 5m --blame-hang-dump-type none
-
-      - name: Coverage summary
-        if: always()
-        run: |
-          dotnet tool install --global dotnet-reportgenerator-globaltool
-          reportgenerator \
-            "-reports:${{ env.TEST_RESULTS }}/**/coverage.cobertura.xml" \
-            "-targetdir:artifacts/coverage" \
-            "-reporttypes:MarkdownSummaryGithub;Cobertura" \
-            "-assemblyfilters:+CQRSharp;+CQRSharp.*;-CQRSharp.Tests;-CQRSharp.Sample*"
-          cat artifacts/coverage/SummaryGithub.md >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Upload test results and coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            ${{ env.TEST_RESULTS }}
-            artifacts/coverage
-
-      - name: Run Sample self-test (framework build)
-        run: dotnet run --project samples/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
-
-      - name: Native AOT publish Sample + run
+      - name: Publish the samples as Native AOT binaries and run them
+        env:
+          FRAMEWORK: ${{ matrix.framework }}
         run: |
           set -eo pipefail
           case "$(uname -m)" in
@@ -113,55 +235,24 @@ jobs:
             *) echo "Unsupported runner architecture for Native AOT publish: $(uname -m)"; exit 1 ;;
           esac
 
-          # The per-library trim/AOT analyzers (IsAotCompatible) already gate AOT-hostile code at build under
-          # -warnaserror. This is the whole-graph backstop: capture the ILC output and fail loud on any trim/AOT (IL)
-          # warning attributed to CQRSharp's own source (the path filter ignores warnings from dependencies).
-          publish_log="$(mktemp)"
-          dotnet publish samples/CQRSharp.Sample/CQRSharp.Sample.csproj \
-            -c "${{ env.CONFIGURATION }}" -f net8.0 -r "${rid}" -o "${{ env.AOT_OUTPUT }}" \
-            -p:GeneratePackageOnBuild=false 2>&1 | tee "${publish_log}"
+          for project in CQRSharp.Sample CQRSharp.Sample.AspNetCore; do
+            # The per-library trim/AOT analyzers (IsAotCompatible) already gate AOT-hostile code at build under
+            # -warnaserror. This is the whole-graph backstop: the app a user publishes contains CQRSharp's dependencies
+            # too, so ANY trim/AOT (IL) warning in the publish fails the job - one raised inside a dependency included,
+            # because the package graph CQRSharp brings is what put that code into the app.
+            publish_log="$(mktemp)"
+            dotnet publish "samples/${project}/${project}.csproj" \
+              -c "${{ env.CONFIGURATION }}" -f "${FRAMEWORK}" -r "${rid}" -o "${{ env.AOT_OUTPUT }}/${FRAMEWORK}/${project}" \
+              -p:GeneratePackageOnBuild=false 2>&1 | tee "${publish_log}"
 
-          if grep -nE 'src/CQRSharp[^]]*: warning IL[0-9]{4}' "${publish_log}"; then
-            echo "::error::Native AOT publish produced trim/AOT (IL) warnings in CQRSharp source (listed above)."
-            exit 1
-          fi
+            # ILLink/ILC write "<file>(l,c): Trim analysis warning ILxxxx" or "ILC : AOT analysis warning ILxxxx: <member>"
+            # (the subcategory sits between the colon and "warning").
+            if grep -nE 'warning IL[0-9]{4}' "${publish_log}"; then
+              echo "::error::The Native AOT publish of ${project} (${FRAMEWORK}) produced trim/AOT (IL) warnings (listed above)."
+              exit 1
+            fi
+          done
 
-          "${{ env.AOT_OUTPUT }}/CQRSharp.Sample"
-
-      - name: Pack
-        # Every packable project in the solution; samples and tests are not packable. --no-build: these are the exact
-        # binaries that were just tested. Package validation (EnablePackageValidation) runs as part of the pack.
-        run: dotnet pack CQRSharp.sln -c ${{ env.CONFIGURATION }} --no-build --no-restore -o "${{ env.PACKAGE_OUTPUT }}"
-
-      - name: Validate package contents
-        run: python3 .github/scripts/validate_packages.py "${{ env.PACKAGE_OUTPUT }}"
-
-      - name: Template smoke test (install, scaffold, run against the packed packages)
-        run: |
-          set -eo pipefail
-          feed="$(pwd)/${{ env.PACKAGE_OUTPUT }}"
-          work="$(mktemp -d)"
-
-          dotnet new install "${feed}"/CQRSharp.Templates.*.nupkg
-          dotnet new cqrsharp -n SmokeApp -o "${work}/SmokeApp"
-
-          cat > "${work}/nuget.config" <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="packed" value="${feed}" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-          </configuration>
-          EOF
-
-          # An isolated package cache, so a CQRSharp 5.x already in the global cache cannot stand in for the packed one.
-          NUGET_PACKAGES="${work}/.packages" dotnet run --project "${work}/SmokeApp" -c Release
-
-      - name: Upload packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-packages
-          path: ${{ env.PACKAGE_OUTPUT }}
-          if-no-files-found: error
+          "${{ env.AOT_OUTPUT }}/${FRAMEWORK}/CQRSharp.Sample/CQRSharp.Sample"
+          # From its own directory, so the web sample finds its appsettings.json (its content root is the working directory).
+          (cd "${{ env.AOT_OUTPUT }}/${FRAMEWORK}/CQRSharp.Sample.AspNetCore" && ./CQRSharp.Sample.AspNetCore --self-test)

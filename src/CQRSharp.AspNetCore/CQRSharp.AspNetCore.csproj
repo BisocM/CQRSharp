@@ -1,31 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
-        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
-        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <!-- Turns on the trim, AOT and single-file analyzers, whose warnings the -warnaserror gate makes errors. -->
+        <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup>
         <PackageId>CQRSharp.AspNetCore</PackageId>
         <PackageTags>CQRS;CQRSharp;AspNetCore;MinimalApi;ProblemDetails;Idempotency;NativeAOT</PackageTags>
         <Title>ASP.NET Core integration for CQRSharp: result mapping, ProblemDetails exception mapping, and Idempotency-Key.</Title>
-        <Description>A 100% Native-AOT-clean ASP.NET Core integration for CQRSharp with no MVC dependency. Maps CommandResult and CommandResult&lt;T&gt; to minimal-API IResult responses (200/204/201, or an RFC 7807 ProblemDetails on failure), registers an IExceptionHandler that turns the framework's known, user-safe exceptions (validation, duplicate request, rate limit, timeout) into ProblemDetails responses through the host's IProblemDetailsService, and reads and validates the Idempotency-Key request header so an endpoint can copy it onto an IIdempotentRequest.</Description>
+        <Description>A Native-AOT-compatible ASP.NET Core integration for CQRSharp with no MVC dependency. Maps CommandResult and CommandResult&lt;T&gt; to minimal-API IResult responses (200/201/204, or an RFC 7807 ProblemDetails whose status follows the result's error kind), registers an IExceptionHandler that turns the exceptions a dispatch throws (validation, duplicate request, idempotency key mismatch, rate limit, timeout, queue refusal) into ProblemDetails responses through the host's IProblemDetailsService, and reads and validates the Idempotency-Key request header.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Initial release.
+            Version 5.0.0. First release: AddCqrsProblemDetails(), ToHttpResult() / ToCreatedHttpResult(...) and GetIdempotencyKey() / TryGetIdempotencyKey().
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

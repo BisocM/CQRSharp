@@ -1,16 +1,22 @@
 using System.Diagnostics;
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Pipelines.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Behaviors.Resilience;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Represents a pipeline behavior that introduces resilience features into the request handling.
-///     The behavior implements retry logic based on the configured maximum retry attempts.
+///     Retries a request implementing <see cref="IRetryableRequest" /> when it throws an exception another attempt might
+///     change, up to <see cref="ResilienceOptions.MaxRetries" /> times with the configured back-off. A returned result,
+///     a failed <see cref="CommandResult" /> included, is never retried. Any other request passes straight through,
+///     untouched.
 /// </summary>
+/// <remarks>
+///     A failure another attempt cannot change is never retried; see <see cref="IRetryableRequest" />. The behavior logs
+///     each retry at Warning, with the failure it retries, and the final give-up at Information, but never the failure
+///     itself at Error: that is the logging behavior's (or the host's) to report, once.
+/// </remarks>
 /// <typeparam name="TRequest">The type of the request.</typeparam>
 /// <typeparam name="TResult">The type of the result returned after processing the request.</typeparam>
 public sealed class ResilienceBehavior<TRequest, TResult>(
@@ -22,87 +28,56 @@ public sealed class ResilienceBehavior<TRequest, TResult>(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <inheritdoc />
-    public async Task<TResult> Handle(TRequest request,
-        RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
+    public Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
-        // Creates a trace activity that spans the entire resilience operation.
-        using var activity = PipelineTelemetry.StartActivity("Resilience.Operation", request);
-        activity?.SetTag("resilience.max_retries", options.Value.MaxRetries);
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(next);
+
+        return request is IRetryableRequest ? HandleWithRetries(next, cancellationToken) : next(cancellationToken);
+    }
+
+    // Runs outside the unit of work, so each retry begins after the failed attempt was rolled back.
+    /// <inheritdoc />
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
+
+    private async Task<TResult> HandleWithRetries(RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
+    {
+        var settings = options.Value;
+        using var activity = PipelineTelemetry.StartActivity<TRequest>("Resilience.Operation");
+        activity?.SetTag(CqrsTelemetry.Tags.MaxRetries, settings.MaxRetries);
 
         var retries = 0;
-
         while (true)
             try
             {
-                //Attempt to execute the next delegate in the pipeline.
-                var result = await next(cancellationToken);
+                var result = await next(cancellationToken).ConfigureAwait(false);
                 activity?.SetStatus(ActivityStatusCode.Ok);
                 return result;
             }
-            catch (RateLimitExceededException rateLimitException)
+            catch (Exception ex) when (RetryPolicy.IsTerminal(ex, cancellationToken, out var reason))
             {
-                //The rate limit has been hit. Don't retry; just propagate the exception.
-                logger.LogError(rateLimitException,
-                    "Rate limit exceeded for request {RequestName}. No retries will be attempted.",
-                    typeof(TRequest).Name);
-
-                // Mark the activity as failed before re-throwing the exception.
-                activity?.SetStatus(ActivityStatusCode.Error, "Rate limit exceeded.");
+                ResilienceLog.NotRetried(logger, typeof(TRequest).Name, reason);
+                activity?.SetStatus(ActivityStatusCode.Error, reason);
                 throw;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (retries < settings.MaxRetries)
             {
-                // Caller-initiated cancellation is terminal: never retry it (mirrors the streaming variant). Any other
-                // OperationCanceledException — an HttpClient timeout, a handler's own linked token — is the classic
-                // transient fault and falls through to the retry path below.
-                activity?.SetStatus(ActivityStatusCode.Error, "Operation canceled.");
-                throw;
-            }
-            catch (DuplicateRequestException)
-            {
-                // The idempotency behavior runs inside this one. A duplicate is a verdict, not a fault: retrying it
-                // only delays the rejection by the whole back-off schedule (and could run the work late if the original
-                // claim is released meanwhile).
-                activity?.SetStatus(ActivityStatusCode.Error, "Duplicate request.");
-                throw;
-            }
-            catch (TimeoutException timeoutException)
-            {
-                // A timeout means the attempt already exceeded its time budget; retrying would multiply the budget by
-                // the retry count. Treat it as terminal and propagate it.
-                logger.LogError(timeoutException,
-                    "Request {RequestName} timed out. No retries will be attempted.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Timed out.");
-                throw;
-            }
-            catch (Exception ex) when (request is IRetryableRequest && retries < options.Value.MaxRetries)
-            {
-                //For retryable requests with retries remaining, log and retry.
                 retries++;
-                logger.LogWarning(ex, "Failure executing {RequestName}, retry {RetryCount}/{MaxRetries}",
-                    typeof(TRequest).Name, retries, options.Value.MaxRetries);
+                var delay = settings.ComputeRetryDelay(retries);
+                ResilienceLog.Retrying(logger, ex, typeof(TRequest).Name, retries, settings.MaxRetries, delay.TotalMilliseconds);
 
-                // Records each retry attempt as an event within the activity's timeline.
                 var eventTags = new ActivityTagsCollection { { "exception.type", ex.GetType().Name } };
                 activity?.AddEvent(new ActivityEvent($"RetryAttempt-{retries}", tags: eventTags));
-
-                var delay = options.Value.ComputeRetryDelay(retries);
-                activity?.SetTag("resilience.retry_delay_ms", delay.TotalMilliseconds);
+                activity?.SetTag(CqrsTelemetry.Tags.RetryDelayMilliseconds, delay.TotalMilliseconds);
 
                 if (delay > TimeSpan.Zero)
-                    await Task.Delay(delay, _timeProvider, cancellationToken);
+                    await Task.Delay(delay, _timeProvider, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                // We get here when the request is not retryable, or its retries are exhausted.
-                logger.LogError(ex, "Request {RequestName} failed and will not be retried further.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Request failed; no further retries.");
+                ResilienceLog.RetriesExhausted(logger, typeof(TRequest).Name, retries + 1);
+                activity?.SetStatus(ActivityStatusCode.Error, "All retries exhausted.");
                 throw;
             }
     }
-
-    // Runs OUTSIDE the unit-of-work behavior (priority 100) so that each retry executes against a fresh transaction
-    // rather than replaying work against an already-aborted one.
-    /// <inheritdoc />
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Resilience;
 }

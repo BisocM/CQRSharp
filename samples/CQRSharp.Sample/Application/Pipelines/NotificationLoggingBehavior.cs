@@ -1,46 +1,32 @@
 using System.Diagnostics;
-using CQRSharp.Pipelines;
-using CQRSharp.Core.Pipelines;
+using CQRSharp.Sample.Infrastructure.Logging;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Application.Pipelines;
 
+/// <summary>
+///     An open-generic notification behavior: logs every notification a handler receives and how long the handlers took,
+///     whether it is published in-process or delivered by the outbox processor.
+/// </summary>
 public sealed class NotificationLoggingBehavior<TNotification>(
     ILogger<NotificationLoggingBehavior<TNotification>> logger,
     SampleDiagnostics diagnostics)
-    : INotificationPipelineBehavior<TNotification>, IPrioritizedPipelineBehavior
+    : INotificationPipelineBehavior<TNotification>
     where TNotification : INotification
 {
-    public async Task Handle(
-        TNotification notification,
-        Func<CancellationToken, Task> next,
-        CancellationToken cancellationToken)
+    public async Task Handle(TNotification notification, NotificationHandlerDelegate next, CancellationToken cancellationToken)
     {
-        var notificationName = typeof(TNotification).Name;
-        var stopwatch = Stopwatch.StartNew();
-
+        diagnostics.RecordNotificationPipelineBefore(typeof(TNotification));
+        var started = Stopwatch.GetTimestamp();
         try
         {
-            diagnostics.RecordNotificationPipelineBefore(typeof(TNotification));
-            logger.LogInformation("[NotificationPipeline] Publishing {NotificationName}", notificationName);
-            await next(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "[NotificationPipeline] Notification {NotificationName} failed", notificationName);
-            throw;
+            await next(cancellationToken);
         }
         finally
         {
+            SampleLog.NotificationHandled(logger, typeof(TNotification).Name, Stopwatch.GetElapsedTime(started).TotalMilliseconds);
             diagnostics.RecordNotificationPipelineAfter(typeof(TNotification));
-            stopwatch.Stop();
-            logger.LogInformation(
-                "[NotificationPipeline] Published {NotificationName} in {ElapsedMilliseconds}ms",
-                notificationName,
-                stopwatch.ElapsedMilliseconds);
         }
     }
-
-    public int PipelineExecutionPriority => -100;
 }

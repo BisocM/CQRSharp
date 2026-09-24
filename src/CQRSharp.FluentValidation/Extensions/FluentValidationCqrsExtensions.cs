@@ -21,10 +21,8 @@ public static class FluentValidationCqrsExtensions
     ///     Registers <see cref="FluentValidationRequestValidator{TRequest}" /> as an open-generic
     ///     <see cref="IRequestValidator{TRequest}" />, so every FluentValidation <c>IValidator&lt;TRequest&gt;</c> in the
     ///     container runs inside CQRSharp's validation behavior, next to any native validators. Safe to call more than
-    ///     once. This method does NOT register your validators (pair it with FluentValidation's
-    ///     <c>AddValidatorsFromAssemblyContaining&lt;T&gt;()</c> or register them by hand) and does NOT enable the
-    ///     validation behavior (call <c>UseValidation()</c> on the builder, or use
-    ///     <see cref="UseFluentValidation" /> which does both).
+    ///     once. This method does NOT register your validators: pair it with FluentValidation's
+    ///     <c>AddValidatorsFromAssemblyContaining&lt;T&gt;()</c> or register them by hand.
     /// </summary>
     /// <param name="services">The service collection to add to.</param>
     /// <returns>The same <paramref name="services" /> for chaining.</returns>
@@ -45,15 +43,15 @@ public static class FluentValidationCqrsExtensions
     }
 
     /// <summary>
-    ///     Runs FluentValidation validators in the CQRSharp pipeline: registers the adapter (see
-    ///     <see cref="AddCqrsFluentValidation" />) and turns the validation behavior on, exactly as
-    ///     <c>UseValidation()</c> does. It does not scan for validators; register them with FluentValidation's
-    ///     <c>AddValidatorsFromAssemblyContaining&lt;T&gt;()</c> or by hand.
+    ///     Runs FluentValidation validators in the CQRSharp pipeline by registering the adapter (see
+    ///     <see cref="AddCqrsFluentValidation" />). The builder's validation behavior, on unless
+    ///     <c>UseValidation(false)</c> is called, runs them next to any native validators. It does not scan for validators;
+    ///     register them with FluentValidation's <c>AddValidatorsFromAssemblyContaining&lt;T&gt;()</c> or by hand.
     /// </summary>
     /// <remarks>
     ///     Unlike the builder's own verbs, the adapter registration is applied to <see cref="ICqrsBuilder.Services" />
-    ///     immediately, so a later <c>UseValidation(false)</c> switches the behavior off but leaves the (then inert)
-    ///     adapter registered.
+    ///     immediately. <c>UseValidation(false)</c> turns FluentValidation validators off together with every other
+    ///     validator, whatever the order of the two calls.
     /// </remarks>
     /// <param name="builder">The CQRSharp builder.</param>
     /// <returns>The same <paramref name="builder" /> for chaining.</returns>
@@ -65,6 +63,6 @@ public static class FluentValidationCqrsExtensions
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Services.AddCqrsFluentValidation();
-        return builder.UseValidation();
+        return builder;
     }
 }

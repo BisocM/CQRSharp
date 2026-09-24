@@ -1,173 +1,64 @@
-using System.Data;
-using System.Diagnostics;
-using CQRSharp.Core.Background.Outbox;
-using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Telemetry;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Behaviors.Transactions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     A pipeline behavior that wraps request handling in a database transaction.
-///     It also orchestrates saving notifications to an outbox store if the outbox pattern is used.
+///     Runs a transactional request (<see cref="ITransactionalCommand" />, <see cref="ITransactionalQuery" />) in a
+///     transaction of the scope's <see cref="IUnitOfWork" />: begun before the handler, committed with the request's
+///     outbox notifications when it succeeds, rolled back (its notifications discarded) when it throws or, unless
+///     <see cref="UnitOfWorkOptions.RollbackOnFailedResult" /> is <c>false</c>, returns a failed
+///     <see cref="CommandResult" />. A read-only query (<see cref="ITransactionalQuery.IsReadOnly" />) is always rolled
+///     back. A request that finds a transaction already active takes part in it, and whoever began it commits or rolls
+///     it back.
 /// </summary>
 /// <typeparam name="TRequest">The type of the request.</typeparam>
 /// <typeparam name="TResult">The type of the result.</typeparam>
+/// <param name="logger">The behavior's logger.</param>
+/// <param name="unitOfWork">The scope's unit of work.</param>
+/// <param name="options">The unit-of-work options.</param>
+/// <param name="services">The request's scoped services, from which the outbox services are resolved when a commit stores notifications.</param>
 public sealed class UnitOfWorkBehavior<TRequest, TResult>(
     ILogger<UnitOfWorkBehavior<TRequest, TResult>> logger,
     IUnitOfWork unitOfWork,
-    IOutbox outbox,
     IOptions<UnitOfWorkOptions> options,
-    IOutboxStore? outboxStore = null,
-    INotificationSerializer? serializer = null,
-    TimeProvider? timeProvider = null)
+    IServiceProvider services)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior where TRequest : IRequest
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    /// <inheritdoc />
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
     /// <inheritdoc />
     public async Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
-        var isTransactional = request is ITransactionalCommand or ITransactionalQuery;
-        if (!isTransactional) return await next(cancellationToken).ConfigureAwait(false);
+        if (!UnitOfWorkSupport.IsTransactional(request)) return await next(cancellationToken).ConfigureAwait(false);
 
-        using var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
-        activity?.SetTag("cqrsharp.request_type", typeof(TRequest).Name);
+        using var activity = PipelineTelemetry.StartActivity<TRequest>("UoW.Transaction");
+        var unitOfWorkOptions = options.Value;
 
-        if (unitOfWork is IExplicitUnitOfWork explicitUow)
-            return await HandleExplicitTransactionAsync(request, next, cancellationToken, activity, explicitUow).ConfigureAwait(false);
+        var transaction = await UnitOfWorkTransaction.BeginAsync(
+            unitOfWork, request, unitOfWorkOptions, services, logger, activity, typeof(TRequest).Name, cancellationToken).ConfigureAwait(false);
+        if (transaction is null) return await next(cancellationToken).ConfigureAwait(false);
 
-        return await HandleImplicitTransactionAsync(request, next, cancellationToken, activity).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
-
-    private async Task<TResult> HandleExplicitTransactionAsync(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken,
-        Activity? activity, IExplicitUnitOfWork explicitUow)
-    {
-        if (explicitUow.HasActiveTransaction)
-        {
-            logger.LogTrace("Participating in existing transaction for {RequestName}", typeof(TRequest).Name);
-            activity?.AddEvent(new ActivityEvent("Participating in existing transaction"));
-            return await next(cancellationToken).ConfigureAwait(false);
-        }
-
-        var level = GetIsolationLevel(request);
-        activity?.SetTag("db.isolation_level", level.ToString());
-
-        await explicitUow.BeginTransactionAsync(level, cancellationToken);
-        activity?.AddEvent(new ActivityEvent("Transaction Started"));
-
+        TResult response;
         try
         {
-            var response = await next(cancellationToken).ConfigureAwait(false);
-
-            if (IsFailedResult(response))
-            {
-                // The handler reported failure without throwing: same outcome for the transaction, no exception.
-                logger.LogWarning("{RequestName} returned a failed result. Rolling back.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to a failed result.");
-                outbox.Drain();
-                await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-                activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
-                return response;
-            }
-
-            await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
-
-            await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
-            activity?.AddEvent(new ActivityEvent("Transaction Committed"));
-            activity?.SetStatus(ActivityStatusCode.Ok);
-            return response;
+            response = await next(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Transaction failed for {RequestName}. Rolling back.", typeof(TRequest).Name);
-            activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to an exception.");
-
-            // The rolled-back work never happened, so neither did its notifications: drop them rather than leave them
-            // in the scoped outbox for a retry attempt (or the next command in this scope) to persist.
-            outbox.Drain();
-
-            try
-            {
-                // Never the caller's token: it is typically what caused the failure, and a rollback that is cancelled
-                // before it starts leaves the transaction open for every later request in this scope.
-                await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-                activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
-            }
-            catch (Exception rollbackEx)
-            {
-                // A failing rollback must not mask the original error that triggered it; log and rethrow the original.
-                logger.LogError(rollbackEx, "Rollback failed for {RequestName} after a transaction error.", typeof(TRequest).Name);
-            }
-
+            await transaction.RollBackAfterFailureAsync(ex, cancellationToken).ConfigureAwait(false);
             throw;
         }
-    }
 
-    private async Task<TResult> HandleImplicitTransactionAsync(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken,
-        Activity? activity)
-    {
-        logger.LogTrace("Beginning implicit transaction for {RequestName}", typeof(TRequest).Name);
-        try
-        {
-            var response = await next(cancellationToken).ConfigureAwait(false);
+        if (UnitOfWorkSupport.IsFailedResult(response, unitOfWorkOptions))
+            await transaction.RollBackFailedResultAsync().ConfigureAwait(false);
+        else if (!UnitOfWorkSupport.CommitsChanges(request))
+            await transaction.RollBackReadOnlyAsync().ConfigureAwait(false);
+        else
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-            if (IsFailedResult(response))
-            {
-                // Nothing is saved, so the implicit unit of work is simply abandoned along with its notifications.
-                logger.LogWarning("{RequestName} returned a failed result. Its changes are not saved.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction abandoned due to a failed result.");
-                outbox.Drain();
-                return response;
-            }
-
-            if (request is ITransactionalCommand)
-            {
-                await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
-
-                logger.LogTrace("Committing implicit transaction for {RequestName}", typeof(TRequest).Name);
-                await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                activity?.AddEvent(new ActivityEvent("Implicit Transaction Committed"));
-            }
-
-            activity?.SetStatus(ActivityStatusCode.Ok);
-            return response;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Implicit transaction failed for {RequestName}. The operation will be rolled back.", typeof(TRequest).Name);
-            activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction failed.");
-            outbox.Drain();
-            throw;
-        }
-    }
-
-    private bool IsFailedResult(TResult response)
-        => options.Value.RollbackOnFailedResult && response is CommandResult { IsSuccess: false };
-
-    private IsolationLevel GetIsolationLevel(TRequest request)
-    {
-        return request switch
-        {
-            ITransactionalCommand treq when treq.IsolationLevel != IsolationLevel.Unspecified => treq.IsolationLevel,
-            ITransactionalQuery tquery when tquery.IsolationLevel != IsolationLevel.Unspecified => tquery.IsolationLevel,
-            _ => options.Value.DefaultIsolationLevel
-        };
-    }
-
-    private async Task SaveNotificationsFromOutboxAsync(CancellationToken cancellationToken)
-    {
-        var notifications = outbox.Drain();
-        if (notifications.Count == 0) return;
-
-        if (outboxStore is null || serializer is null)
-            throw new InvalidOperationException("IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
-
-        var messages = OutboxMessageFactory.Create(notifications, serializer, _timeProvider);
-        await outboxStore.StoreAsync(messages, cancellationToken).ConfigureAwait(false);
+        return response;
     }
 }

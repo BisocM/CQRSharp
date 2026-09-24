@@ -1,20 +1,16 @@
-using CQRSharp.Pipelines;
 using CQRSharp.Sample.Domain.Events;
 using CQRSharp.Sample.Infrastructure.SelfTest;
-using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Application.Notifications.Handlers;
 
-public class UserCreatedNotificationHandler(
-    ILogger<UserCreatedNotificationHandler> logger,
-    SampleDiagnostics diagnostics)
+// Records the scope it ran in: the outbox processor delivers in a scope of its own, which is how the self-test tells an
+// outbox delivery from an in-process one.
+public sealed class UserCreatedNotificationHandler(SampleDiagnostics diagnostics, SampleScopedMarker scope)
     : INotificationHandler<UserCreatedNotification>
 {
     public Task Handle(UserCreatedNotification notification, CancellationToken cancellationToken)
     {
-        diagnostics.RecordUserCreated(notification);
-        logger.LogWarning("[NOTIFICATION HANDLER] New user created! Name: {Name}, ID: {Id}",
-            notification.Name, notification.UserId);
+        diagnostics.RecordUserCreated(notification, scope.Id);
         return Task.CompletedTask;
     }
 }

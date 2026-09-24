@@ -4,4 +4,4 @@ using CQRSharp.Sample.Infrastructure.Interceptors;
 namespace CQRSharp.Sample.Application.Commands.Requests;
 
 [CustomInterceptor(10)]
-public class InterceptorDemoCommand : CommandBase<SampleRequestContext>;
+public sealed class InterceptorDemoCommand : CommandBase<SampleRequestContext>;

@@ -44,13 +44,13 @@ public sealed class FluentValidationPipelineTests
         await using var scope = provider.CreateAsyncScope();
 
         var result = await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>()
-            .Send(new FvOrderQuery { Name = "widget", Quantity = 2 });
+            .Send(new FvOrderQuery { Name = "widget", Quantity = 2 }, TestContext.Current.CancellationToken);
 
         result.Should().Be(new FvOrderResult("widget x2"));
     }
 
-    [Fact(DisplayName = "End-to-end: UseFluentValidation() alone registers the adapter and turns validation on")]
-    public async Task Builder_verb_enables_validation()
+    [Fact(DisplayName = "End-to-end: UseFluentValidation() alone is enough: the builder's default validation behavior runs the adapter")]
+    public async Task Builder_verb_runs_under_the_default_validation_behavior()
     {
         await using var provider = Build(
             b => b.UseFluentValidation(),
@@ -64,6 +64,26 @@ public sealed class FluentValidationPipelineTests
             .Should().ContainSingle().Which.Code.Should().Be("QUANTITY_POSITIVE");
     }
 
+    [Theory(DisplayName = "End-to-end: UseValidation(false) turns FluentValidation validators off whichever of the two verbs comes first")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Validation_opt_out_wins_in_either_order(bool optOutFirst)
+    {
+        await using var provider = Build(
+            b =>
+            {
+                if (optOutFirst) b.UseValidation(false).UseFluentValidation();
+                else b.UseFluentValidation().UseValidation(false);
+            },
+            services => services.AddScoped<IValidator<FvOrderQuery>, OrderValidator>());
+        await using var scope = provider.CreateAsyncScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>()
+            .Send(new FvOrderQuery { Name = "", Quantity = 0 }, TestContext.Current.CancellationToken);
+
+        result.Should().Be(new FvOrderResult(" x0"), "with the validation behavior off no validator runs");
+    }
+
     [Fact(DisplayName = "End-to-end: a request with no FluentValidation validator passes untouched")]
     public async Task Request_without_validator_passes()
     {
@@ -72,7 +92,7 @@ public sealed class FluentValidationPipelineTests
             services => services.AddScoped<IValidator<FvOrderQuery>, OrderValidator>());
         await using var scope = provider.CreateAsyncScope();
 
-        var result = await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Send(new FvUnvalidatedQuery());
+        var result = await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>().Send(new FvUnvalidatedQuery(), TestContext.Current.CancellationToken);
 
         result.Should().Be(new FvUnvalidatedResult(true));
     }
@@ -142,7 +162,7 @@ public sealed class FluentValidationPipelineTests
         await using var scope = provider.CreateAsyncScope();
 
         var result = await scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>()
-            .Send(new FvOrderQuery { Name = "", Quantity = 0 });
+            .Send(new FvOrderQuery { Name = "", Quantity = 0 }, TestContext.Current.CancellationToken);
 
         result.Should().Be(new FvOrderResult(" x0"));
     }

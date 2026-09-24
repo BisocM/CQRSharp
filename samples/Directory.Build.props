@@ -1,0 +1,32 @@
+<Project>
+
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+    <!--
+        Every sample is built the way an application that installs the CQRSharp meta-package is: the source generator
+        writes its registrations, the CQRSharp analyzers check its code (under the solution's zero-warning gate, so a
+        false positive on idiomatic code fails the build here first), and the meta-package's global usings apply. The
+        samples reference the projects rather than the packages, so the two Roslyn components are wired as analyzers
+        here; nothing from them is referenced at compile time.
+    -->
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- The solution's pack walks the samples too; the web SDK would warn that it cannot pack the web sample. -->
+        <WarnOnPackingNonPackableProject>false</WarnOnPackingNonPackableProject>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>default</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(MSBuildThisFileDirectory)../src/CQRSharp.Generators/CQRSharp.Generators.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
+        <ProjectReference Include="$(MSBuildThisFileDirectory)../src/CQRSharp.Analyzers/CQRSharp.Analyzers.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)../src/CQRSharp/build/CQRSharp.props"/>
+
+</Project>

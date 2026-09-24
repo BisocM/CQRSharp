@@ -1,82 +1,79 @@
-using CQRSharp.Pipelines;
-using CQRSharp.Core.Caching.Contexts;
-using CQRSharp.Core.Caching.Handlers;
-using CQRSharp.Core.Caching.Requests;
-using CQRSharp.Core.Diagnostics;
+using System.ComponentModel;
 using CQRSharp.Core.Exceptions;
+using CQRSharp.Core.Idempotency;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Registries;
+using CQRSharp.Persistence;
 
 namespace CQRSharp.Core.Modules;
 
 /// <summary>
-///     The per-assembly registration surface the CQRSharp source generator emits: one implementation per assembly
-///     that contains handlers, carrying that assembly's compile-time-discovered registration data and its AOT-safe,
-///     reflection-free typed-dispatch entry points. A composition-root assembly registers its own module plus every
-///     referenced assembly's module as additive singletons, and <c>AddCqrsModuleComposition</c> merges them into the
-///     single set of framework services (one registry, one dispatcher per kind) — which is how CQRSharp spans multiple
-///     assemblies without the generated registration code colliding across them.
+///     What one assembly's source-generated module contributes to the application: the requests, handlers, context
+///     types, exception hooks and notifications the generator discovered in that assembly at compile time, as tables
+///     keyed by type. Every value is data, a static lambda over the assembly's types, or an object the generated code
+///     creates by closing one of CQRSharp.Core's generic factories over them (<see cref="RequestRoute" />,
+///     <see cref="NotificationRoute" />, …), so the behavior behind every entry lives in CQRSharp.Core and only the list of
+///     types is compiled into the assembly. A composition root registers its own module and every referenced assembly's,
+///     and <see cref="CqrsModuleComposition.AddCqrsModuleComposition" /> merges them into provider-wide tables, the
+///     composition root's module winning where two modules route the same request.
 /// </summary>
+/// <remarks>
+///     Implemented only by the source generator; a hand-written module is not supported. Members added after 5.0.0 come
+///     with default implementations, so a module compiled against an earlier 5.x keeps loading.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface ICqrsModule
 {
-    /// <summary>Per-request metadata (handler type, context, pre/post handlers, exemptions) discovered in this assembly.</summary>
+    /// <summary>The metadata (handler, context type, interceptors, exemptions) of every request this assembly handles.</summary>
     IReadOnlyDictionary<Type, RequestMetadata> RequestMetadata { get; }
 
     /// <summary>
-    ///     Typed handler invokers keyed by request type: a
+    ///     The typed handler invoker of every request this assembly handles: a
     ///     <c>Func&lt;object, TRequest, CancellationToken, Task&lt;TResult&gt;&gt;</c> for a command or query, a
     ///     <c>Func&lt;object, TRequest, CancellationToken, IAsyncEnumerable&lt;TItem&gt;&gt;</c> for a streaming request. Each
-    ///     returns the handler's own task/stream.
+    ///     returns the handler's own task or stream.
     /// </summary>
     IReadOnlyDictionary<Type, Delegate> HandlerInvokers { get; }
 
-    /// <summary>Per-context-type factory resolvers discovered in this assembly.</summary>
-    IReadOnlyDictionary<Type, Func<IServiceProvider, object?>> ContextFactories { get; }
+    /// <summary>The source of the contexts of every context type this assembly's requests use or its factories create.</summary>
+    IReadOnlyDictionary<Type, RequestContextSource> ContextSources { get; }
 
-    /// <summary>
-    ///     This module's command/query routes keyed by exact request type. The composition merges every module's routes
-    ///     into one table, so a dispatch is a single lookup. A request type listed in <see cref="RequestTypes" /> without
-    ///     a route here is dispatched through <see cref="CreateRequestDispatcher" /> instead.
-    /// </summary>
+    /// <summary>The route of every command and query this assembly handles, keyed by exact request type.</summary>
     IReadOnlyDictionary<Type, RequestRoute> RequestRoutes { get; }
 
-    /// <summary>The boxed-result counterpart of <see cref="RequestRoutes" />, for the untyped <c>Send(object)</c> path.</summary>
-    IReadOnlyDictionary<Type, UntypedRequestRoute> UntypedRequestRoutes { get; }
+    /// <summary>The route of every streaming request this assembly handles, keyed by exact request type.</summary>
+    IReadOnlyDictionary<Type, StreamRoute> StreamRoutes { get; }
 
-    /// <summary>Per-request exception-hook invokers discovered in this assembly.</summary>
-    IReadOnlyDictionary<Type, RequestExceptionHookInvoker> ExceptionHooks { get; }
+    /// <summary>The exception hooks this assembly declares, one entry per (request, exception type) pair.</summary>
+    IReadOnlyList<RequestExceptionHook> ExceptionHooks { get; }
 
-    /// <summary>The command/query request types this module's request dispatcher can execute.</summary>
-    IReadOnlyList<Type> RequestTypes { get; }
+    /// <summary>The route of every concrete notification type this assembly declares or handles.</summary>
+    IReadOnlyDictionary<Type, NotificationRoute> NotificationRoutes { get; }
 
-    /// <summary>The streaming request types this module's stream dispatcher can execute.</summary>
-    IReadOnlyList<Type> StreamRequestTypes { get; }
+    /// <summary>
+    ///     This assembly's notification subscriptions: one per (handler type, handled notification type) pair. The
+    ///     composition merges every module's into the <see cref="INotificationSubscriptionRegistry" /> that decides which
+    ///     handlers a notification reaches, in-process and through the outbox.
+    /// </summary>
+    IReadOnlyList<NotificationSubscription> NotificationSubscriptions { get; }
 
-    /// <summary>Every concrete notification type declared in this assembly (the notification-registry surface).</summary>
-    IReadOnlyList<Type> NotificationTypes { get; }
+    /// <summary>
+    ///     The partition key selectors of this assembly's <c>[NotificationName(PartitionBy = ...)]</c> notifications, keyed
+    ///     by notification type.
+    /// </summary>
+    IReadOnlyDictionary<Type, Func<INotification, string?>> PartitionKeySelectors { get; }
 
-    /// <summary>The notification types this assembly has an in-process handler for (the dispatch-routing surface).</summary>
-    IReadOnlyList<Type> HandledNotificationTypes { get; }
-
-    /// <summary>The subset of <see cref="HandledNotificationTypes" /> that carry a stable <c>[NotificationName]</c>.</summary>
-    IReadOnlyList<Type> StableNotificationTypes { get; }
-
-    /// <summary>Creates this module's AOT-safe request dispatcher, bound to the supplied scoped pipeline executor.</summary>
-    IRequestDispatcher CreateRequestDispatcher(IPipelineExecutor pipelineExecutor);
-
-    /// <summary>Creates this module's AOT-safe stream-request dispatcher, bound to the supplied scoped pipeline executor.</summary>
-    IStreamRequestDispatcher CreateStreamDispatcher(IPipelineExecutor pipelineExecutor);
-
-    /// <summary>Creates this module's AOT-safe direct notification dispatcher, bound to the supplied scope.</summary>
-    IDirectNotificationDispatcher CreateNotificationDispatcher(IServiceProvider services);
-
-    /// <summary>Creates this module's diagnostics describer over the (already merged) registries.</summary>
-    ICqrsDiagnostics CreateDiagnostics(
-        IServiceProvider services,
-        IRequestRegistry requestRegistry,
-        IContextFactoryRegistry contextFactoryRegistry,
-        ICqrsNotificationRegistry notificationRegistry);
-
-    /// <summary>This module's outbox notification serializer, or <see langword="null" /> when it has no stable-named notifications.</summary>
+    /// <summary>
+    ///     This assembly's generated outbox serializer, which names and serializes its <c>[NotificationName]</c>
+    ///     notifications, or <see langword="null" /> when it has none. The composition puts every module's behind the
+    ///     application's one <see cref="INotificationSerializer" />, unless a custom serializer replaces it.
+    /// </summary>
     INotificationSerializer? OutboxSerializer { get; }
+
+    /// <summary>
+    ///     This assembly's payload fingerprinter for the <see cref="IIdempotentRequest" /> types it declares or handles, or
+    ///     <see langword="null" /> when none of them can be fingerprinted automatically.
+    /// </summary>
+    IRequestFingerprinter? RequestFingerprinter { get; }
 }

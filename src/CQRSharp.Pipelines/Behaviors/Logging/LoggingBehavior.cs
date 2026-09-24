@@ -1,12 +1,27 @@
-using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Pipelines.Behaviors.Logging;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     A pipeline behavior that logs the start, completion (with elapsed time), and failure of each request. Opt-in
-///     via <c>AddLoggingBehavior()</c>; runs outermost so the measured time covers the whole pipeline.
+///     Logs the start, completion (with elapsed time) and failure of each request; enabled with <c>UseLogging()</c>.
+///     It is the one place a failed request is logged at Error with its exception: the other built-in behaviors only log
+///     what they decide.
 /// </summary>
+/// <remarks>
+///     <para>
+///         An outcome the pipeline produces on purpose is not an Error, and is logged in one line without the stack
+///         trace: a request rejected for something its caller controls (<see cref="RequestValidationException" />,
+///         <see cref="DuplicateRequestException" />, <see cref="IdempotencyKeyMismatchException" />,
+///         <see cref="RateLimitExceededException" />) at Information, one the server could not serve
+///         (<see cref="RequestTimeoutException" />, <see cref="BackgroundTaskRejectedException" />) at Warning, and one
+///         its caller cancelled at Information.
+///     </para>
+///     <para>
+///         It runs inside the exception-handling and rate-limiting behaviors, so a request throttled by its own limit is
+///         not logged here, and outside everything else, so its elapsed time includes validation, retries and the unit
+///         of work.
+///     </para>
+/// </remarks>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TResult">The result type.</typeparam>
 public sealed class LoggingBehavior<TRequest, TResult>(
@@ -20,19 +35,17 @@ public sealed class LoggingBehavior<TRequest, TResult>(
     {
         var requestName = typeof(TRequest).Name;
         var startTimestamp = _timeProvider.GetTimestamp();
-        logger.LogInformation("Handling {RequestName}", requestName);
+        LoggingBehaviorLog.Handling(logger, requestName);
 
         try
         {
             var result = await next(cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("Handled {RequestName} in {ElapsedMs:0.##}ms",
-                requestName, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            LoggingBehaviorLog.Handled(logger, requestName, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
             return result;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Request {RequestName} failed after {ElapsedMs:0.##}ms",
-                requestName, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            LoggingBehaviorLog.Ended(logger, ex, cancellationToken, requestName, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
             throw;
         }
     }

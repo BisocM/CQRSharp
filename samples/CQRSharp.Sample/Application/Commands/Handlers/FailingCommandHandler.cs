@@ -1,25 +1,20 @@
 using CQRSharp.Sample.Application.Commands.Requests;
-using Microsoft.Extensions.Logging;
+using CQRSharp.Sample.Infrastructure.SelfTest;
 
 namespace CQRSharp.Sample.Application.Commands.Handlers;
 
-public class FailingCommandHandler(ILogger<FailingCommandHandler> logger) : ICommandHandler<FailingCommand>
+public sealed class FailingCommandHandler(SampleDiagnostics diagnostics) : ICommandHandler<FailingCommand>
 {
-    private static int _attemptCount;
-
     public Task<CommandResult> Handle(FailingCommand command, CancellationToken cancellationToken)
     {
-        _attemptCount++;
-        logger.LogInformation("Handling FailingCommand. Attempt: {AttemptCount}", _attemptCount);
+        // A retry sends the same request object again, so the attempt is counted per request, not in the handler, which
+        // is a new instance each time.
+        var attempt = diagnostics.CountRun(AttemptKey(command));
+        if (attempt <= command.FailuresBeforeSuccess)
+            throw new InvalidOperationException($"Simulated failure on attempt {attempt}.");
 
-        if (_attemptCount <= 2)
-        {
-            logger.LogWarning("FailingCommand is failing on purpose.");
-            throw new InvalidOperationException($"Simulated failure on attempt {_attemptCount}.");
-        }
-
-        logger.LogInformation("FailingCommand is now succeeding.");
-        _attemptCount = 0; // Reset for next time
         return Task.FromResult(CommandResult.FromSuccess());
     }
+
+    public static string AttemptKey(FailingCommand command) => $"failing-command:{command.Id:N}";
 }

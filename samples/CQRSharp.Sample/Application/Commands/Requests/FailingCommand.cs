@@ -2,6 +2,12 @@ using CQRSharp.Sample.Application.Contexts;
 
 namespace CQRSharp.Sample.Application.Commands.Requests;
 
-// Opts into resilience retries: the handler deliberately fails the first attempts, then succeeds, to exercise the
-// retry behavior. Retries are now opt-in via IRetryableRequest (most commands are not idempotent and must not retry).
-public class FailingCommand : CommandBase<SampleRequestContext>, IRetryableRequest;
+/// <summary>
+///     Fails its first <see cref="FailuresBeforeSuccess" /> attempts, then succeeds. It opts into the resilience
+///     behavior's retries with <see cref="IRetryableRequest" />: only a request that is safe to run again may.
+/// </summary>
+public sealed class FailingCommand : CommandBase<SampleRequestContext>, IRetryableRequest
+{
+    public Guid Id { get; } = Guid.NewGuid();
+    public required int FailuresBeforeSuccess { get; init; }
+}

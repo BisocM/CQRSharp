@@ -1,22 +1,20 @@
 #nullable enable
+const CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.FingerprintMaxLength = 128 -> int
+const CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.KeyMaxLength = 450 -> int
+const CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.SqlServerBinaryCollation = "Latin1_General_100_BIN2" -> string!
+const CQRSharp.EntityFrameworkCore.OutboxEntityConfiguration.HandlerNameMaxLength = 256 -> int
+const CQRSharp.EntityFrameworkCore.OutboxEntityConfiguration.PartitionKeyMaxLength = 256 -> int
+CQRSharp.EntityFrameworkCore.CqrsModelBuilderExtensions
 CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions
 CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions.EfCoreIdempotencyStoreOptions() -> void
 CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions.Retention.get -> System.TimeSpan
 CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions.Retention.set -> void
-CQRSharp.EntityFrameworkCore.EfCoreOutboxPurgeSchedule
-CQRSharp.EntityFrameworkCore.EfCoreOutboxPurgeSchedule.EfCoreOutboxPurgeSchedule() -> void
-CQRSharp.EntityFrameworkCore.EfCoreOutboxPurgeSchedule.TryBegin(System.DateTime now, System.TimeSpan interval) -> bool
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.EfCoreOutboxStore(TContext! context, System.TimeProvider! timeProvider, Microsoft.Extensions.Options.IOptions<CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions!>! options, Microsoft.Extensions.Logging.ILogger<CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext!>!>! logger, CQRSharp.EntityFrameworkCore.EfCoreOutboxPurgeSchedule? purgeSchedule = null) -> void
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.GetPendingAsync(int batchSize, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<CQRSharp.Pipelines.OutboxMessage!>!>!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.IncrementAttemptAsync(CQRSharp.Pipelines.OutboxClaim claim, string? error, System.DateTime? nextRetryAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.MarkAsFailedAsync(CQRSharp.Pipelines.OutboxClaim claim, string? error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.MarkAsProcessedAsync(CQRSharp.Pipelines.OutboxClaim claim, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.ReleaseAsync(System.Collections.Generic.IReadOnlyCollection<CQRSharp.Pipelines.OutboxClaim>! claims, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.RenewAsync(CQRSharp.Pipelines.OutboxClaim claim, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Pipelines.OutboxClaim?>!
-CQRSharp.EntityFrameworkCore.EfCoreOutboxStore<TContext>.StoreAsync(System.Collections.Generic.IEnumerable<CQRSharp.Pipelines.OutboxMessage!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions
+CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.DeadLetterRetention.get -> System.TimeSpan?
+CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.DeadLetterRetention.set -> void
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.EfCoreOutboxStoreOptions() -> void
+CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.InboxRetention.get -> System.TimeSpan
+CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.InboxRetention.set -> void
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.MaxClaimAttempts.get -> int
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.MaxClaimAttempts.set -> void
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.ProcessedRetention.get -> System.TimeSpan?
@@ -25,57 +23,94 @@ CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.PurgeInterval.get -> Syste
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.PurgeInterval.set -> void
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.VisibilityTimeout.get -> System.TimeSpan
 CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions.VisibilityTimeout.set -> void
-CQRSharp.EntityFrameworkCore.Extensions.CqrsModelBuilderExtensions
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Completed.get -> bool
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Completed.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.ExpiresAt.get -> System.DateTime
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.ExpiresAt.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.IdempotencyEntity() -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Key.get -> string!
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Key.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Result.get -> byte[]?
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.Result.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.RowVersion.get -> uint
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity.RowVersion.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntityConfiguration
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntityConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntity!>! builder) -> void
-CQRSharp.EntityFrameworkCore.Persistence.IdempotencyEntityConfiguration.IdempotencyEntityConfiguration() -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.AttemptCount.get -> int
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.AttemptCount.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.CreatedAt.get -> System.DateTime
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.CreatedAt.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Id.get -> System.Guid
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Id.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.LastError.get -> string?
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.LastError.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.LockedUntil.get -> System.DateTime?
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.LockedUntil.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.NextRetryAt.get -> System.DateTime?
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.NextRetryAt.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.NotificationType.get -> string!
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.NotificationType.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.OutboxEntity() -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Payload.get -> byte[]!
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Payload.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.ProcessedAt.get -> System.DateTime?
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.ProcessedAt.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.RowVersion.get -> uint
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.RowVersion.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Status.get -> CQRSharp.Pipelines.OutboxMessageStatus
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.Status.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.TraceParent.get -> string?
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity.TraceParent.set -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntityConfiguration
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntityConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CQRSharp.EntityFrameworkCore.Persistence.OutboxEntity!>! builder) -> void
-CQRSharp.EntityFrameworkCore.Persistence.OutboxEntityConfiguration.OutboxEntityConfiguration() -> void
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>.BeginTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>.EfCoreUnitOfWork(TContext! context) -> void
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>.HasActiveTransaction.get -> bool
+CQRSharp.EntityFrameworkCore.EfCoreUnitOfWork<TContext>.RollbackAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.EntityFrameworkCore.IdempotencyEntity
+CQRSharp.EntityFrameworkCore.IdempotencyEntity.IdempotencyEntity() -> void
+CQRSharp.EntityFrameworkCore.IdempotencyEntity.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+CQRSharp.EntityFrameworkCore.IdempotencyEntity.PropertyChanging -> System.ComponentModel.PropertyChangingEventHandler?
+CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration
+CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CQRSharp.EntityFrameworkCore.IdempotencyEntity!>! builder) -> void
+CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.IdempotencyEntityConfiguration(string? keyCollation = null) -> void
+CQRSharp.EntityFrameworkCore.IdempotencyEntityConfiguration.KeyCollation.get -> string?
+CQRSharp.EntityFrameworkCore.InboxEntity
+CQRSharp.EntityFrameworkCore.InboxEntity.InboxEntity() -> void
+CQRSharp.EntityFrameworkCore.InboxEntity.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+CQRSharp.EntityFrameworkCore.InboxEntity.PropertyChanging -> System.ComponentModel.PropertyChangingEventHandler?
+CQRSharp.EntityFrameworkCore.InboxEntityConfiguration
+CQRSharp.EntityFrameworkCore.InboxEntityConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CQRSharp.EntityFrameworkCore.InboxEntity!>! builder) -> void
+CQRSharp.EntityFrameworkCore.InboxEntityConfiguration.InboxEntityConfiguration() -> void
+CQRSharp.EntityFrameworkCore.OutboxEntity
+CQRSharp.EntityFrameworkCore.OutboxEntity.OutboxEntity() -> void
+CQRSharp.EntityFrameworkCore.OutboxEntity.PropertyChanged -> System.ComponentModel.PropertyChangedEventHandler?
+CQRSharp.EntityFrameworkCore.OutboxEntity.PropertyChanging -> System.ComponentModel.PropertyChangingEventHandler?
+CQRSharp.EntityFrameworkCore.OutboxEntityConfiguration
+CQRSharp.EntityFrameworkCore.OutboxEntityConfiguration.Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<CQRSharp.EntityFrameworkCore.OutboxEntity!>! builder) -> void
+CQRSharp.EntityFrameworkCore.OutboxEntityConfiguration.OutboxEntityConfiguration() -> void
 Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreIdempotencyStoreServiceCollectionExtensions
 Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreOutboxStoreServiceCollectionExtensions
 Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreStoreBuilderExtensions
-static CQRSharp.EntityFrameworkCore.Extensions.CqrsModelBuilderExtensions.ApplyCqrsIdempotency(this Microsoft.EntityFrameworkCore.ModelBuilder! modelBuilder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
-static CQRSharp.EntityFrameworkCore.Extensions.CqrsModelBuilderExtensions.ApplyCqrsOutbox(this Microsoft.EntityFrameworkCore.ModelBuilder! modelBuilder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreUnitOfWorkBuilderExtensions
+static CQRSharp.EntityFrameworkCore.CqrsModelBuilderExtensions.ApplyCqrsIdempotency(this Microsoft.EntityFrameworkCore.ModelBuilder! modelBuilder, string? keyCollation = null) -> Microsoft.EntityFrameworkCore.ModelBuilder!
+static CQRSharp.EntityFrameworkCore.CqrsModelBuilderExtensions.ApplyCqrsOutbox(this Microsoft.EntityFrameworkCore.ModelBuilder! modelBuilder) -> Microsoft.EntityFrameworkCore.ModelBuilder!
 static Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreIdempotencyStoreServiceCollectionExtensions.AddEntityFrameworkCoreIdempotencyStore<TContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreOutboxStoreServiceCollectionExtensions.AddEntityFrameworkCoreOutboxStore<TContext>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreStoreBuilderExtensions.UseEntityFrameworkCore<TContext>(this CQRSharp.Pipelines.IdempotencyStoreBuilder! builder, System.Action<CQRSharp.EntityFrameworkCore.EfCoreIdempotencyStoreOptions!>? configure = null) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
 static Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreStoreBuilderExtensions.UseEntityFrameworkCore<TContext>(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, System.Action<CQRSharp.EntityFrameworkCore.EfCoreOutboxStoreOptions!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.EntityFrameworkCoreUnitOfWorkBuilderExtensions.UseEntityFrameworkCoreUnitOfWork<TContext>(this CQRSharp.Pipelines.ICqrsBuilder! builder, System.Action<CQRSharp.Pipelines.UnitOfWorkOptions!>? configure = null) -> CQRSharp.Pipelines.ICqrsBuilder!
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Completed.get -> bool
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Completed.set -> void
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.ExpiresAt.get -> System.DateTime
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.ExpiresAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Fingerprint.get -> string?
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Fingerprint.set -> void
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Key.get -> string!
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Key.set -> void
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Result.get -> byte[]?
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.Result.set -> void
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.RowVersion.get -> uint
+virtual CQRSharp.EntityFrameworkCore.IdempotencyEntity.RowVersion.set -> void
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.DeliveredAt.get -> System.DateTime
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.DeliveredAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.HandlerName.get -> string!
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.HandlerName.set -> void
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.MessageId.get -> System.Guid
+virtual CQRSharp.EntityFrameworkCore.InboxEntity.MessageId.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.AttemptCount.get -> int
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.AttemptCount.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.CreatedAt.get -> System.DateTime
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.CreatedAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.FailedAt.get -> System.DateTime?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.FailedAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.HandlerName.get -> string!
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.HandlerName.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Id.get -> System.Guid
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Id.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.LastError.get -> string?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.LastError.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.LockedUntil.get -> System.DateTime?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.LockedUntil.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NextRetryAt.get -> System.DateTime?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NextRetryAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NotificationId.get -> System.Guid?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NotificationId.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NotificationType.get -> string!
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.NotificationType.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.PartitionKey.get -> string?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.PartitionKey.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Payload.get -> byte[]!
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Payload.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.ProcessedAt.get -> System.DateTime?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.ProcessedAt.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.RowVersion.get -> uint
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.RowVersion.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Sequence.get -> long
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Sequence.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Status.get -> CQRSharp.Persistence.OutboxMessageStatus
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.Status.set -> void
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.TraceParent.get -> string?
+virtual CQRSharp.EntityFrameworkCore.OutboxEntity.TraceParent.set -> void

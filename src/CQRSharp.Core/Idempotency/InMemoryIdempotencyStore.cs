@@ -1,4 +1,4 @@
-using CQRSharp.Pipelines;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Idempotency;
@@ -7,8 +7,9 @@ namespace CQRSharp.Core.Idempotency;
 ///     A thread-safe in-process idempotency store for development, tests, and single-node demos. It is NOT durable:
 ///     claims live in process memory and are lost on restart, so it only deduplicates within a single process lifetime
 ///     — use a database- or Redis-backed store for cross-process at-most-once semantics. Claims are atomic (one
-///     concurrent caller wins), a completed request's result is kept for replay, and every entry ages out after the
-///     retention window, so the store does not grow without bound.
+///     concurrent caller wins), a completed request's result is kept for replay, a key reused with a different payload
+///     fingerprint is reported as a mismatch, and every entry ages out after the retention window, so the store does
+///     not grow without bound.
 /// </summary>
 internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
 {
@@ -26,7 +27,7 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
         _retention = options.Value.Retention;
     }
 
-    public Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken)
+    public Task<IdempotencyClaim> TryClaimAsync(string key, string? fingerprint, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
@@ -34,38 +35,59 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
             SweepExpired(now);
 
             if (_entries.TryGetValue(key, out var existing) && now - existing.ClaimedAt < _retention)
+            {
+                // The same key for a different request: neither the original's outcome nor a second run is the answer.
+                if (fingerprint is not null && existing.Fingerprint is not null &&
+                    !string.Equals(fingerprint, existing.Fingerprint, StringComparison.Ordinal))
+                    return Task.FromResult(IdempotencyClaim.PayloadMismatch);
+
                 return Task.FromResult(existing.Completed
                     ? IdempotencyClaim.Completed(existing.Result)
                     : IdempotencyClaim.InProgress);
+            }
 
-            // Free, or the previous claim aged out (a crashed claimant's key self-heals this way).
-            _entries[key] = new Entry(now, false, null);
-            return Task.FromResult(IdempotencyClaim.Claimed);
+            // Free, or the previous claim aged out (an abandoned claim self-heals this way). A fresh token identifies
+            // this claim, so the previous claimant - if it is still running - can neither complete nor release it.
+            var token = Guid.NewGuid().ToString("N");
+            _entries[key] = new Entry(now, false, null, fingerprint, token);
+            return Task.FromResult(IdempotencyClaim.ClaimedWith(token));
         }
     }
 
-    public Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken)
+    public Task CompleteAsync(string key, string claimToken, byte[]? result, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
             // Keeps ClaimedAt: the retention window runs from the claim, not from completion.
-            if (_entries.TryGetValue(key, out var existing) && !existing.Completed)
+            if (_entries.TryGetValue(key, out var existing) && !existing.Completed && existing.Token == claimToken)
                 _entries[key] = existing with { Completed = true, Result = result };
         }
 
         return Task.CompletedTask;
     }
 
-    public Task ReleaseAsync(string key, CancellationToken cancellationToken)
+    public Task ReleaseAsync(string key, string claimToken, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
-            // Only an in-flight claim can be released; a completed request stays remembered.
-            if (_entries.TryGetValue(key, out var existing) && !existing.Completed)
+            // Only the caller's own, in-flight claim is released; a completed request stays remembered.
+            if (_entries.TryGetValue(key, out var existing) && !existing.Completed && existing.Token == claimToken)
                 _entries.Remove(key);
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>How many keys the store holds, expired ones not yet swept included; for in-process inspection in tests.</summary>
+    internal int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Count;
+            }
+        }
     }
 
     // Expired entries are otherwise only replaced when the SAME key returns, so with a unique key per request (the normal
@@ -84,5 +106,5 @@ internal sealed class InMemoryIdempotencyStore : IIdempotencyStore
         foreach (var key in expired) _entries.Remove(key);
     }
 
-    private sealed record Entry(DateTime ClaimedAt, bool Completed, byte[]? Result);
+    private sealed record Entry(DateTime ClaimedAt, bool Completed, byte[]? Result, string? Fingerprint, string Token);
 }

@@ -109,9 +109,9 @@ public sealed class IdempotencyKeyHttpExtensionsTests
         using var request = new HttpRequestMessage(HttpMethod.Post, "/");
         request.Headers.TryAddWithoutValidation("idempotency-key", "order-17");
 
-        var response = await host.Client.SendAsync(request);
+        var response = await host.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await response.Content.ReadAsStringAsync()).Should().Be("order-17");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Be("order-17");
     }
 }

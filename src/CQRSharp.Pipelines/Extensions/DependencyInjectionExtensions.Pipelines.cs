@@ -1,25 +1,17 @@
-﻿using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Behaviors.Exceptions;
-using CQRSharp.Pipelines.Behaviors.Idempotency;
-using CQRSharp.Pipelines.Behaviors.Logging;
-using CQRSharp.Pipelines.Behaviors.RateLimiting;
-using CQRSharp.Pipelines.Behaviors.Resilience;
-using CQRSharp.Pipelines.Behaviors.Timeout;
-using CQRSharp.Pipelines.Behaviors.Transactions;
-using CQRSharp.Pipelines.Behaviors.Validation;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Pipelines;
 
-// The optional-behavior registration extensions are internal: the fluent builder (UseLogging/UseValidation/UseResilience/
-// UseTimeout/UseRateLimiting/UseUnitOfWork/UseExceptionHandling/UseIdempotency/UsePipelinePack) is the single public lane
-// for enabling pipeline behaviors. The builder, in the same assembly, calls these to do the actual registration.
+// The behavior registrations are internal: the fluent builder is the one public lane for enabling pipeline behaviors.
+// Each registration is idempotent in itself (TryAdd for services and option validators, Configure for settings, which
+// composes), so the builder can run them again for a second AddCqrsGenerated(builder) call on the same collection and
+// every call's settings still apply.
 internal static class DependencyInjectionExtensions
 {
-    /// <summary>
-    ///     Registers request-level exception hook support.
-    /// </summary>
+    /// <summary>Registers the request-level exception-hook behaviors.</summary>
     internal static IServiceCollection AddExceptionHandling(this IServiceCollection services)
     {
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ExceptionHandlingBehavior<,>)));
@@ -28,13 +20,9 @@ internal static class DependencyInjectionExtensions
     }
 
     /// <summary>
-    ///     Registers the idempotency behavior, which enforces at-most-once processing for requests implementing
-    ///     <c>IIdempotentRequest</c>. A duplicate request is rejected with a <c>DuplicateRequestException</c>.
+    ///     Registers the idempotency behaviors, which enforce at-most-once processing for requests implementing
+    ///     <c>IIdempotentRequest</c>. The caller also registers an <see cref="IIdempotencyStore" />.
     /// </summary>
-    /// <remarks>
-    ///     The caller must also register an
-    ///     <see cref="CQRSharp.Pipelines.IIdempotencyStore" /> implementation.
-    /// </remarks>
     internal static IServiceCollection AddIdempotency(this IServiceCollection services)
     {
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(IdempotencyBehavior<,>)));
@@ -42,10 +30,7 @@ internal static class DependencyInjectionExtensions
         return services;
     }
 
-    /// <summary>
-    ///     Registers the logging behavior, which logs the start, completion (with elapsed time), and failure of each
-    ///     request and streaming request. Opt-in (off by default); runs outermost.
-    /// </summary>
+    /// <summary>Registers the logging behaviors (<c>UseLogging()</c>).</summary>
     internal static IServiceCollection AddLoggingBehavior(this IServiceCollection services)
     {
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>)));
@@ -53,52 +38,33 @@ internal static class DependencyInjectionExtensions
         return services;
     }
 
-    /// <summary>
-    ///     Registers the resilience pipeline behavior in the service collection.
-    /// </summary>
-    internal static IServiceCollection AddResilienceBehavior(
-        this IServiceCollection services,
-        Action<ResilienceOptions> configureOptions)
+    /// <summary>Registers the resilience behaviors and applies <paramref name="configureOptions" /> to their options.</summary>
+    internal static IServiceCollection AddResilienceBehavior(this IServiceCollection services, Action<ResilienceOptions> configureOptions)
     {
-        if (configureOptions == null)
-            throw new ArgumentNullException(nameof(configureOptions), "Resilience configuration must be provided.");
+        ArgumentNullException.ThrowIfNull(configureOptions);
 
-        services.AddOptions<ResilienceOptions>()
-            .Configure(configureOptions.Invoke)
-            .Validate(o => o.MaxRetries >= 0, "ResilienceOptions.MaxRetries must be non-negative.")
-            .Validate(o => o.BaseDelay >= TimeSpan.Zero, "ResilienceOptions.BaseDelay must be non-negative.")
-            .ValidateOnStart();
-
+        services.AddOptions<ResilienceOptions>().Configure(configureOptions).ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<ResilienceOptions>, ResilienceOptionsValidator>());
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ResilienceBehavior<,>)));
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamResilienceBehavior<,>)));
-
         return services;
     }
 
-    /// <summary>
-    ///     Registers the timeout pipeline behavior in the service collection.
-    /// </summary>
-    internal static IServiceCollection AddTimeoutBehavior(
-        this IServiceCollection services,
-        Action<TimeoutOptions> configureOptions)
+    /// <summary>Registers the timeout behaviors and applies <paramref name="configureOptions" /> to their options.</summary>
+    internal static IServiceCollection AddTimeoutBehavior(this IServiceCollection services, Action<TimeoutOptions> configureOptions)
     {
-        if (configureOptions == null)
-            throw new ArgumentNullException(nameof(configureOptions), "Timeout configuration must be provided.");
+        ArgumentNullException.ThrowIfNull(configureOptions);
 
-        services.AddOptions<TimeoutOptions>()
-            .Configure(configureOptions.Invoke)
-            .Validate(o => o.Timeout > TimeSpan.Zero, "TimeoutOptions.Timeout must be greater than zero.")
-            .ValidateOnStart();
-
+        services.AddOptions<TimeoutOptions>().Configure(configureOptions).ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<TimeoutOptions>, TimeoutOptionsValidator>());
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(TimeoutBehavior<,>)));
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamTimeoutBehavior<,>)));
-
         return services;
     }
 
     /// <summary>
-    ///     Registers the validation pipeline behavior in the service collection.
-    ///     This behavior executes all registered <c>IRequestValidator&lt;TRequest&gt;</c> implementations for a request.
+    ///     Registers the validation behaviors, which run every registered <c>IRequestValidator&lt;TRequest&gt;</c> before
+    ///     the handler.
     /// </summary>
     internal static IServiceCollection AddValidationBehavior(this IServiceCollection services)
     {
@@ -108,122 +74,43 @@ internal static class DependencyInjectionExtensions
     }
 
     /// <summary>
-    ///     Registers the rate limiting pipeline behavior in the dependency injection container.
+    ///     Registers the rate-limiting behaviors and the shared <see cref="RequestRateLimiter" />, and applies
+    ///     <paramref name="configureOptions" /> to the limiter's options.
     /// </summary>
-    internal static IServiceCollection AddRateLimiting(
-        this IServiceCollection services,
-        Action<RateLimiterOptions> configureOptions)
+    internal static IServiceCollection AddRateLimiting(this IServiceCollection services, Action<RateLimitingOptions> configureOptions)
     {
-        if (configureOptions == null)
-            throw new ArgumentNullException(nameof(configureOptions), "Rate limiting configuration must be provided.");
+        ArgumentNullException.ThrowIfNull(configureOptions);
 
-        // Validate on start (consistent with the resilience/timeout behaviors) rather than throwing inside the
-        // Configure delegate, so an invalid configuration fails fast and predictably at host startup with an
-        // OptionsValidationException — not lazily, the first time the options happen to be resolved.
-        services.AddOptions<RateLimiterOptions>()
-            .Configure(configureOptions.Invoke)
-            .Validate(o => o.MaxTokens > 0, "RateLimiterOptions.MaxTokens must be greater than zero.")
-            .Validate(o => o.ReplenishRatePerSecond > 0, "RateLimiterOptions.ReplenishRatePerSecond must be greater than zero.")
-            .Validate(o => o.MaxEntries > 0, "RateLimiterOptions.MaxEntries must be greater than zero.")
-            .ValidateOnStart();
-
-        services.AddSingleton<RateLimiter>();
+        services.AddOptions<RateLimitingOptions>().Configure(configureOptions).ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<RateLimitingOptions>, RateLimitingOptionsValidator>());
+        services.TryAddSingleton<RequestRateLimiter>();
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(RateLimitingBehavior<,>)));
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamRateLimitingBehavior<,>)));
-
         return services;
     }
 
     /// <summary>
-    ///     Adds the Unit of Work behavior to the CQRS pipeline in an AoT-compatible way.
+    ///     Registers the unit-of-work behaviors with the factory for the application's <see cref="IUnitOfWork" />.
     /// </summary>
-    /// <typeparam name="TUnitOfWork">Your concrete implementation of IUnitOfWork (e.g., an EF Core specific UoW).</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <param name="implementationFactory">An AoT-safe factory delegate to create an instance of your TUnitOfWork.</param>
-    /// <param name="configureOptions">Options for UoW configuration.</param>
-    /// <returns>The service collection to allow chaining.</returns>
-    /// <example>
-    ///     <code>
-    /// services.AddUnitOfWorkBehavior&lt;MyEfCoreUnitOfWork&gt;(sp => 
-    ///     new MyEfCoreUnitOfWork(sp.GetRequiredService&lt;MyDbContext&gt;()));
-    /// </code>
-    /// </example>
-    internal static IServiceCollection AddUnitOfWorkBehavior<TUnitOfWork>(
-        this IServiceCollection services,
-        Func<IServiceProvider, TUnitOfWork> implementationFactory,
-        Action<UnitOfWorkOptions>? configureOptions = null)
-        where TUnitOfWork : class, IUnitOfWork
-    {
-        // Add configuration for UnitOfWorkOptions
-        services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
-
-        // Register the concrete UoW using a factory delegate. This is AoT-safe
-        // as it gives the compiler a static reference to the constructor.
-        services.AddScoped<IUnitOfWork>(implementationFactory);
-
-        // Register the pipeline behavior.
-        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>)));
-        services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>)));
-
-        return services;
-    }
-
+    /// <remarks>
+    ///     Every reader resolves the unit of work singly, so the last registered factory is the one in effect: a host's
+    ///     <c>UseUnitOfWork</c> overrides the one a library it references registered before it.
+    /// </remarks>
     internal static IServiceCollection AddUnitOfWorkBehavior(
         this IServiceCollection services,
         Func<IServiceProvider, IUnitOfWork> implementationFactory,
         Action<UnitOfWorkOptions>? configureOptions = null)
     {
-        services.Configure<UnitOfWorkOptions>(opts => { configureOptions?.Invoke(opts); });
-        services.AddScoped<IUnitOfWork>(implementationFactory);
+        ArgumentNullException.ThrowIfNull(implementationFactory);
+
+        var options = services.AddOptions<UnitOfWorkOptions>().ValidateOnStart();
+        if (configureOptions is not null)
+            options.Configure(configureOptions);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<UnitOfWorkOptions>, UnitOfWorkOptionsValidator>());
+
+        services.AddScoped(implementationFactory);
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>)));
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IStreamPipelineBehavior<,>), typeof(StreamUnitOfWorkBehavior<,>)));
-        return services;
-    }
-
-    /// <summary>
-    ///     Registers the optional CQRSharp pipeline behaviors selected by <paramref name="configure" /> in one call.
-    ///     Idempotent: a second call with the same service collection is a no-op (guarded by a registered marker), so
-    ///     the pack cannot stack duplicate behaviors.
-    /// </summary>
-    internal static IServiceCollection AddCqrsPipelinePack(
-        this IServiceCollection services,
-        Action<CqrsPipelinePackOptions>? configure = null)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-
-        // Idempotency guard: if the marker is already registered the pack ran before, so bail out before adding any
-        // behavior a second time (which would stack duplicate registrations). Otherwise register the marker and proceed.
-        if (services.Any(d => d.ServiceType == typeof(CqrsPipelinePackMarker)))
-            return services;
-        services.TryAddSingleton<CqrsPipelinePackMarker>();
-
-        // Ensure the clock seam is available even if the pipeline pack is wired without the core AddCqrs call.
-        services.TryAddSingleton(TimeProvider.System);
-
-        var pack = new CqrsPipelinePackOptions();
-        configure?.Invoke(pack);
-
-        if (pack.IncludeExceptionHandling)
-            services.AddExceptionHandling();
-
-        if (pack.IncludeValidation)
-            services.AddValidationBehavior();
-
-        if (pack.IncludeLogging)
-            services.AddLoggingBehavior();
-
-        if (pack.ConfigureRateLimiting is not null)
-            services.AddRateLimiting(pack.ConfigureRateLimiting);
-
-        if (pack.UnitOfWorkFactory is not null)
-            services.AddUnitOfWorkBehavior(pack.UnitOfWorkFactory, pack.ConfigureUnitOfWork);
-
-        if (pack.ConfigureTimeout is not null)
-            services.AddTimeoutBehavior(pack.ConfigureTimeout);
-
-        if (pack.ConfigureResilience is not null)
-            services.AddResilienceBehavior(pack.ConfigureResilience);
-
         return services;
     }
 }

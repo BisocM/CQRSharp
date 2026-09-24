@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>CQRSharp.Testing</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IsPackable>true</IsPackable>
+        <!-- Abstract suites for consumers to derive from, with no runnable tests of their own: runners and `dotnet test`
+             must not treat this library as a test assembly. -->
+        <IsTestProject>false</IsTestProject>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>CQRSharp.Testing.Xunit.V3</PackageId>
+        <PackageTags>CQRS;CQRSharp;Testing;xUnit;xUnit.v3;ContractTests;Outbox;Inbox;Idempotency</PackageTags>
+        <Title>CQRSharp store contract suites for xUnit v3.</Title>
+        <Description>The abstract xUnit v3 contract suites every IOutboxStore, IInboxStore and IIdempotencyStore implementation must pass, so a custom store proves the same semantics as the built-in in-memory, EF Core, and Redis stores: atomic claims, claim tokens and leases, renewal, release, retries, dead letters and their operations, FIFO and partition order, the backlog, the inbox, idempotency claim tokens, stored results and payload fingerprints. Assertions use plain xUnit; no mocking or assertion library is forced on the consumer.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0. First release: OutboxStoreContractTests, InboxStoreContractTests and IdempotencyStoreContractTests, for xUnit v3.
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The library surface of xUnit v3 (attributes, lifecycle, Assert with runtime skipping), not the `xunit.v3`
+             test-project package, which would turn this library into a test executable. Consumers bring their own. -->
+        <PackageReference Include="xunit.v3.extensibility.core"/>
+        <PackageReference Include="xunit.v3.assert"/>
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+    </ItemGroup>
+
+</Project>

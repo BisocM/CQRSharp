@@ -1,7 +1,6 @@
-using CQRSharp.EntityFrameworkCore.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CQRSharp.EntityFrameworkCore.Extensions;
+namespace CQRSharp.EntityFrameworkCore;
 
 /// <summary>
 ///     <see cref="ModelBuilder" /> helpers that apply the CQRSharp EF Core entity mappings in one call, so a consumer's
@@ -12,15 +11,17 @@ namespace CQRSharp.EntityFrameworkCore.Extensions;
 public static class CqrsModelBuilderExtensions
 {
     /// <summary>
-    ///     Applies the outbox table mapping (<see cref="OutboxEntityConfiguration" />). Call this from your
+    ///     Applies the outbox table mappings (<see cref="OutboxEntityConfiguration" /> and, for the inbox that records
+    ///     completed deliveries, <see cref="InboxEntityConfiguration" />). Call this from your
     ///     <c>DbContext.OnModelCreating</c> when you use <c>UseEntityFrameworkCore&lt;TContext&gt;()</c> for the outbox
-    ///     store, then add a migration so the <c>CqrsOutboxMessages</c> table exists. Without it the processor's first
-    ///     poll fails with "no such table".
+    ///     store, then add a migration so the <c>CqrsOutboxMessages</c> and <c>CqrsInboxRecords</c> tables exist. A context
+    ///     that does not map them fails host start; one whose database lacks the tables fails the processor's first poll.
     /// </summary>
     public static ModelBuilder ApplyCqrsOutbox(this ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
         modelBuilder.ApplyConfiguration(new OutboxEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new InboxEntityConfiguration());
         return modelBuilder;
     }
 
@@ -29,10 +30,16 @@ public static class CqrsModelBuilderExtensions
     ///     <c>DbContext.OnModelCreating</c> when you use the EF Core idempotency store, then add a migration so the
     ///     <c>CqrsIdempotencyKeys</c> table exists.
     /// </summary>
-    public static ModelBuilder ApplyCqrsIdempotency(this ModelBuilder modelBuilder)
+    /// <param name="modelBuilder">The model builder of the context that holds the idempotency table.</param>
+    /// <param name="keyCollation">
+    ///     The key column's collation, or <c>null</c> for the database's default. Keys are compared ordinally and
+    ///     case-sensitively: on SQL Server pass <see cref="IdempotencyEntityConfiguration.SqlServerBinaryCollation" />
+    ///     (host start fails without a case-sensitive one); SQLite and PostgreSQL need none.
+    /// </param>
+    public static ModelBuilder ApplyCqrsIdempotency(this ModelBuilder modelBuilder, string? keyCollation = null)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
-        modelBuilder.ApplyConfiguration(new IdempotencyEntityConfiguration());
+        modelBuilder.ApplyConfiguration(new IdempotencyEntityConfiguration(keyCollation));
         return modelBuilder;
     }
 }

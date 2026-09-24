@@ -24,7 +24,8 @@ public record TestQueryResult(string Value);
 public class TransactionalCommand : CommandBase, ITransactionalCommand
 {
     /// <inheritdoc />
-    public IsolationLevel IsolationLevel { get; set; }
+    /// <remarks>Left unset by default (0, no member of the enum), which must fall back to the configured default.</remarks>
+    public IsolationLevel IsolationLevel { get; init; }
 }
 
 /// <summary>
@@ -52,8 +53,3 @@ public class RetryableTestCommand : CommandBase, IRetryableRequest;
 ///     A command that requires a rate-limited context, used for testing rate-limiting behavior.
 /// </summary>
 public class TestRateLimitedCommand : RequestBase<IRateLimitedContext>;
-
-/// <summary>
-///     Another distinct command that requires a rate-limited context, used for testing rate-limiting scopes.
-/// </summary>
-public class OtherRateLimitedCommand : RequestBase<IRateLimitedContext>;

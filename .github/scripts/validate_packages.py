@@ -4,11 +4,13 @@
     python3 .github/scripts/validate_packages.py <package-dir> [--check-nuget]
 
 Structure: the exact expected set of packages, one aligned version, every library built for every target framework with
-its XML docs and a symbol package, the meta-package's embedded generator/analyzers, the template's pinned version, and
-the shared README / license / icon in each package.
+its XML docs and a symbol package, the meta-package's embedded generator, the analyzers shipped exactly once (in
+CQRSharp.Abstractions) and flowing through every dependency on another CQRSharp package, the template's pinned version,
+and the shared README / license / icon in each package.
 
---check-nuget additionally asks nuget.org which packages already have this version and writes `should_publish` and
-`package_version` to $GITHUB_OUTPUT, so a push to Release that did not change the version publishes nothing.
+--check-nuget additionally asks nuget.org which packages already have this version and writes `should_publish` (whether
+anything is left to push, so a push to Release that did not change the version publishes nothing) and `package_version`
+(which the release job tags and takes the changelog section of) to $GITHUB_OUTPUT.
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ElementTree
 import zipfile
 
 META = "CQRSharp"
@@ -32,12 +35,18 @@ LIBRARIES = {
     "CQRSharp.FluentValidation",
     "CQRSharp.AspNetCore",
     "CQRSharp.Testing",
+    "CQRSharp.Testing.Xunit.V3",
 }
 EXPECTED = LIBRARIES | {META, TEMPLATES}
 FRAMEWORKS = ("net8.0", "net9.0", "net10.0")
-# The contracts are also consumable from netstandard2.0 (the generator and analyzers reference them).
+# The contracts also compile for netstandard2.0 consumers (a shared contracts library, for example).
 EXTRA_FRAMEWORKS = {"CQRSharp.Abstractions": ("netstandard2.0",)}
 SHARED_FILES = ("README.md", "LICENSE", "CQRSharp_Icon.png")
+GENERATOR = "analyzers/dotnet/cs/CQRSharp.Generators.dll"
+ANALYZERS = "analyzers/dotnet/cs/CQRSharp.Analyzers.dll"
+# Every project that references a CQRSharp package gets the analyzers through it, so they ship in exactly one package:
+# two copies of one analyzer assembly in a compilation are redundant at best and version-skewed at worst.
+ANALYZERS_PACKAGE = "CQRSharp.Abstractions"
 
 errors: list[str] = []
 
@@ -47,19 +56,20 @@ def fail(message: str) -> None:
     print(f"::error::{message}")
 
 
-def parse_nuspec(z: zipfile.ZipFile) -> tuple[str, str]:
+def parse_nuspec(z: zipfile.ZipFile) -> tuple[str, str, list[ElementTree.Element]]:
+    """Returns the package id, its version and its <dependency> elements (across every target-framework group)."""
     nuspecs = [n for n in z.namelist() if n.endswith(".nuspec")]
     if len(nuspecs) != 1:
         raise SystemExit(f"Expected 1 .nuspec file, found {len(nuspecs)}: {nuspecs}")
-    nuspec = z.read(nuspecs[0]).decode("utf-8-sig", errors="replace")
+    root = ElementTree.fromstring(z.read(nuspecs[0]))
 
     def text(name: str) -> str:
-        match = re.search(rf"<{name}>\s*([^<]+?)\s*</{name}>", nuspec)
-        if match is None:
+        element = root.find(f"{{*}}metadata/{{*}}{name}")
+        if element is None or not (element.text or "").strip():
             raise SystemExit(f"Missing nuspec value '{name}' in {nuspecs[0]}")
-        return match.group(1)
+        return element.text.strip()
 
-    return text("id"), text("version")
+    return text("id"), text("version"), root.findall(".//{*}dependencies//{*}dependency")
 
 
 def normalize_version(v: str) -> str:
@@ -89,10 +99,26 @@ def check_library(package_id: str, names: set[str], path: str) -> None:
         fail(f"{package_id}: no symbol package (.snupkg) next to {os.path.basename(path)}")
 
 
+def check_analyzers(package_id: str, names: set[str], dependencies: list[ElementTree.Element]) -> None:
+    if package_id == ANALYZERS_PACKAGE and ANALYZERS not in names:
+        fail(f"{package_id}: missing {ANALYZERS} (the CQRA analyzers ship in this package, and only here).")
+    elif package_id != ANALYZERS_PACKAGE and ANALYZERS in names:
+        fail(f"{package_id}: embeds {ANALYZERS}; the analyzers ship only in {ANALYZERS_PACKAGE}.")
+    # The dependency on another CQRSharp package is how the analyzers reach a project that references this one, so
+    # none of them may exclude the Analyzers asset.
+    excluding = sorted({
+        d.get("id", "") for d in dependencies
+        if d.get("id", "").startswith("CQRSharp")
+        and "analyzers" in {e.strip().lower() for e in d.get("exclude", "").split(",")}
+    })
+    for dependency_id in excluding:
+        fail(f"{package_id}: its dependency on {dependency_id} excludes Analyzers; the CQRSharp analyzers must flow to "
+             f"every project that references {package_id} (reference it with PrivateAssets that keep analyzers).")
+
+
 def check_meta(names: set[str]) -> None:
-    for assembly in ("CQRSharp.Generators.dll", "CQRSharp.Analyzers.dll"):
-        if f"analyzers/dotnet/cs/{assembly}" not in names:
-            fail(f"{META}: the meta-package must embed analyzers/dotnet/cs/{assembly} for plug-and-play.")
+    if GENERATOR not in names:
+        fail(f"{META}: the meta-package must embed {GENERATOR} for plug-and-play.")
     if any(n.startswith("lib/") for n in names):
         fail(f"{META}: the meta-package must not contain lib/ output.")
     if "buildTransitive/CQRSharp.props" not in names:
@@ -126,9 +152,10 @@ def main() -> int:
     observed: dict[str, str] = {}
     for path in packages:
         with zipfile.ZipFile(path) as z:
-            package_id, version = parse_nuspec(z)
+            package_id, version, dependencies = parse_nuspec(z)
             observed[package_id] = version
             names = set(z.namelist())
+            check_analyzers(package_id, names, dependencies)
 
             for shared in SHARED_FILES:
                 if shared not in names:

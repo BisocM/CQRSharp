@@ -1,0 +1,3 @@
+// APIs the libraries under src/ must not call (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030). One per line:
+// the documentation id of the symbol, a semicolon, then why and what to call instead.
+M:System.Threading.Tasks.Task.Yield;Task.Yield resumes on the caller's SynchronizationContext, which CA2007 cannot flag: use await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding)

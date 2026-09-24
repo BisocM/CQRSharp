@@ -23,7 +23,7 @@ namespace CQRSharp.Testing;
 ///     </para>
 ///     <para>
 ///         This is a test double for the dispatcher's <em>callers</em>. It runs no handlers, behaviors, or
-///         validation; to test those, resolve the real dispatcher from a container built with <c>AddCqrs</c>.
+///         validation; to test those, resolve the real dispatcher from a container built with <c>AddCqrsGenerated</c>.
 ///     </para>
 /// </remarks>
 public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
@@ -130,9 +130,11 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
         ArgumentNullException.ThrowIfNull(stream);
         // Both shapes are captured here, where TItem is known, so the untyped Stream(object) overload can box items
         // without reflecting over the request's interfaces.
+        // Deferred: the delegate runs on the first MoveNextAsync, so a stub that throws surfaces there, as a real
+        // stream's failure does, not at the Stream(...) call.
         _streams[typeof(TRequest)] = new StreamStub(
-            (request, cancellationToken) => stream((TRequest)request, cancellationToken),
-            (request, cancellationToken) => Box(stream((TRequest)request, cancellationToken), cancellationToken));
+            (request, cancellationToken) => Defer(() => stream((TRequest)request, cancellationToken), cancellationToken),
+            (request, cancellationToken) => Box(Defer(() => stream((TRequest)request, cancellationToken), cancellationToken), cancellationToken));
         return this;
     }
 
@@ -329,6 +331,14 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
             cancellationToken.ThrowIfCancellationRequested();
             yield return item;
         }
+    }
+
+    private static async IAsyncEnumerable<TItem> Defer<TItem>(
+        Func<IAsyncEnumerable<TItem>> create,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var item in create().WithCancellation(cancellationToken).ConfigureAwait(false))
+            yield return item;
     }
 
     private static async IAsyncEnumerable<object?> Box<TItem>(

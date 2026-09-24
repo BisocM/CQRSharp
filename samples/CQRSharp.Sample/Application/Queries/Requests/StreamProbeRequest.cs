@@ -7,4 +7,4 @@ public sealed class StreamProbeRequest(int count) : StreamRequestBase<StreamProb
     public int Count { get; } = count;
 }
 
-public sealed record StreamProbeItem(int Value, Guid ScopedMarkerId);
+public sealed record StreamProbeItem(int Value, Guid ScopeId);

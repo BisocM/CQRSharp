@@ -36,6 +36,7 @@ public sealed class PassThroughBehavior<TRequest, TResponse> : IPipelineBehavior
         => next();
 }
 
+// MediatR's documented defaults: a transient IMediator and handlers, and a behavior added with AddOpenBehavior (transient).
 public static class MediatRSubject
 {
     public static ServiceProvider CreateProvider(bool withBehavior)
@@ -50,7 +51,4 @@ public static class MediatRSubject
 
         return services.BuildServiceProvider();
     }
-
-    public static IMediator Create(bool withBehavior)
-        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<IMediator>();
 }

@@ -1,16 +1,19 @@
 using System.Diagnostics;
-using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Telemetry;
+using CQRSharp.Core.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Behaviors.Timeout;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Represents a behavior that enforces a timeout on the execution of a pipeline request.
-///     Implements <see cref="IPipelineBehavior{TRequest,TResult}" />.
+///     Bounds a request's handler (and any unprioritized custom behavior inside it) by
+///     <see cref="TimeoutOptions.Timeout" />: when the time runs out it cancels the token the handler receives and, once
+///     the handler observes the cancellation, throws <see cref="RequestTimeoutException" />.
 /// </summary>
-/// <typeparam name="TRequest">The type of the request being handled, must implement <see cref="IRequest" />.</typeparam>
+/// <remarks>
+///     The timeout is cooperative: a handler that ignores its token runs to completion, and its result is returned.
+/// </remarks>
+/// <typeparam name="TRequest">The type of the request being handled.</typeparam>
 /// <typeparam name="TResult">The type of the result produced by the handler pipeline.</typeparam>
 public sealed class TimeoutBehavior<TRequest, TResult>(
     ILogger<TimeoutBehavior<TRequest, TResult>> logger,
@@ -24,37 +27,28 @@ public sealed class TimeoutBehavior<TRequest, TResult>(
         RequestHandlerDelegate<TResult> next,
         CancellationToken cancellationToken)
     {
-        // Creates a trace activity that guards the execution with a timeout.
-        using var activity = PipelineTelemetry.StartActivity("Timeout.Guard", request);
-        var timeout = options.Value.Timeout;
-
-        // Adds the configured timeout duration to the trace for observability.
-        activity?.SetTag("cqrsharp.timeout_ms", timeout.TotalMilliseconds);
-
         ArgumentNullException.ThrowIfNull(request);
+
+        using var activity = PipelineTelemetry.StartActivity<TRequest>("Timeout.Guard");
+        var timeout = options.Value.Timeout;
+        activity?.SetTag(CqrsTelemetry.Tags.TimeoutMilliseconds, timeout.TotalMilliseconds);
 
         using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout, _timeProvider);
         using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             timeoutCancellationTokenSource.Token);
-        var combinedCancellationToken = linkedCancellationTokenSource.Token;
-
-        logger.LogInformation("Timeout for {ReqName} set for {TimeoutMilliseconds}ms", request.GetType().Name,
-            timeout.TotalMilliseconds);
 
         try
         {
-            var result = await next(combinedCancellationToken);
-            // Mark the activity as successful if the operation completes in time.
+            var result = await next(linkedCancellationTokenSource.Token).ConfigureAwait(false);
             activity?.SetStatus(ActivityStatusCode.Ok);
             return result;
         }
-        catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            logger.LogError("{CommandName} execution timed out", typeof(TRequest).Name);
-            // Mark the activity as failed, indicating the timeout was exceeded.
+            TimeoutLog.RequestTimedOut(logger, typeof(TRequest).Name, timeout.TotalMilliseconds);
             activity?.SetStatus(ActivityStatusCode.Error, "Request timed out.");
-            throw new TimeoutException($"{typeof(TRequest).Name} execution timed out.");
+            throw new RequestTimeoutException(typeof(TRequest), timeout, ex);
         }
     }
 

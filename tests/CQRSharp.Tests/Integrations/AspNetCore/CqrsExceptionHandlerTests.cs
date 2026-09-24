@@ -1,16 +1,20 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using CQRSharp.AspNetCore;
+using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Pipelines;
+using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Moq;
 
 namespace CQRSharp.Tests.Integrations.AspNetCore;
 
@@ -42,24 +46,23 @@ public sealed class CqrsExceptionHandlerTests
         ]);
     }
 
-    private static RateLimitExceededException RateLimitException()
-    {
-        var context = Mock.Of<IRateLimitedContext>(c => c.RequestId == "req-internal-1" && c.UserId == "user-internal-9");
-        return new RateLimitExceededException(context, "Rate limit exceeded for user.");
-    }
+    private static RateLimitExceededException RateLimitException(TimeSpan? retryAfter = null)
+        => new($"The rate limit for {nameof(AspNetCoreTestRequestMarker)} was exceeded.", retryAfter);
 
     [Fact(DisplayName = "RequestValidationException maps to a 400 validation problem with errors and codes grouped by member")]
     public async Task Validation_maps_to_400_validation_problem()
     {
         await using var host = await StartAsync(ValidationException);
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
         body.GetProperty("status").GetInt32().Should().Be(400);
-        body.GetProperty("detail").GetString().Should().Be("Validation failed for request 'AspNetCoreTestRequestMarker'.");
+        body.GetProperty("detail").GetString().Should().Be("Validation failed.");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().NotContain(nameof(AspNetCoreTestRequestMarker), "the server's request type is not the caller's business");
 
         var errors = body.GetProperty("errors");
         errors.GetProperty("Name").EnumerateArray().Select(e => e.GetString())
@@ -73,12 +76,36 @@ public sealed class CqrsExceptionHandlerTests
         codes.GetProperty("").EnumerateArray().Select(e => e.GetString()).Should().Equal("REQUEST_INVALID");
     }
 
+    [Fact(DisplayName = "A pipeline validation failure and a handler's CommandResult.Invalid produce the same response body")]
+    public async Task Validation_exception_and_invalid_result_bodies_match()
+    {
+        await using var fromPipeline = await StartAsync(ValidationException);
+        await using var fromHandler = await AspNetCoreTestHost.StartAsync(
+            services => services.AddCqrsProblemDetails(),
+            app => app.MapGet("/", () => CommandResult.Invalid(ValidationException().Failures).ToHttpResult()));
+
+        var pipelineResponse = await fromPipeline.Client.GetAsync("/", TestContext.Current.CancellationToken);
+        var handlerResponse = await fromHandler.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        handlerResponse.StatusCode.Should().Be(pipelineResponse.StatusCode);
+        (await BodyWithoutTraceId(handlerResponse)).Should().Be(await BodyWithoutTraceId(pipelineResponse));
+
+        // The traceId identifies the request (its Activity when one is running, else the connection's request), so it
+        // differs between any two responses; everything else must match.
+        static async Task<string> BodyWithoutTraceId(HttpResponseMessage response)
+        {
+            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))!.AsObject();
+            body.Remove("traceId");
+            return body.ToJsonString();
+        }
+    }
+
     [Fact(DisplayName = "DuplicateRequestException maps to 409 with the exception message as the detail")]
     public async Task Duplicate_maps_to_409()
     {
         await using var host = await StartAsync(() => new DuplicateRequestException("order-17"));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
@@ -93,7 +120,7 @@ public sealed class CqrsExceptionHandlerTests
     {
         await using var host = await StartAsync(() => new DuplicateRequestException("order-17", isInProgress: true));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(1));
@@ -101,48 +128,245 @@ public sealed class CqrsExceptionHandlerTests
         body.GetProperty("detail").GetString().Should().Be("A request with idempotency key 'order-17' is still being processed.");
     }
 
-    [Fact(DisplayName = "RateLimitExceededException maps to 429 without leaking the request or user id, and without Retry-After by default")]
+    [Fact(DisplayName = "IdempotencyKeyMismatchException maps to 422 with the exception message as the detail")]
+    public async Task Key_mismatch_maps_to_422()
+    {
+        await using var host = await StartAsync(() => new IdempotencyKeyMismatchException("order-17"));
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await AspNetCoreTestHost.ReadJsonAsync(response);
+        body.GetProperty("status").GetInt32().Should().Be(422);
+        body.GetProperty("detail").GetString().Should().Be("The idempotency key 'order-17' was already used by a request with a different payload.");
+    }
+
+    [Fact(DisplayName = "RateLimitExceededException maps to 429 with a fixed detail (its message names the request type)")]
     public async Task Rate_limit_maps_to_429()
     {
-        await using var host = await StartAsync(RateLimitException);
+        await using var host = await StartAsync(() => RateLimitException(TimeSpan.FromSeconds(2)));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be((HttpStatusCode)429);
-        response.Headers.RetryAfter.Should().BeNull();
-        var raw = await response.Content.ReadAsStringAsync();
-        raw.Should().NotContain("req-internal-1").And.NotContain("user-internal-9");
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        raw.Should().NotContain(nameof(AspNetCoreTestRequestMarker));
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
         body.GetProperty("status").GetInt32().Should().Be(429);
         body.GetProperty("detail").GetString().Should().Be("Rate limit exceeded. Try again later.");
     }
 
-    [Fact(DisplayName = "RateLimitExceededException sets Retry-After (whole seconds, rounded up) when configured")]
-    public async Task Rate_limit_sets_retry_after_when_configured()
+    [Theory(DisplayName = "The 429's Retry-After is the exception's RetryAfter in whole seconds, rounded up and at least one")]
+    [InlineData(29.2, 30)]
+    [InlineData(2.0, 2)]
+    [InlineData(0.1, 1)]
+    public async Task Rate_limit_retry_after_comes_from_the_exception(double retryAfterSeconds, int expectedSeconds)
     {
-        await using var host = await StartAsync(RateLimitException,
-            services => services.AddCqrsProblemDetails(o => o.RateLimitRetryAfter = TimeSpan.FromSeconds(29.2)));
+        await using var host = await StartAsync(() => RateLimitException(TimeSpan.FromSeconds(retryAfterSeconds)));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be((HttpStatusCode)429);
-        response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(30));
+        response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(expectedSeconds));
     }
 
-    [Fact(DisplayName = "TimeoutException maps to 504 with a fixed detail (its message may come from anywhere)")]
-    public async Task Timeout_maps_to_504()
+    // Counted in ticks: one tick past a whole second is another second, however long the delay.
+    [Theory(DisplayName = "The 429's Retry-After rounds up the last tick of the exception's RetryAfter")]
+    [InlineData(2 * TimeSpan.TicksPerSecond + 1, "3")]
+    [InlineData(900_000_000_000 * TimeSpan.TicksPerSecond + 1, "900000000001")]
+    [InlineData(long.MaxValue, "922337203686")]
+    public async Task Rate_limit_retry_after_rounds_up_to_the_tick(long retryAfterTicks, string expectedHeader)
     {
-        await using var host = await StartAsync(() => new TimeoutException("connection string Server=internal-db timed out"));
+        await using var host = await StartAsync(() => RateLimitException(TimeSpan.FromTicks(retryAfterTicks)));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be((HttpStatusCode)429);
+        // Read as sent: a delay beyond an int of seconds does not parse into RetryConditionHeaderValue.
+        response.Headers.NonValidated["Retry-After"].ToString().Should().Be(expectedHeader);
+    }
+
+    [Fact(DisplayName = "A RateLimitExceededException that does not know its retry-after gets a 429 without Retry-After")]
+    public async Task Rate_limit_without_retry_after_sends_no_header()
+    {
+        await using var host = await StartAsync(() => RateLimitException());
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be((HttpStatusCode)429);
+        response.Headers.RetryAfter.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "End to end: a throttled request's 429 carries the token bucket's own wait")]
+    public async Task Throttled_request_carries_the_limiter_wait()
+    {
+        var limiter = new RequestRateLimiter(
+            Options.Create(new RateLimitingOptions { MaxTokens = 1, ReplenishRatePerSecond = 0.25 }),
+            new Microsoft.Extensions.Time.Testing.FakeTimeProvider());
+        limiter.TryAcquire("caller", typeof(AspNetCoreTestRequestMarker), out _).Should().BeTrue();
+
+        await using var host = await StartAsync(() =>
+            limiter.TryAcquire("caller", typeof(AspNetCoreTestRequestMarker), out var retryAfter)
+                ? new InvalidOperationException("the bucket should be empty")
+                : RateLimitException(retryAfter));
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be((HttpStatusCode)429);
+        response.Headers.RetryAfter!.Delta.Should().Be(TimeSpan.FromSeconds(4), "a token every four seconds, and none left");
+    }
+
+    [Fact(DisplayName = "RequestTimeoutException maps to 504 with a fixed detail (its message names the request type)")]
+    public async Task Request_timeout_maps_to_504()
+    {
+        await using var host = await StartAsync(() => new RequestTimeoutException(typeof(AspNetCoreTestRequestMarker), TimeSpan.FromSeconds(2)));
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.GatewayTimeout);
-        var raw = await response.Content.ReadAsStringAsync();
-        raw.Should().NotContain("internal-db");
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        raw.Should().NotContain(nameof(AspNetCoreTestRequestMarker));
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
         body.GetProperty("status").GetInt32().Should().Be(504);
         body.GetProperty("detail").GetString().Should().Be("The request timed out.");
     }
+
+    [Theory(DisplayName = "BackgroundTaskRejectedException maps to 503 with a fixed detail (its message describes the server's queue)")]
+    [InlineData(BackgroundTaskRejectionReason.QueueFull)]
+    [InlineData(BackgroundTaskRejectionReason.Evicted)]
+    [InlineData(BackgroundTaskRejectionReason.QueueClosed)]
+    public async Task Rejected_background_work_maps_to_503(BackgroundTaskRejectionReason reason)
+    {
+        await using var host = await StartAsync(() => new BackgroundTaskRejectedException(reason, "The background task queue is full (500 work items)."));
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        raw.Should().NotContain("500 work items");
+        var body = await AspNetCoreTestHost.ReadJsonAsync(response);
+        body.GetProperty("status").GetInt32().Should().Be(503);
+        body.GetProperty("detail").GetString().Should().Be("The server cannot take the request on right now. Try again later.");
+        response.Headers.RetryAfter.Should().BeNull("the queue cannot tell when it will have room");
+    }
+
+    [Fact(DisplayName = "End to end: a queued dispatch the full queue refuses answers 503")]
+    public async Task Queued_dispatch_refused_by_a_full_queue_maps_to_503()
+    {
+        // No consumer runs, so the first item fills the queue and stays queued.
+        using var queue = new BackgroundTaskQueue(Options.Create(new BackgroundTaskQueueOptions { Capacity = 1, FullMode = System.Threading.Channels.BoundedChannelFullMode.DropWrite }));
+        var queued = queue.EnqueueAsync(_ => Task.CompletedTask, TestContext.Current.CancellationToken);
+        await using var host = await AspNetCoreTestHost.StartAsync(
+            services => services.AddCqrsProblemDetails(),
+            app =>
+            {
+                app.UseExceptionHandler();
+                app.MapGet("/", async Task<IResult> (CancellationToken ct) =>
+                {
+                    await queue.EnqueueAsync(_ => Task.CompletedTask, ct);
+                    return Results.Ok();
+                });
+            });
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        queue.CompleteAdding();
+        queue.CancelPending();
+        await FluentActions.Awaiting(() => queued).Should().ThrowAsync<Exception>("the queued item is withdrawn when the test ends");
+    }
+
+    [Fact(DisplayName = "A TimeoutException from a dependency is not handled: the host's default 500 applies")]
+    public async Task Dependency_timeout_is_not_handled()
+    {
+        await using var host = await StartAsync(() => new TimeoutException("connection string Server=internal-db timed out"));
+
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("internal-db");
+    }
+
+    [Fact(DisplayName = "TryHandleAsync leaves a dependency's TimeoutException to the host and logs nothing")]
+    public async Task Try_handle_returns_false_for_dependency_timeout()
+    {
+        var logger = new CapturingLogger<CqrsExceptionHandler>();
+        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()), logger);
+        var context = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
+
+        var handled = await handler.TryHandleAsync(context, new TimeoutException("redis"), CancellationToken.None);
+
+        handled.Should().BeFalse();
+        logger.Entries.Should().BeEmpty("an exception the handler does not map is the host's to log");
+    }
+
+    [Fact(DisplayName = "A mapped exception is logged in one line without the stack trace: at Warning when the server could not serve the request, at Information otherwise")]
+    public async Task Mapped_exceptions_are_logged()
+    {
+        var logger = new CapturingLogger<CqrsExceptionHandler>();
+        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()), logger);
+        var timeout = new RequestTimeoutException(typeof(AspNetCoreTestRequestMarker), TimeSpan.FromSeconds(2));
+
+        (await handler.TryHandleAsync(NewContext(), timeout, CancellationToken.None)).Should().BeTrue();
+        (await handler.TryHandleAsync(NewContext(), ValidationException(), CancellationToken.None)).Should().BeTrue();
+
+        logger.Entries.Should().HaveCount(2);
+        logger.Entries[0].Should().Match<CapturedLogEntry>(e =>
+            e.Level == LogLevel.Warning && e.EventId.Id == 7001 && e.Exception == null && e.Message.Contains("504"));
+        logger.Entries[1].Should().Match<CapturedLogEntry>(e =>
+            e.Level == LogLevel.Information && e.EventId.Id == 7000 && e.Exception == null && e.Message.Contains("400"));
+    }
+
+    [Fact(DisplayName = "The level of a mapped exception follows the exception, not the status code it is configured to map to")]
+    public async Task Mapped_exception_level_follows_the_exception()
+    {
+        var logger = new CapturingLogger<CqrsExceptionHandler>();
+        var options = new CqrsProblemDetailsOptions
+        {
+            TimeoutStatusCode = StatusCodes.Status408RequestTimeout,
+            ValidationStatusCode = StatusCodes.Status500InternalServerError
+        };
+        var handler = new CqrsExceptionHandler(Options.Create(options), logger);
+
+        (await handler.TryHandleAsync(NewContext(), new RequestTimeoutException(typeof(AspNetCoreTestRequestMarker), TimeSpan.FromSeconds(2)), CancellationToken.None))
+            .Should().BeTrue();
+        (await handler.TryHandleAsync(NewContext(), ValidationException(), CancellationToken.None)).Should().BeTrue();
+
+        logger.Entries.Select(e => (e.EventId.Id, e.Level)).Should().Equal((7001, LogLevel.Warning), (7000, LogLevel.Information));
+    }
+
+    [Theory(DisplayName = "The handler logs each outcome the pipeline produces on purpose at the level the logging behavior gives it, neither with the stack trace")]
+    [InlineData(PipelineOutcome.Invalid)]
+    [InlineData(PipelineOutcome.Duplicate)]
+    [InlineData(PipelineOutcome.KeyReused)]
+    [InlineData(PipelineOutcome.RateLimited)]
+    [InlineData(PipelineOutcome.TimedOut)]
+    [InlineData(PipelineOutcome.QueueRefused)]
+    public async Task Mapped_exceptions_are_logged_as_the_logging_behavior_logs_them(PipelineOutcome outcome)
+    {
+        var exception = PipelineOutcomes.Create(outcome);
+        var handlerLogger = new CapturingLogger<CqrsExceptionHandler>();
+        var behaviorLogger = new CapturingLogger<LoggingBehavior<TestCommand, string>>();
+
+        (await new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()), handlerLogger)
+            .TryHandleAsync(NewContext(), exception, CancellationToken.None)).Should().BeTrue();
+        var act = () => new LoggingBehavior<TestCommand, string>(behaviorLogger)
+            .Handle(new TestCommand(), _ => throw exception, CancellationToken.None);
+        await act.Should().ThrowAsync<Exception>();
+
+        var mapped = handlerLogger.Entries.Should().ContainSingle().Subject;
+        var outcomeLine = behaviorLogger.Entries.Should().HaveCount(2).And.Subject.Last();
+        mapped.Level.Should().Be(outcomeLine.Level);
+        mapped.Level.Should().BeOneOf(LogLevel.Information, LogLevel.Warning);
+        mapped.Exception.Should().BeNull();
+        outcomeLine.Exception.Should().BeNull();
+    }
+
+    private static DefaultHttpContext NewContext() => new()
+    {
+        RequestServices = new ServiceCollection().AddLogging().BuildServiceProvider(),
+        Response = { Body = new MemoryStream() }
+    };
 
     [Fact(DisplayName = "InvalidIdempotencyKeyException maps to 400 with the exception message as the detail")]
     public async Task Invalid_idempotency_key_maps_to_400()
@@ -155,7 +379,7 @@ public sealed class CqrsExceptionHandlerTests
                 app.MapPost("/", (HttpContext context) => Results.Text(context.GetIdempotencyKey()));
             });
 
-        var response = await host.Client.PostAsync("/", content: null);
+        var response = await host.Client.PostAsync("/", content: null, cancellationToken: TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
@@ -167,16 +391,16 @@ public sealed class CqrsExceptionHandlerTests
     {
         await using var host = await StartAsync(() => new InvalidOperationException("secret internal state"));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
-        (await response.Content.ReadAsStringAsync()).Should().NotContain("secret internal state");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("secret internal state");
     }
 
     [Fact(DisplayName = "TryHandleAsync returns false and leaves the response untouched for an unknown exception")]
     public async Task Try_handle_returns_false_for_unknown_exception()
     {
-        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()));
+        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()), NullLogger<CqrsExceptionHandler>.Instance);
         var context = new DefaultHttpContext { RequestServices = new ServiceCollection().BuildServiceProvider() };
 
         var handled = await handler.TryHandleAsync(context, new InvalidOperationException("boom"), CancellationToken.None);
@@ -191,7 +415,7 @@ public sealed class CqrsExceptionHandlerTests
         await using var host = await StartAsync(ValidationException,
             services => services.AddCqrsProblemDetails(o => o.ValidationStatusCode = StatusCodes.Status422UnprocessableEntity));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);
@@ -205,7 +429,7 @@ public sealed class CqrsExceptionHandlerTests
         await using var host = await StartAsync(() => new DuplicateRequestException("order-17"),
             services => services.AddCqrsProblemDetails(o => o.DuplicateRequestStatusCode = null));
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
     }
@@ -223,7 +447,7 @@ public sealed class CqrsExceptionHandlerTests
             services.AddCqrsProblemDetails();
         });
 
-        var body = await AspNetCoreTestHost.ReadJsonAsync(await host.Client.GetAsync("/"));
+        var body = await AspNetCoreTestHost.ReadJsonAsync(await host.Client.GetAsync("/", TestContext.Current.CancellationToken));
 
         body.GetProperty("service").GetString().Should().Be("orders");
         body.GetProperty("exceptionType").GetString().Should().Be(nameof(DuplicateRequestException));
@@ -236,7 +460,7 @@ public sealed class CqrsExceptionHandlerTests
         using var request = new HttpRequestMessage(HttpMethod.Get, "/");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
 
-        var response = await host.Client.SendAsync(request);
+        var response = await host.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await AspNetCoreTestHost.ReadJsonAsync(response)).GetProperty("status").GetInt32().Should().Be(409);
@@ -245,7 +469,7 @@ public sealed class CqrsExceptionHandlerTests
     [Fact(DisplayName = "The handler writes the problem itself when no IProblemDetailsService is registered")]
     public async Task Writes_directly_without_problem_details_service()
     {
-        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()));
+        var handler = new CqrsExceptionHandler(Options.Create(new CqrsProblemDetailsOptions()), NullLogger<CqrsExceptionHandler>.Instance);
         var body = new MemoryStream();
         var context = new DefaultHttpContext
         {
@@ -279,7 +503,7 @@ public sealed class CqrsExceptionHandlerTests
             });
         });
 
-        var response = await host.Client.GetAsync("/");
+        var response = await host.Client.GetAsync("/", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await AspNetCoreTestHost.ReadJsonAsync(response);

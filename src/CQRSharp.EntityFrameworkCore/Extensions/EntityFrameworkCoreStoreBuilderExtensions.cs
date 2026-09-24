@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp;
-using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
+using CQRSharp.Pipelines;
 using Microsoft.EntityFrameworkCore;
 
 // Namespace-extends the DI builder so the fluent store verbs read naturally next to the rest of the app's wiring.
@@ -16,17 +15,15 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// </summary>
 public static class EntityFrameworkCoreStoreBuilderExtensions
 {
-    private const string AotMessage =
-        "EF Core uses runtime query compilation and is not compatible with Native AOT or full trimming.";
 
     /// <summary>
     ///     Uses the EF Core durable outbox store, backed by the already-registered <typeparamref name="TContext" />.
     /// </summary>
-    /// <typeparam name="TContext">The DbContext that maps <c>OutboxEntity</c> (apply <c>OutboxEntityConfiguration</c> in its model).</typeparam>
+    /// <typeparam name="TContext">The DbContext that maps the outbox and inbox tables (call <c>modelBuilder.ApplyCqrsOutbox()</c> in its model); host start fails when it does not.</typeparam>
     /// <param name="builder">The outbox store builder.</param>
-    /// <param name="configure">Optional callback to tune the visibility timeout and concurrency-retry budget.</param>
-    [RequiresDynamicCode(AotMessage)]
-    [RequiresUnreferencedCode(AotMessage)]
+    /// <param name="configure">Optional callback to tune the visibility timeout, the claim's retry budget and the retention.</param>
+    [RequiresDynamicCode(EfCoreAot.Message)]
+    [RequiresUnreferencedCode(EfCoreAot.Message)]
     public static OutboxStoreBuilder UseEntityFrameworkCore<TContext>(
         this OutboxStoreBuilder builder,
         Action<EfCoreOutboxStoreOptions>? configure = null)
@@ -39,11 +36,15 @@ public static class EntityFrameworkCoreStoreBuilderExtensions
     /// <summary>
     ///     Uses the EF Core durable idempotency store, backed by the already-registered <typeparamref name="TContext" />.
     /// </summary>
-    /// <typeparam name="TContext">The DbContext that maps <c>IdempotencyEntity</c> (apply <c>IdempotencyEntityConfiguration</c> in its model).</typeparam>
+    /// <typeparam name="TContext">
+    ///     The DbContext that maps <c>IdempotencyEntity</c> (call <c>modelBuilder.ApplyCqrsIdempotency(...)</c> in its model,
+    ///     with <see cref="IdempotencyEntityConfiguration.SqlServerBinaryCollation" /> on SQL Server); host start fails when
+    ///     it does not.
+    /// </typeparam>
     /// <param name="builder">The idempotency store builder.</param>
     /// <param name="configure">Optional callback to tune the retention window.</param>
-    [RequiresDynamicCode(AotMessage)]
-    [RequiresUnreferencedCode(AotMessage)]
+    [RequiresDynamicCode(EfCoreAot.Message)]
+    [RequiresUnreferencedCode(EfCoreAot.Message)]
     public static IdempotencyStoreBuilder UseEntityFrameworkCore<TContext>(
         this IdempotencyStoreBuilder builder,
         Action<EfCoreIdempotencyStoreOptions>? configure = null)

@@ -1,31 +1,30 @@
-using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using CQRSharp.Pipelines;
-using CQRSharp.Core.Caching.Contexts;
-using CQRSharp.Core.Caching.Handlers;
-using CQRSharp.Core.Caching.Requests;
+using System.ComponentModel;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
+using CQRSharp.Core.Idempotency;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Registries;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Core.Modules;
 
 /// <summary>
 ///     Wires the per-assembly <see cref="ICqrsModule" /> registrations (the composition root's own module plus every
-///     referenced assembly's) into the single set of framework services CQRSharp resolves at runtime. The registries
-///     are merged dictionaries; the dispatchers are composites that route a request, stream, or notification to the
-///     owning module's source-generated, AOT-safe dispatcher by runtime type. Generated bootstrap code calls this once,
-///     after every module has been registered.
+///     referenced assembly's) into the single set of framework services CQRSharp resolves at runtime: the registries and
+///     route tables, merged once per service provider. Generated bootstrap code calls this once, after every module has
+///     been registered.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class CqrsModuleComposition
 {
     /// <summary>
-    ///     Registers the merged registries and routing dispatchers built from every registered <see cref="ICqrsModule" />.
-    ///     Authoritative (RemoveAll-then-register) so it wins regardless of ordering and is idempotent on re-invocation.
+    ///     Registers the merged registries and route table built from every registered
+    ///     <see cref="ICqrsModule" />. Authoritative (RemoveAll-then-register) so it wins regardless of ordering and is
+    ///     idempotent on re-invocation.
     /// </summary>
     /// <param name="services">The service collection that the modules were registered into.</param>
     /// <returns>The same service collection, to allow chaining.</returns>
@@ -33,369 +32,136 @@ public static class CqrsModuleComposition
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Registries: a single registry per kind, backed by the union of every module's compile-time map.
+        // Where two modules describe the same request, the last registered wins, exactly as for its route below: the
+        // bootstrap registers referenced modules first and the composition root's own last, so the application's handler
+        // for a request wins over a library's, and its metadata and invoker come from the same module as its route.
         services.RemoveAll<IRequestRegistry>();
         services.AddSingleton<IRequestRegistry>(sp =>
-            new RequestRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.RequestMetadata)));
+            new RequestRegistry(LastWins(sp.GetServices<ICqrsModule>(), m => m.RequestMetadata)));
 
         services.RemoveAll<IHandlerRegistry>();
         services.AddSingleton<IHandlerRegistry>(sp =>
-            new HandlerRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers)));
+            new HandlerRegistry(LastWins(sp.GetServices<ICqrsModule>(), m => m.HandlerInvokers)));
 
         services.RemoveAll<IContextFactoryRegistry>();
-        services.AddSingleton<IContextFactoryRegistry>(sp =>
-            new ContextFactoryRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.ContextFactories)));
+        services.AddSingleton<IContextFactoryRegistry>(sp => new ContextFactoryRegistry(MergeContextSources(sp.GetServices<ICqrsModule>())));
+
+        // The built-in factory of the default context. Registered here, after every module registrar, so that a factory
+        // for RequestContextBase a module discovered or one registered by hand before this call takes precedence; one
+        // registered by hand afterwards, or discovered by a module a later AddCqrsGenerated registers, replaces it.
+        DiscoveredContextFactories.RegisterDefault(services);
 
         services.RemoveAll<IRequestExceptionHookRegistry>();
         services.AddSingleton<IRequestExceptionHookRegistry>(sp =>
-            new RequestExceptionHookRegistry(Merge(sp.GetServices<ICqrsModule>(), m => m.ExceptionHooks)));
+            new RequestExceptionHookRegistry(MergeExceptionHooks(sp.GetServices<ICqrsModule>())));
 
-        // Dispatchers carry the resolving scope's executor/provider (transient: the scoped ICqrsDispatcher façade keeps
-        // the one it resolves), but the routing itself is a singleton table
-        // built once from the modules. Creating a DI scope — every HTTP request — must not rebuild a dictionary of every
-        // request type in the application.
+        // The behaviors of a request with a value-type result and of a value-type notification, closed by the modules'
+        // generated factories: Microsoft's container cannot close an open-generic registration over a value type where
+        // dynamic code is unavailable.
+        ClosedPipelineBehaviors.Register(services);
+
+        // The routing is a singleton table built once from the modules: creating a DI scope, which every HTTP request
+        // does, must not rebuild a dictionary of every request type in the application.
         services.RemoveAll<ModuleRouteTable>();
         services.AddSingleton(sp => new ModuleRouteTable(sp.GetServices<ICqrsModule>()));
 
-        services.RemoveAll<IRequestDispatcher>();
-        services.AddTransient<IRequestDispatcher>(sp =>
-        {
-            var executor = sp.GetRequiredService<IPipelineExecutor>();
-            var table = (executor as PipelineExecutor)?.Shared?.RouteTable ?? sp.GetRequiredService<ModuleRouteTable>();
-            return new CompositeRequestDispatcher(table, executor);
-        });
+        // Which handlers a notification reaches, in-process and through the outbox alike.
+        services.RemoveAll<INotificationSubscriptionRegistry>();
+        services.AddSingleton<INotificationSubscriptionRegistry>(sp => new NotificationSubscriptionRegistry(sp.GetServices<ICqrsModule>()));
 
-        services.RemoveAll<IStreamRequestDispatcher>();
-        services.AddTransient<IStreamRequestDispatcher>(sp =>
-            new CompositeStreamRequestDispatcher(sp.GetRequiredService<ModuleRouteTable>(), sp.GetRequiredService<IPipelineExecutor>()));
-
-        services.RemoveAll<IDirectNotificationDispatcher>();
-        services.AddScoped<IDirectNotificationDispatcher>(sp =>
-            new CompositeDirectNotificationDispatcher(sp.GetRequiredService<ModuleRouteTable>(), sp));
-
-        // Notification surface + diagnostics built from the merged modules.
-        services.RemoveAll<ICqrsNotificationRegistry>();
-        services.AddSingleton<ICqrsNotificationRegistry>(sp =>
-            new CompositeCqrsNotificationRegistry(sp.GetServices<ICqrsModule>()));
+        // The idempotency behavior's payload fingerprints: every module's generated fingerprinter, first match wins.
+        services.RemoveAll<IRequestFingerprinter>();
+        services.AddSingleton<IRequestFingerprinter>(sp =>
+            new CompositeRequestFingerprinter(sp.GetServices<ICqrsModule>()));
 
         services.RemoveAll<ICqrsDiagnostics>();
-        services.AddScoped<ICqrsDiagnostics>(sp => new CompositeCqrsDiagnostics(
-            sp.GetServices<ICqrsModule>(),
+        services.AddScoped<ICqrsDiagnostics>(sp => new CqrsDiagnostics(
+            sp.GetRequiredService<ModuleRouteTable>(),
             sp,
             sp.GetRequiredService<IRequestRegistry>(),
-            sp.GetRequiredService<IContextFactoryRegistry>(),
-            sp.GetRequiredService<ICqrsNotificationRegistry>()));
+            sp.GetRequiredService<IContextFactoryRegistry>()));
 
-        // Outbox serializer: TryAdd so a consumer-registered custom serializer still wins. The composite tries each
-        // module's serializer in turn (an unrecognised name yields null and falls through to the next).
-        services.TryAddSingleton<CompositeOutboxNotificationSerializer>(sp =>
+        // The outbox serializer, over every module's generated one. TryAdd: a serializer registered with
+        // AddNotificationSerializer<T>() before this ran replaces it (one registered afterwards removes this one).
+        services.TryAddSingleton<INotificationSerializer>(sp =>
             new CompositeOutboxNotificationSerializer(sp.GetServices<ICqrsModule>()));
-        services.TryAddSingleton<INotificationSerializer>(sp => sp.GetRequiredService<CompositeOutboxNotificationSerializer>());
-        services.TryAddSingleton<IStableNotificationNameProvider>(sp => sp.GetRequiredService<CompositeOutboxNotificationSerializer>());
 
         return services;
     }
 
-    private static ConcurrentDictionary<Type, TValue> Merge<TValue>(
+    private static FrozenDictionary<Type, RequestContextSource> MergeContextSources(IEnumerable<ICqrsModule> modules)
+    {
+        // Every module's source for a context type is the same object, so which one is kept does not matter. The default
+        // context always has one: a request that implements the request interfaces directly is created with it.
+        var sources = new Dictionary<Type, RequestContextSource>();
+        foreach (var module in modules)
+        foreach (var source in module.ContextSources)
+            sources[source.Key] = source.Value;
+
+        sources.TryAdd(typeof(RequestContextBase), RequestContextSource.For<RequestContextBase>());
+        return sources.ToFrozenDictionary();
+    }
+
+    private static FrozenDictionary<Type, RequestExceptionHookInvoker> MergeExceptionHooks(IEnumerable<ICqrsModule> modules)
+    {
+        var pairs = new Dictionary<Type, Dictionary<Type, RequestExceptionHook>>();
+        foreach (var module in modules)
+        foreach (var hook in module.ExceptionHooks)
+        {
+            if (!pairs.TryGetValue(hook.RequestType, out var byException))
+                pairs[hook.RequestType] = byException = new Dictionary<Type, RequestExceptionHook>();
+
+            // Merged role by role. A module's hook for a pair carries only the roles that module declares (a library may
+            // declare the action and the application the handler), and each role's invoker resolves every module's
+            // actions or handlers for the pair from the container: the first invoker of each role covers them all, and
+            // keeping one of each runs every hook once.
+            byException[hook.ExceptionType] = byException.TryGetValue(hook.ExceptionType, out var existing)
+                ? new RequestExceptionHook(existing.RequestType, existing.ExceptionType, existing.InheritanceDepth,
+                    existing.Actions ?? hook.Actions, existing.Handlers ?? hook.Handlers)
+                : hook;
+        }
+
+        var merged = new Dictionary<Type, RequestExceptionHookInvoker>(pairs.Count);
+        foreach (var request in pairs)
+        {
+            var ordered = request.Value.Values
+                .OrderByDescending(h => h.InheritanceDepth)
+                .ThenBy(h => h.ExceptionType.FullName, StringComparer.Ordinal)
+                .ToArray();
+            merged[request.Key] = Compose(ordered);
+        }
+
+        return merged.ToFrozenDictionary();
+
+        // Every matching action runs first (they are side effects of the exception, whatever becomes of it), then the
+        // handlers from the most derived exception type up; the first that handles decides the outcome.
+        static RequestExceptionHookInvoker Compose(RequestExceptionHook[] hooks)
+            => async (services, request, exception, cancellationToken) =>
+            {
+                foreach (var hook in hooks)
+                    if (hook.Actions is { } actions && hook.ExceptionType.IsInstanceOfType(exception))
+                        await actions(services, request, exception, cancellationToken).ConfigureAwait(false);
+
+                foreach (var hook in hooks)
+                {
+                    if (hook.Handlers is not { } handlers || !hook.ExceptionType.IsInstanceOfType(exception)) continue;
+                    var outcome = await handlers(services, request, exception, cancellationToken).ConfigureAwait(false);
+                    if (outcome.Handled) return outcome;
+                }
+
+                return RequestExceptionHandlingOutcome.NotHandled;
+            };
+    }
+
+    private static FrozenDictionary<Type, TValue> LastWins<TValue>(
         IEnumerable<ICqrsModule> modules,
         Func<ICqrsModule, IReadOnlyDictionary<Type, TValue>> selector)
     {
-        var merged = new ConcurrentDictionary<Type, TValue>();
+        var merged = new Dictionary<Type, TValue>();
         foreach (var module in modules)
         foreach (var entry in selector(module))
-            merged.TryAdd(entry.Key, entry.Value);
+            merged[entry.Key] = entry.Value;
 
-        return merged;
-    }
-}
-
-/// <summary>
-///     The application's routing, built once per provider from every registered module: request type to generated route,
-///     and — for the surfaces that are still dispatched per module — request/notification type to owning module.
-/// </summary>
-internal sealed class ModuleRouteTable
-{
-    public ModuleRouteTable(IEnumerable<ICqrsModule> modules)
-    {
-        var routes = new Dictionary<Type, RequestRoute>();
-        var untypedRoutes = new Dictionary<Type, UntypedRequestRoute>();
-        var requestModules = new Dictionary<Type, ICqrsModule>();
-        var streamModules = new Dictionary<Type, ICqrsModule>();
-        var notificationModules = new Dictionary<Type, ICqrsModule>();
-
-        // Last module wins, matching the pre-5.0 composite dispatchers.
-        foreach (var module in modules)
-        {
-            foreach (var requestType in module.RequestTypes) requestModules[requestType] = module;
-            foreach (var route in module.RequestRoutes) routes[route.Key] = route.Value;
-            foreach (var route in module.UntypedRequestRoutes) untypedRoutes[route.Key] = route.Value;
-            foreach (var streamType in module.StreamRequestTypes) streamModules[streamType] = module;
-            foreach (var notificationType in module.HandledNotificationTypes) notificationModules[notificationType] = module;
-        }
-
-        // A request whose winning module offers no route must not be served by another module's route.
-        foreach (var owner in requestModules)
-        {
-            if (!owner.Value.RequestRoutes.ContainsKey(owner.Key)) routes.Remove(owner.Key);
-            if (!owner.Value.UntypedRequestRoutes.ContainsKey(owner.Key)) untypedRoutes.Remove(owner.Key);
-        }
-
-        Routes = routes.ToFrozenDictionary();
-        UntypedRoutes = untypedRoutes.ToFrozenDictionary();
-        RequestModules = requestModules.ToFrozenDictionary();
-        StreamModules = streamModules.ToFrozenDictionary();
-        NotificationModules = notificationModules.ToFrozenDictionary();
-    }
-
-    public FrozenDictionary<Type, RequestRoute> Routes { get; }
-    public FrozenDictionary<Type, UntypedRequestRoute> UntypedRoutes { get; }
-    public FrozenDictionary<Type, ICqrsModule> RequestModules { get; }
-    public FrozenDictionary<Type, ICqrsModule> StreamModules { get; }
-    public FrozenDictionary<Type, ICqrsModule> NotificationModules { get; }
-}
-
-/// <summary>
-///     Dispatches a request through its source-generated route: one lookup by exact runtime type in the provider-wide
-///     <see cref="ModuleRouteTable" />, then a direct call into the executor. Constructing one per scope costs nothing.
-/// </summary>
-internal sealed class CompositeRequestDispatcher(ModuleRouteTable table, IPipelineExecutor pipelineExecutor) : IRequestDispatcher
-{
-    /// <summary>The executor this dispatcher routes into (lets the wiring probe recognise the default composition).</summary>
-    internal IPipelineExecutor Executor => pipelineExecutor;
-
-    // Only for modules that expose no routes: their own dispatcher, created on first use in this scope.
-    private Dictionary<ICqrsModule, IRequestDispatcher>? _moduleDispatchers;
-
-    public Task<TResponse> ExecuteAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        return table.Routes.TryGetValue(request.GetType(), out var route)
-            ? (Task<TResponse>)route(pipelineExecutor, request, cancellationToken)
-            : ResolveModuleDispatcher(request.GetType()).ExecuteAsync(request, cancellationToken);
-    }
-
-    public Task<object?> ExecuteAsync(IRequest request, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        return table.UntypedRoutes.TryGetValue(request.GetType(), out var route)
-            ? route(pipelineExecutor, request, cancellationToken)
-            : ResolveModuleDispatcher(request.GetType()).ExecuteAsync(request, cancellationToken);
-    }
-
-    private IRequestDispatcher ResolveModuleDispatcher(Type requestType)
-    {
-        if (!table.RequestModules.TryGetValue(requestType, out var module))
-            throw new InvalidOperationException(
-                $"No handler or pipeline found for request type '{requestType.FullName}'. Ensure it's public or internal, has a corresponding handler, and its assembly's CQRSharp module is registered.");
-
-        _moduleDispatchers ??= new Dictionary<ICqrsModule, IRequestDispatcher>();
-        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
-            _moduleDispatchers[module] = dispatcher = module.CreateRequestDispatcher(pipelineExecutor);
-
-        return dispatcher;
-    }
-}
-
-/// <summary>
-///     Routes a streaming request to the owning module's source-generated stream dispatcher by runtime type. The
-///     per-module dispatcher is created on first use in a scope, not eagerly for every module.
-/// </summary>
-internal sealed class CompositeStreamRequestDispatcher(ModuleRouteTable table, IPipelineExecutor pipelineExecutor) : IStreamRequestDispatcher
-{
-    private Dictionary<ICqrsModule, IStreamRequestDispatcher>? _moduleDispatchers;
-
-    public IAsyncEnumerable<TItem> ExecuteAsync<TItem>(IStreamRequest<TItem> request, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return Resolve(request.GetType()).ExecuteAsync(request, cancellationToken);
-    }
-
-    public IAsyncEnumerable<object?> ExecuteAsync(IStreamRequest request, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return Resolve(request.GetType()).ExecuteAsync(request, cancellationToken);
-    }
-
-    private IStreamRequestDispatcher Resolve(Type requestType)
-    {
-        if (!table.StreamModules.TryGetValue(requestType, out var module))
-            throw new InvalidOperationException(
-                $"No stream handler or pipeline found for request type '{requestType.FullName}'. Ensure it's public or internal, has a corresponding handler, and its assembly's CQRSharp module is registered.");
-
-        _moduleDispatchers ??= new Dictionary<ICqrsModule, IStreamRequestDispatcher>();
-        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
-            _moduleDispatchers[module] = dispatcher = module.CreateStreamDispatcher(pipelineExecutor);
-
-        return dispatcher;
-    }
-}
-
-/// <summary>
-///     Routes an untyped notification to the owning module's source-generated dispatcher by runtime type. The typed
-///     <c>Publish&lt;T&gt;</c> path is inherited from <see cref="DirectNotificationDispatcher" /> and already spans
-///     assemblies via DI handler resolution, so only the runtime-typed bridge needs per-module routing.
-/// </summary>
-internal sealed class CompositeDirectNotificationDispatcher(ModuleRouteTable table, IServiceProvider services)
-    : DirectNotificationDispatcher(services)
-{
-    private readonly IServiceProvider _scope = services;
-    private Dictionary<ICqrsModule, IDirectNotificationDispatcher>? _moduleDispatchers;
-
-    public override Task Publish(INotification notification, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(notification);
-        if (!table.NotificationModules.TryGetValue(notification.GetType(), out var module))
-            return Task.CompletedTask;
-
-        _moduleDispatchers ??= new Dictionary<ICqrsModule, IDirectNotificationDispatcher>();
-        if (!_moduleDispatchers.TryGetValue(module, out var dispatcher))
-            _moduleDispatchers[module] = dispatcher = module.CreateNotificationDispatcher(_scope);
-
-        return dispatcher.Publish(notification, cancellationToken);
-    }
-}
-
-/// <summary>
-///     Merges every module's compile-time notification surface (the handled types and which carry a stable outbox name).
-/// </summary>
-internal sealed class CompositeCqrsNotificationRegistry : ICqrsNotificationRegistry
-{
-    private readonly Type[] _handled;
-    private readonly HashSet<Type> _stable;
-
-    public CompositeCqrsNotificationRegistry(IEnumerable<ICqrsModule> modules)
-    {
-        var materialized = modules as IReadOnlyCollection<ICqrsModule> ?? modules.ToArray();
-        _handled = materialized
-            .SelectMany(m => m.NotificationTypes)
-            .Distinct()
-            .OrderBy(t => t.FullName, StringComparer.Ordinal)
-            .ToArray();
-        _stable = new HashSet<Type>(materialized.SelectMany(m => m.StableNotificationTypes));
-    }
-
-    public IReadOnlyList<Type> HandledNotificationTypes => _handled;
-
-    public bool HasStableName(Type notificationType)
-    {
-        ArgumentNullException.ThrowIfNull(notificationType);
-        return _stable.Contains(notificationType);
-    }
-}
-
-/// <summary>
-///     Aggregates each module's source-generated diagnostics: a request is described by the module that owns it, and
-///     the configuration inspection runs once over the union of every module's request bindings.
-/// </summary>
-internal sealed class CompositeCqrsDiagnostics : ICqrsDiagnostics
-{
-    private readonly ICqrsDiagnostics[] _modules;
-    private readonly ICqrsNotificationRegistry _notificationRegistry;
-    private readonly IServiceProvider _services;
-
-    public CompositeCqrsDiagnostics(
-        IEnumerable<ICqrsModule> modules,
-        IServiceProvider services,
-        IRequestRegistry requestRegistry,
-        IContextFactoryRegistry contextFactoryRegistry,
-        ICqrsNotificationRegistry notificationRegistry)
-    {
-        _services = services;
-        _notificationRegistry = notificationRegistry;
-        _modules = modules
-            .Select(m => m.CreateDiagnostics(services, requestRegistry, contextFactoryRegistry, notificationRegistry))
-            .ToArray();
-    }
-
-    public bool TryDescribeRequest(Type requestType, out CqrsRequestBinding binding)
-    {
-        foreach (var module in _modules)
-            if (module.TryDescribeRequest(requestType, out binding))
-                return true;
-
-        binding = default!;
-        return false;
-    }
-
-    public CqrsRequestBinding DescribeRequest(Type requestType)
-        => TryDescribeRequest(requestType, out var binding)
-            ? binding
-            : throw new InvalidOperationException(
-                $"Unknown request type '{requestType.FullName}'. Ensure it is included in a source-generated module.");
-
-    public IReadOnlyList<CqrsRequestBinding> DescribeAllRequests()
-    {
-        var list = new List<CqrsRequestBinding>();
-        foreach (var module in _modules)
-            list.AddRange(module.DescribeAllRequests());
-        return list;
-    }
-
-    public IReadOnlyList<CqrsBindingIssue> DescribeConfiguration()
-    {
-        var outbox = _services.GetService<IOptions<OutboxOptions>>()?.Value ?? new OutboxOptions();
-        var dispatcher = _services.GetService<IOptions<DispatcherOptions>>()?.Value ?? new DispatcherOptions();
-        return CqrsConfigurationInspector.Inspect(
-            _services, outbox, dispatcher, DescribeAllRequests(), _notificationRegistry);
-    }
-}
-
-/// <summary>
-///     A single outbox serializer over every module's source-generated serializer. Serialization picks the module that
-///     recognises the notification's type; deserialization tries each until one resolves the stable name.
-/// </summary>
-internal sealed class CompositeOutboxNotificationSerializer : INotificationSerializer, IStableNotificationNameProvider
-{
-    private readonly INotificationSerializer[] _serializers;
-
-    public CompositeOutboxNotificationSerializer(IEnumerable<ICqrsModule> modules)
-        => _serializers = modules
-            .Select(m => m.OutboxSerializer)
-            .Where(s => s is not null)
-            .ToArray()!;
-
-    public byte[] Serialize(INotification notification)
-    {
-        ArgumentNullException.ThrowIfNull(notification);
-
-        foreach (var serializer in _serializers)
-            if (serializer is IStableNotificationNameProvider provider &&
-                provider.TryGetStableName(notification.GetType(), out _))
-                return serializer.Serialize(notification);
-
-        throw new InvalidOperationException(
-            $"Notification type '{notification.GetType().FullName}' is not registered for outbox serialization. Add [NotificationName] or register a custom INotificationSerializer.");
-    }
-
-    public INotification? Deserialize(string notificationName, byte[] payload)
-    {
-        foreach (var serializer in _serializers)
-        {
-            var result = serializer.Deserialize(notificationName, payload);
-            if (result is not null) return result;
-        }
-
-        return null;
-    }
-
-    public string GetNotificationName(Type notificationType)
-    {
-        ArgumentNullException.ThrowIfNull(notificationType);
-        return TryGetStableName(notificationType, out var name) ? name : notificationType.FullName ?? notificationType.Name;
-    }
-
-    public bool TryGetStableName(Type notificationType, out string stableName)
-    {
-        ArgumentNullException.ThrowIfNull(notificationType);
-
-        foreach (var serializer in _serializers)
-            if (serializer is IStableNotificationNameProvider provider &&
-                provider.TryGetStableName(notificationType, out stableName))
-                return true;
-
-        stableName = string.Empty;
-        return false;
+        return merged.ToFrozenDictionary();
     }
 }

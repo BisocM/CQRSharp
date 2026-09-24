@@ -21,13 +21,15 @@ updates:
           - "xunit*"
           - "Xunit.*"
           - "Microsoft.NET.Test.Sdk"
-          - "coverlet.*"
+          - "Microsoft.Testing.*"
           - "FluentAssertions"
           - "Moq"
           - "Microsoft.Extensions.TimeProvider.Testing"
           - "Microsoft.AspNetCore.TestHost"
           - "Microsoft.EntityFrameworkCore.Sqlite"
           - "SQLitePCLRaw.*"
+          - "Testcontainers.*"
+          - "Microsoft.Data.SqlClient"
       roslyn:
         patterns:
           - "Microsoft.CodeAnalysis.*"
@@ -35,9 +37,11 @@ updates:
         patterns:
           - "Microsoft.Extensions.*"
           - "Microsoft.Bcl.*"
+      # The Npgsql provider requires the EF Core patch it was built against, so the two always move in one pull request.
       entity-framework-core:
         patterns:
           - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore.PostgreSQL"
       # Not built by CI: run the benchmarks locally before merging one of these.
       benchmarks:
         patterns:
@@ -53,17 +57,21 @@ updates:
       # Pinned to 12.5.0, the last Apache-2.0 release; 13.0 and later are commercially licensed. Benchmarks only.
       - dependency-name: "MediatR"
       # A library's package references are the floor its consumers inherit, and net8.0 is a supported target: moving
-      # to a new major (EF Core 10 requires .NET 10) is a release decision, not a routine update.
+      # to a new major is a release decision, not a routine update.
       - dependency-name: "Microsoft.Extensions.*"
         update-types:
           - "version-update:semver-major"
       - dependency-name: "Microsoft.Bcl.*"
         update-types:
           - "version-update:semver-major"
+      # Pinned once per target framework in Directory.Packages.props, each to that framework's major (EF Core, its
+      # providers, and TestHost, which must match the shared framework); a major update would cross frameworks.
       - dependency-name: "Microsoft.EntityFrameworkCore*"
         update-types:
           - "version-update:semver-major"
-      # Referenced once per target framework, each pinned to that framework's major.
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: "Microsoft.AspNetCore.TestHost"
         update-types:
           - "version-update:semver-major"

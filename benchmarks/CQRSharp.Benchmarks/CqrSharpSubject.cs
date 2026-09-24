@@ -37,6 +37,8 @@ public sealed class PassThroughBehavior<TRequest, TResult> : IPipelineBehavior<T
         => next(cancellationToken);
 }
 
+// CQRSharp's documented defaults: a scoped ICqrsDispatcher, transient handlers, and a behavior registered as a transient
+// open generic.
 public static class CqrSharpSubject
 {
     public static ServiceProvider CreateProvider(bool withBehavior)
@@ -46,10 +48,6 @@ public static class CqrSharpSubject
         if (withBehavior)
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(PassThroughBehavior<,>));
 
-        // Every subject dispatches from one long-lived scope, mirroring a request scope in a real host.
         return services.BuildServiceProvider();
     }
-
-    public static ICqrsDispatcher Create(bool withBehavior)
-        => CreateProvider(withBehavior).CreateScope().ServiceProvider.GetRequiredService<ICqrsDispatcher>();
 }

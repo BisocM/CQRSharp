@@ -1,7 +1,7 @@
 # Getting started
 
-This guide takes you from an empty project to dispatching commands, queries, streaming requests, and
-notifications, then layering on opt-in behaviors and a transactional outbox.
+This guide goes from an empty project to dispatching commands, queries, streaming requests and notifications, then adds
+behaviors and an outbox.
 
 - [Install](#install)
 - [Your first app](#your-first-app)
@@ -21,43 +21,51 @@ notifications, then layering on opt-in behaviors and a transactional outbox.
 dotnet add package CQRSharp
 ```
 
-The `CQRSharp` meta-package pulls in the abstractions, the runtime, the source generator, and the
-analyzers. For durable outbox / idempotency persistence, also add an integration package:
+The `CQRSharp` meta-package brings the contracts, the runtime, the pipeline behaviors and their builder, the source
+generator, and the analyzers. It does not bring the .NET Generic Host: a program that calls `Host.CreateApplicationBuilder`
+(like the one below) also needs
 
 ```bash
-dotnet add package CQRSharp.Redis                 # Redis-backed stores (Native-AOT-compatible)
-dotnet add package CQRSharp.EntityFrameworkCore   # EF Core relational stores
+dotnet add package Microsoft.Extensions.Hosting
 ```
 
-CQRSharp targets **net8.0, net9.0, and net10.0**. The authoring contracts also compile against
-`netstandard2.0` consumers.
+ASP.NET Core and Worker Service projects already have it. For durable outbox and idempotency stores, add an integration
+package as well ([Integrations](integrations.md)):
+
+```bash
+dotnet add package CQRSharp.Redis                 # Redis stores
+dotnet add package CQRSharp.EntityFrameworkCore   # EF Core (relational) stores and unit of work
+```
+
+CQRSharp targets **net8.0, net9.0 and net10.0**. `CQRSharp.Abstractions`, the contracts package, also targets
+`netstandard2.0`, so a contracts-only library can declare requests and notifications for any .NET consumer.
 
 ## Your first app
 
-Here is a complete program — register CQRSharp, send one request, print the result. It compiles and runs as-is on a
-.NET 8+ console app that references the `CQRSharp` meta-package (the CQRSharp types are import-free thanks to the
-package's global usings; only the host/DI usings are explicit):
+This is the program `dotnet new cqrsharp` scaffolds: it registers CQRSharp, sends one query and prints the result. It runs
+on a .NET 8+ console project that references `CQRSharp` and `Microsoft.Extensions.Hosting`. The CQRSharp types need no
+`using` directives thanks to the package's [global usings](#global-usings); only the host and DI usings are explicit.
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddCqrsGenerated();              // wires the dispatcher + every discovered handler
+builder.Services.AddCqrsGenerated();              // the dispatcher, every discovered handler, validation and exception handling
 
 using var host = builder.Build();
 await host.StartAsync();
 
-using (var scope = host.Services.CreateScope())   // CQRSharp services are scoped — resolve from a scope
+using (var scope = host.Services.CreateScope())   // the dispatcher is scoped: resolve it from a scope
 {
     var dispatcher = scope.ServiceProvider.GetRequiredService<ICqrsDispatcher>();
     var greeting = await dispatcher.Send(new Greet("world"));
-    Console.WriteLine(greeting);                  // -> Hello, world!
+    Console.WriteLine(greeting);                  // Hello, world!
 }
 
 await host.StopAsync();
 
-// The query and its handler. Discovered and wired by the source generator — there is no manual registration.
+// The query and its handler. The source generator discovers and registers the handler.
 public sealed class Greet(string name) : QueryBase<string>
 {
     public string Name { get; } = name;
@@ -70,45 +78,42 @@ public sealed class GreetHandler : IQueryHandler<Greet, string>
 }
 ```
 
-This is the [`CQRSharp.Sample.Minimal`](../samples/CQRSharp.Sample.Minimal) project verbatim. You can scaffold
-the same app in one command with the included template:
+To create the project from the template:
 
 ```bash
-dotnet new install templates/cqrsharp   # or: dotnet new install CQRSharp.Templates
+dotnet new install CQRSharp.Templates
 dotnet new cqrsharp -n MyApp
 ```
 
-The rest of this guide breaks the pieces down and layers on queries, streams, notifications, behaviors, and an outbox.
+The rest of this guide takes the pieces apart and adds queries, streams, notifications, behaviors and an outbox.
 
 ## Register CQRSharp
 
-`AddCqrsGenerated` is **emitted by the source generator** into your assembly. It registers every
-command, query, stream, and notification handler the generator discovered, plus the dispatcher and the
-AOT-safe registries — no assembly scanning, no reflection.
+`AddCqrsGenerated` is written into your assembly by the source generator. It registers the dispatcher and every command,
+query, stream and notification handler the generator discovered, in this assembly and in the CQRSharp assemblies it
+references. There is no assembly scanning at runtime.
 
 ```csharp
-// Minimal: just the discovered handlers and the dispatcher.
+// The dispatcher, the discovered handlers, and the validation and exception-handling behaviors.
 services.AddCqrsGenerated();
 
-// Fluent: opt into behaviors and stores in any order (see Configuration).
+// The same, configured through the fluent builder. Validation and exception handling stay on unless turned off.
 services.AddCqrsGenerated(builder => builder
-    .UseValidation()
     .UseLogging()
     .ValidateOnStart());
 ```
 
-> **Always use `AddCqrsGenerated`, never `AddCqrs` directly.** `AddCqrsGenerated` applies the
-> source-generated registrations; the startup validator will raise `CQRCONF004` at host start if it
-> detects the generated registry is missing.
+[Configuration](configuration.md) covers both forms and every builder verb.
 
 ## Global usings
 
-The framework's authoring types live in several namespaces. On a project with `ImplicitUsings`
-enabled (the .NET 8+ default), the meta-package ships **global usings** so you don't have to import
-them: `CommandBase`, `QueryBase<>`, `ICommandHandler<>`, `CommandResult`, `INotification`,
-`ICqrsDispatcher`, `AddCqrsGenerated`, the builder verbs, and friends are already in scope.
+On a project with `ImplicitUsings` enabled (the default for .NET 8+ projects), the meta-package adds `CQRSharp` and
+`CQRSharp.Pipelines` as global usings. The request base classes, handler interfaces, `CommandResult`, `INotification`,
+`ICqrsDispatcher`, `AddCqrsGenerated`, the builder and its verbs are then in scope everywhere. `CQRSharp.Persistence`,
+which only store and unit-of-work implementations need, is not a global using. The [namespace map](README.md#namespaces)
+lists what lives where.
 
-Opt out — without disabling all implicit usings — with:
+To keep implicit usings but drop CQRSharp's:
 
 ```xml
 <PropertyGroup>
@@ -121,7 +126,8 @@ The snippets in these docs assume the global usings are active.
 ## Your first command
 
 A **command** expresses an intent to change state. Derive it from `CommandBase` and handle it with
-`ICommandHandler<TCommand>`. A command's result is always a [`CommandResult`](requests-and-handlers.md#commandresult).
+`ICommandHandler<TCommand>`. A command's result is a [`CommandResult`](requests-and-handlers.md#commandresult): success,
+or a failure with a kind (`NotFound`, `Conflict`, `Validation`, ...) and a message.
 
 ```csharp
 public sealed class CreateUser : CommandBase
@@ -131,32 +137,32 @@ public sealed class CreateUser : CommandBase
 
 public sealed class CreateUserHandler : ICommandHandler<CreateUser>
 {
-    public async Task<CommandResult> Handle(CreateUser command, CancellationToken ct)
+    public Task<CommandResult> Handle(CreateUser command, CancellationToken cancellationToken)
     {
         // ... persist the user ...
-        return CommandResult.FromSuccess();
-        // or: return CommandResult.FromError("Name already taken", errorCode: 409);
+        return Task.FromResult(CommandResult.FromSuccess());
+        // or: CommandResult.Conflict("Name already taken")
     }
 }
 ```
 
-Dispatch it through the single façade, `ICqrsDispatcher`:
+Send it through `ICqrsDispatcher`. A handler reports a failure by returning it, so `Send` does not throw for one: await
+the result and check `IsSuccess`.
 
 ```csharp
-public sealed class UsersController(ICqrsDispatcher cqrs)
+public sealed class UserService(ICqrsDispatcher cqrs)
 {
-    public async Task<IResult> Create(string name)
+    public async Task<string?> CreateAsync(string name, CancellationToken cancellationToken)
     {
-        CommandResult result = await cqrs.Send(new CreateUser { Name = name });
-        return result.IsSuccess
-            ? Results.Ok()
-            : Results.Problem(result.ErrorMessage, statusCode: result.ErrorCode ?? 400);
+        CommandResult result = await cqrs.Send(new CreateUser { Name = name }, cancellationToken);
+        return result.IsSuccess ? null : result.ErrorMessage;   // result.ErrorKind says what kind of failure
     }
 }
 ```
 
-`Send` returns the command's `CommandResult`; **await it and check `IsSuccess`** to decide the outcome
-(there is no `Task`-returning `Send` overload that discards the result).
+In an ASP.NET Core endpoint, add `CQRSharp.AspNetCore` and `using CQRSharp.AspNetCore;`, then
+`return result.ToHttpResult();`: it picks the status code from the error kind and writes a ProblemDetails body
+([ASP.NET Core](aspnetcore.md)).
 
 ## Queries
 
@@ -171,7 +177,7 @@ public sealed class GetUserName : QueryBase<string>
 
 public sealed class GetUserNameHandler : IQueryHandler<GetUserName, string>
 {
-    public Task<string> Handle(GetUserName query, CancellationToken ct)
+    public Task<string> Handle(GetUserName query, CancellationToken cancellationToken)
         => Task.FromResult("Ada");
 }
 
@@ -180,20 +186,21 @@ public sealed class GetUserNameHandler : IQueryHandler<GetUserName, string>
 
 ## Streaming requests
 
-A **streaming request** yields a sequence asynchronously. Derive it from `StreamRequestBase<TItem>`,
-handle it with `IStreamRequestHandler<TRequest, TItem>`, and dispatch it with `Stream` (not `Send`).
+A **streaming request** yields a sequence asynchronously. Derive it from `StreamRequestBase<TItem>`, handle it with
+`IStreamRequestHandler<TRequest, TItem>`, and dispatch it with `Stream`, not `Send`.
 
 ```csharp
 public sealed class TailLog : StreamRequestBase<string>;
 
 public sealed class TailLogHandler : IStreamRequestHandler<TailLog, string>
 {
-    public async IAsyncEnumerable<string> Handle(TailLog request,
-        [EnumeratorCancellation] CancellationToken ct)
+    public async IAsyncEnumerable<string> Handle(
+        TailLog request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         for (var i = 0; i < 3; i++)
         {
-            await Task.Delay(100, ct);
+            await Task.Delay(100, cancellationToken);
             yield return $"line {i}";
         }
     }
@@ -202,62 +209,63 @@ public sealed class TailLogHandler : IStreamRequestHandler<TailLog, string>
 // await foreach (var line in cqrs.Stream(new TailLog())) { ... }
 ```
 
-> Sending a stream request through `Send(...)` compiles but throws at runtime. The **CQRA004**
-> analyzer flags this with a code fix that switches the call to `Stream(...)`.
+`[EnumeratorCancellation]` is in `System.Runtime.CompilerServices`, which is not an implicit using.
+
+> The C# compiler accepts a stream request in `Send(...)`, but the dispatcher throws for it at runtime. The **CQRA004**
+> analyzer makes this a build error, and its code fix switches the call to `Stream(...)`.
 
 ## Notifications
 
-A **notification** is a one-to-many event. Implement `INotification`, handle it with one or more
-`INotificationHandler<TNotification>`, and publish it with `Publish`.
+A **notification** is a one-to-many event. Implement `INotification`, handle it with any number of
+`INotificationHandler<TNotification>` classes, and publish it with `Publish`.
 
 ```csharp
 public sealed record UserCreated(Guid Id) : INotification;
 
 public sealed class SendWelcomeEmail : INotificationHandler<UserCreated>
 {
-    public Task Handle(UserCreated n, CancellationToken ct) => /* ... */ Task.CompletedTask;
+    public Task Handle(UserCreated notification, CancellationToken cancellationToken)
+        => Task.CompletedTask;   // ... send the email ...
 }
 
 // await cqrs.Publish(new UserCreated(id));
 ```
 
-By default, handlers run **sequentially** (the safe choice — they share the dispatching DI scope). See
-[Notifications](notifications.md) for publish strategies and the durable-via-outbox path.
+Handlers run one after another by default, in the publishing DI scope. [Notifications](notifications.md) covers the
+other publish strategies and which handlers a notification reaches.
 
 ## Adding behaviors
 
-Cross-cutting behaviors are opt-in and composed through the fluent builder. Order never matters — the
-builder applies them in a fixed canonical sequence.
+Cross-cutting behaviors are configured through the builder. The order of the verbs does not matter: each behavior has a
+fixed place in the pipeline.
 
 ```csharp
 services.AddCqrsGenerated(builder => builder
     .UseLogging()
-    .UseValidation()
-    .UseExceptionHandling()
     .UseTimeout(o => o.Timeout = TimeSpan.FromSeconds(30))
-    .UseResilience(o => o.MaxRetries = 3)
-    .UseRateLimiting(o => { o.MaxTokens = 100; o.ReplenishRatePerSecond = 10; o.MaxEntries = 10_000; }));
+    .UseResilience(o => o.MaxRetries = 3));
 ```
 
-See [Pipeline behaviors](pipeline-behaviors.md) for what each one does and how to write your own.
+Validation and exception handling need no verb in this form. Some behaviors act only on requests that opt in: resilience
+retries requests that implement `IRetryableRequest`, for example. [Pipeline behaviors](pipeline-behaviors.md) describes
+each behavior and how to write your own.
 
 ## Adding an outbox
 
-The outbox is **off by default**. Enable it in one cohesive step that selects the mode and registers a
-store:
+The outbox is **off** until you call `UseOutbox`, which turns it on and chooses its store in one step:
 
 ```csharp
 services.AddCqrsGenerated(builder => builder
-    .UseOutbox(o => o.Transactional().UseInMemoryStore()));   // dev/test
+    .UseOutbox(o => o.UseInMemoryStore()));   // development and tests: not durable
 ```
 
-For durable persistence, swap the store verb for `o.UseRedis(...)` or
-`o.UseEntityFrameworkCore<MyDbContext>()`. A notification is only carried by the outbox if it is marked
-with `[NotificationName("...")]`. See [The outbox](outbox.md) for the full story.
+For durable storage, use `o.UseRedis(...)` or `o.UseEntityFrameworkCore<MyDbContext>()` instead. Only notifications the
+registered notification serializer can name go through the outbox; with the generated serializer that means types marked
+`[NotificationName("...")]`. Everything else is still dispatched in process. [The outbox](outbox.md) has the details.
 
 ## Where to go next
 
-- [Requests and handlers](requests-and-handlers.md) — the full request/handler/context model.
-- [Configuration](configuration.md) — every builder verb and option.
-- [Pipeline behaviors](pipeline-behaviors.md) — built-ins and custom behaviors.
-- [Diagnostics & validation](diagnostics.md) — the analyzers and startup checks that keep you honest.
+- [Requests and handlers](requests-and-handlers.md): the request model, `CommandResult` and the request context.
+- [Configuration](configuration.md): every builder verb and option.
+- [Pipeline behaviors](pipeline-behaviors.md): the built-in behaviors and custom ones.
+- [Diagnostics and validation](diagnostics.md): the analyzers and startup checks.

@@ -1,37 +1,32 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
-        <EnableAotAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableAotAnalyzer>
-        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <!-- Turns on the trim, AOT and single-file analyzers, whose warnings the -warnaserror gate makes errors. -->
+        <IsAotCompatible>true</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup>
         <PackageTags>CQRS;CQRSharp;Redis;Outbox;Idempotency;NativeAOT</PackageTags>
         <Title>Redis integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
-        <Description>A 100% Native-AOT-clean Redis integration for CQRSharp. Its first feature is a durable IOutboxStore that persists outbox messages as discrete Redis hash fields (binary payloads stored verbatim) and runs all claim, lease, and finalize logic as atomic server-side Lua, so two processors never claim the same message and crashed claimants are reclaimed after a visibility timeout. It also provides a durable IIdempotencyStore that rejects duplicate requests via atomic set-if-not-exists claims with a server-side expiry window.</Description>
+        <Description>A Native-AOT-compatible Redis integration for CQRSharp: a durable IOutboxStore whose claim, lease and finalize logic runs as atomic Lua scripts (ordered partitions, retries, dead letters), an IInboxStore for effectively-once delivery, and an IIdempotencyStore with token-owned claims, payload fingerprints and result replay.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Claim-checked outbox scripts (renew, release, lost claims are no-ops) and a result-replaying idempotency store. Breaking: the default outbox KeyPrefix is now {cqrsharp:outbox}: (cluster-safe hash tag) - set KeyPrefix = &quot;cqrsharp:outbox:&quot; to keep draining messages stored by 4.x. Default VisibilityTimeout is 5 minutes. Owner-checked idempotency release, terminal guards on the finalize scripts, the never-expiring done set is gone, and two different connection strings are rejected instead of the second being ignored. Breaking: the authoring surface is flattened to two namespaces, CQRSharp and CQRSharp.Pipelines (replace your CQRSharp.Abstractions.* / CQRSharp.Core.* usings; the CQRSharp meta-package applies both as global usings). See CHANGELOG.md for the full list.
+            Version 5.0.0 (breaking). A new key layout under the {cqrsharp:outbox}: and {cqrs:idemp}: prefixes, and every KeyPrefix must contain a hash tag; drain the outbox with 4.x processors before upgrading.
+            Messages carry a handler name and partition key, claims are leases checked inside the scripts, dead letters can be listed, requeued and purged, and an inbox records deliveries. The idempotency store keeps a claim token, a payload fingerprint and the result.
+            CQRSharp no longer registers an IConnectionMultiplexer: each store runs on the connection it is given (a connection string, an instance or a factory).
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
         <!-- Referenced for the OutboxStoreBuilder/IdempotencyStoreBuilder the UseRedis(...) fluent verbs extend; the
-             store impls themselves still target only the Abstractions contracts. -->
+             store implementations target only the Abstractions contracts. -->
         <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
     </ItemGroup>
 

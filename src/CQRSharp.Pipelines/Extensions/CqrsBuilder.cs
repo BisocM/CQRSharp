@@ -1,53 +1,47 @@
+using CQRSharp.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     The fluent builder implementation. Each verb records intent into a field or into the single
-///     <see cref="CqrsPipelinePackOptions" /> accumulator; nothing is registered until <see cref="Build" /> runs the
-///     one fixed canonical sequence. This is what makes the public surface order-insensitive: the order verbs are
-///     called in never changes what the build does. It is sealed and field-access-only so it stays AOT-clean.
+///     The <see cref="ICqrsBuilder" /> behind <c>AddCqrsGenerated(Action&lt;ICqrsBuilder&gt;)</c>. Each verb only records
+///     intent; <see cref="Build" /> applies it in one fixed sequence, so the order of different verbs never changes what is
+///     registered. Every registration <see cref="Build" /> makes is additive, which is what lets two builder calls on one
+///     service collection (a library's own wiring and its host's) both take effect.
 /// </summary>
-/// <remarks>
-///     The type and its <see cref="Build" /> entry point are public so the source-generated entry point
-///     <c>AddCqrsGenerated(Action&lt;ICqrsBuilder&gt;)</c> (emitted into the consumer assembly) can construct it and
-///     drive the build before applying the generated registrations. No other internals are exposed.
-/// </remarks>
-public sealed class CqrsBuilder : ICqrsBuilder
+internal sealed class CqrsBuilder(IServiceCollection services) : ICqrsBuilder
 {
-    private readonly CqrsPipelinePackOptions _pack = new();
-
     private Action<BackgroundTaskQueueOptions>? _configureQueue;
     private Action<DispatcherOptions>? _configureDispatcher;
     private Action<NotificationOptions>? _configureNotifications;
 
-    private CqrsValidationPolicy _validationPolicy = CqrsValidationPolicy.Off;
-
-    // The pack is only registered if at least one pack-related verb was used; this flag tracks that so a builder
-    // that configures nothing pack-related does not pull in the (idempotent, but still unnecessary) pack marker.
-    private bool _usePipelinePack;
+    // Null until ValidateOnStart is called, so a builder that never asked leaves the policy to whoever set it (another
+    // builder call, a Configure<CqrsStartupValidationOptions>, a configuration binding).
+    private CqrsValidationPolicy? _validationPolicy;
 
     private Func<IServiceProvider, TimeProvider>? _timeProviderFactory;
+
+    private bool _validation = true;
+    private bool _exceptionHandling = true;
+    private bool _logging;
+    private Action<RateLimitingOptions>? _configureRateLimiting;
+    private Action<ResilienceOptions>? _configureResilience;
+    private Action<TimeoutOptions>? _configureTimeout;
+    private Func<IServiceProvider, IUnitOfWork>? _unitOfWorkFactory;
+    private Action<UnitOfWorkOptions>? _configureUnitOfWork;
 
     private OutboxStoreBuilder? _outbox;
     private IdempotencyStoreBuilder? _idempotency;
 
-    /// <summary>Creates a builder over <paramref name="services" />.</summary>
-    public CqrsBuilder(IServiceCollection services)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        Services = services;
-    }
-
     /// <inheritdoc />
-    public IServiceCollection Services { get; }
+    public IServiceCollection Services { get; } = services ?? throw new ArgumentNullException(nameof(services));
 
     /// <inheritdoc />
     public ICqrsBuilder ConfigureQueue(Action<BackgroundTaskQueueOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _configureQueue = configure;
+        _configureQueue += configure;
         return this;
     }
 
@@ -55,7 +49,7 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public ICqrsBuilder ConfigureDispatcher(Action<DispatcherOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _configureDispatcher = configure;
+        _configureDispatcher += configure;
         return this;
     }
 
@@ -63,7 +57,7 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public ICqrsBuilder ConfigureNotifications(Action<NotificationOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _configureNotifications = configure;
+        _configureNotifications += configure;
         return this;
     }
 
@@ -108,8 +102,8 @@ public sealed class CqrsBuilder : ICqrsBuilder
         "provider (e.g. sp.GetService<TimeProvider>()). That factory is itself the TimeProvider registration, so " +
         "resolving TimeProvider inside it recurses until the container deadlocks. Return a concrete TimeProvider instead " +
         "(TimeProvider.System, a FakeTimeProvider, or your own clock). To make CQRSharp defer to a TimeProvider your " +
-        "host already registered, don't call UseTimeProvider at all: AddCqrs registers TimeProvider.System with TryAdd, " +
-        "so an existing registration wins.";
+        "host already registered, don't call UseTimeProvider at all: AddCqrsGenerated registers TimeProvider.System " +
+        "with TryAdd, so an existing registration wins.";
 
     private static TimeProvider ResolveTimeProviderGuarded(Func<IServiceProvider, TimeProvider> factory, IServiceProvider sp)
     {
@@ -130,43 +124,31 @@ public sealed class CqrsBuilder : ICqrsBuilder
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder UsePipelinePack(Action<CqrsPipelinePackOptions>? configure = null)
-    {
-        _usePipelinePack = true;
-        configure?.Invoke(_pack);
-        return this;
-    }
-
-    /// <inheritdoc />
     public ICqrsBuilder UseLogging()
     {
-        _usePipelinePack = true;
-        _pack.IncludeLogging = true;
+        _logging = true;
         return this;
     }
 
     /// <inheritdoc />
     public ICqrsBuilder UseValidation(bool enabled = true)
     {
-        _usePipelinePack = true;
-        _pack.IncludeValidation = enabled;
+        _validation = enabled;
         return this;
     }
 
     /// <inheritdoc />
     public ICqrsBuilder UseExceptionHandling(bool enabled = true)
     {
-        _usePipelinePack = true;
-        _pack.IncludeExceptionHandling = enabled;
+        _exceptionHandling = enabled;
         return this;
     }
 
     /// <inheritdoc />
-    public ICqrsBuilder UseRateLimiting(Action<RateLimiterOptions> configure)
+    public ICqrsBuilder UseRateLimiting(Action<RateLimitingOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _usePipelinePack = true;
-        _pack.ConfigureRateLimiting = configure;
+        _configureRateLimiting += configure;
         return this;
     }
 
@@ -174,8 +156,7 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public ICqrsBuilder UseResilience(Action<ResilienceOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _usePipelinePack = true;
-        _pack.ConfigureResilience = configure;
+        _configureResilience += configure;
         return this;
     }
 
@@ -183,8 +164,7 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public ICqrsBuilder UseTimeout(Action<TimeoutOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _usePipelinePack = true;
-        _pack.ConfigureTimeout = configure;
+        _configureTimeout += configure;
         return this;
     }
 
@@ -192,15 +172,14 @@ public sealed class CqrsBuilder : ICqrsBuilder
     public ICqrsBuilder UseOutbox(Action<OutboxStoreBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
-        _outbox = new OutboxStoreBuilder();
-        configure(_outbox);
+        configure(_outbox ??= new OutboxStoreBuilder());
         return this;
     }
 
     /// <inheritdoc />
     public ICqrsBuilder UseIdempotency(Action<IdempotencyStoreBuilder>? configure = null)
     {
-        _idempotency = new IdempotencyStoreBuilder();
+        _idempotency ??= new IdempotencyStoreBuilder();
         configure?.Invoke(_idempotency);
         return this;
     }
@@ -212,83 +191,66 @@ public sealed class CqrsBuilder : ICqrsBuilder
         where TUnitOfWork : class, IUnitOfWork
     {
         ArgumentNullException.ThrowIfNull(factory);
-        _usePipelinePack = true;
 
-        // Adapt the concrete factory to the IUnitOfWork-typed slot the pack exposes. The cast is an upcast (the
-        // generic constraint guarantees TUnitOfWork : IUnitOfWork), so it is AOT-safe — no reflection.
-        _pack.UnitOfWorkFactory = sp => factory(sp);
-        _pack.ConfigureUnitOfWork = configure;
+        // An upcast (TUnitOfWork : IUnitOfWork), so no reflection is involved.
+        _unitOfWorkFactory = sp => factory(sp);
+        _configureUnitOfWork += configure;
         return this;
     }
 
     /// <summary>
-    ///     Applies the accumulated intent in one fixed canonical sequence, independent of the order the verbs were
-    ///     called: core <c>AddCqrs</c> first, then the authoritative <see cref="TimeProvider" /> override, then the
-    ///     outbox store/processor and the idempotency behavior/store, then the merged pipeline pack. Generated
-    ///     registrations are NOT applied here — the generated entry point owns that step so it can order it correctly
-    ///     against the generated dispatchers' <c>RemoveAll</c>-authoritative wiring.
+    ///     Applies the recorded intent: the core services first, then the options the verbs configured, the authoritative
+    ///     clock, the outbox and idempotency stores, and finally the behaviors. The source-generated registrations are
+    ///     applied afterwards by the generated entry point, so their authoritative dispatcher registrations win.
     /// </summary>
-    public IServiceCollection Build()
+    public void Build()
     {
-        // 1) Core services. The outbox mode comes from UseOutbox (off — Disabled — when it was not used), and AddCqrs
-        //    registers the outbox processor host service off that mode. The startup-validator policy is whatever
-        //    ValidateOnStart(...) recorded; the builder path defaults to Off (call ValidateOnStart() to turn it on).
-        Services.AddCqrs(
-            _configureQueue,
-            _outbox is not null ? OutboxModeConfigurator : null,
-            _configureDispatcher,
-            opts => opts.Policy = _validationPolicy);
+        Services.AddCqrs();
 
-        // 1b) Notification dispatch options (publish strategy). Applied directly; the Options default (Sequential) is
-        //     used when this verb was not called.
+        if (_configureQueue is not null)
+            Services.Configure(_configureQueue);
+        if (_configureDispatcher is not null)
+            Services.Configure(_configureDispatcher);
         if (_configureNotifications is not null)
             Services.Configure(_configureNotifications);
+        if (_validationPolicy is { } policy)
+            Services.Configure<CqrsStartupValidationOptions>(options => options.Policy = policy);
 
-        // 2) Authoritative clock seam. AddCqrs only TryAdds TimeProvider.System, so without this a consumer override
-        //    would lose to whatever ran first; RemoveAll + AddSingleton makes the chosen provider win regardless of
-        //    where UseTimeProvider appeared in the chain.
-        if (_timeProviderFactory is not null)
+        // AddCqrs only TryAdds TimeProvider.System, so the chosen provider replaces whatever was registered before.
+        if (_timeProviderFactory is { } timeProviderFactory)
         {
-            var factory = _timeProviderFactory;
             Services.RemoveAll<TimeProvider>();
-            // Register the factory guarded: a self-referential factory (one that resolves TimeProvider from the
-            // provider) fails fast with a clear message on first resolution instead of deadlocking the container.
-            Services.AddSingleton<TimeProvider>(sp => ResolveTimeProviderGuarded(factory, sp));
+            Services.AddSingleton<TimeProvider>(sp => ResolveTimeProviderGuarded(timeProviderFactory, sp));
         }
 
-        // 3) Outbox store + processor options (the processor host service was registered by AddCqrs off the mode set
-        //    in step 1). Defaults to the in-memory store when no integration store was chosen.
-        _outbox?.Apply(Services);
+        // A store chosen through UseOutbox or UseIdempotency replaces any registered one; with none chosen, the in-memory
+        // store is registered only when no store is registered at all, so one registered outside the builder wins in
+        // either order.
+        if (_outbox is { } outbox)
+        {
+            Services.Configure<OutboxOptions>(options => options.Mode = outbox.Mode);
+            outbox.Apply(Services);
+        }
 
-        // 4) Idempotency behavior + store (defaults to the in-memory store when none was chosen).
-        if (_idempotency is not null)
+        if (_idempotency is { } idempotency)
         {
             Services.AddIdempotency();
-            _idempotency.Apply(Services);
+            idempotency.Apply(Services);
         }
 
-        // 5) The merged pipeline pack. Registered only when a pack-related verb was used; the pack's marker keeps it
-        //    idempotent against any earlier AddCqrsPipelinePack call.
-        if (_usePipelinePack)
-            Services.AddCqrsPipelinePack(ConfigurePack);
-
-        return Services;
-    }
-
-    // Applies the outbox mode selected by UseOutbox into OutboxOptions so AddCqrs registers the processor accordingly.
-    private void OutboxModeConfigurator(OutboxOptions options) => options.Mode = _outbox!.Mode;
-
-    // Copies the accumulator into the pack options the registration call hands us. Done as a method (not a captured
-    // lambda over the accumulator directly) so the single canonical pack is applied verbatim.
-    private void ConfigurePack(CqrsPipelinePackOptions options)
-    {
-        options.IncludeExceptionHandling = _pack.IncludeExceptionHandling;
-        options.IncludeValidation = _pack.IncludeValidation;
-        options.IncludeLogging = _pack.IncludeLogging;
-        options.UnitOfWorkFactory = _pack.UnitOfWorkFactory;
-        options.ConfigureUnitOfWork = _pack.ConfigureUnitOfWork;
-        options.ConfigureRateLimiting = _pack.ConfigureRateLimiting;
-        options.ConfigureResilience = _pack.ConfigureResilience;
-        options.ConfigureTimeout = _pack.ConfigureTimeout;
+        if (_exceptionHandling)
+            Services.AddExceptionHandling();
+        if (_validation)
+            Services.AddValidationBehavior();
+        if (_logging)
+            Services.AddLoggingBehavior();
+        if (_configureRateLimiting is not null)
+            Services.AddRateLimiting(_configureRateLimiting);
+        if (_unitOfWorkFactory is not null)
+            Services.AddUnitOfWorkBehavior(_unitOfWorkFactory, _configureUnitOfWork);
+        if (_configureTimeout is not null)
+            Services.AddTimeoutBehavior(_configureTimeout);
+        if (_configureResilience is not null)
+            Services.AddResilienceBehavior(_configureResilience);
     }
 }

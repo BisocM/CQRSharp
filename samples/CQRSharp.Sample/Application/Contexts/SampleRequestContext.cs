@@ -1,11 +1,10 @@
-using CQRSharp.Pipelines;
-
 namespace CQRSharp.Sample.Application.Contexts;
 
-public class SampleRequestContext(string requestId, string userId, DateTime createdAt)
-    : IRateLimitedContext
+/// <summary>
+///     The context of the sample's requests: who is calling, which the rate limiter keys its buckets on. No creation time
+///     is set here, so the dispatcher stamps the context from the application's <see cref="TimeProvider" />.
+/// </summary>
+public sealed class SampleRequestContext : RequestContextBase, IRateLimitedContext
 {
-    public DateTime CreatedAt { get; } = createdAt;
-    public string RequestId { get; set; } = requestId;
-    public string UserId { get; set; } = userId;
+    public required string UserId { get; init; }
 }

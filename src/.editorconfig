@@ -1,0 +1,12 @@
+# Rules for the shipped library code only; tests, samples and benchmarks keep the defaults of the root .editorconfig.
+
+[*.cs]
+# Library code never resumes on its caller's SynchronizationContext: every await, including the implicit ones of
+# `await using` and `await foreach`, is ConfigureAwait(false). A continuation posted back to a UI or other
+# single-threaded context deadlocks a caller that blocks on the call, and runs library code on that thread otherwise.
+dotnet_diagnostic.CA2007.severity = error
+
+# The store contract suites are xUnit test code, run by the consumer's test runner: they keep xUnit's context on
+# purpose (xUnit1030 forbids ConfigureAwait(false) in a test).
+[CQRSharp.Testing.Xunit.V3/**.cs]
+dotnet_diagnostic.CA2007.severity = none

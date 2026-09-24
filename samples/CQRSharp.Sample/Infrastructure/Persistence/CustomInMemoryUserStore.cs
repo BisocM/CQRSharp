@@ -3,18 +3,11 @@ using CQRSharp.Sample.Domain.Entities;
 
 namespace CQRSharp.Sample.Infrastructure.Persistence;
 
-public class CustomInMemoryUserStore
+public sealed class CustomInMemoryUserStore
 {
-    private readonly ConcurrentDictionary<Guid, User> _userStore = new();
+    private readonly ConcurrentDictionary<Guid, User> _users = new();
 
-    public void AddUser(User user)
-    {
-        _userStore.TryAdd(user.Id, user);
-    }
+    public void AddUser(User user) => _users.TryAdd(user.Id, user);
 
-    public User? GetUserById(Guid id)
-    {
-        _userStore.TryGetValue(id, out var user);
-        return user;
-    }
+    public User? GetUserById(Guid id) => _users.GetValueOrDefault(id);
 }

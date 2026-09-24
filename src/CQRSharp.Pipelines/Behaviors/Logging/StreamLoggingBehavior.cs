@@ -1,11 +1,12 @@
-using CQRSharp.Core.Pipelines;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Pipelines.Behaviors.Logging;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The streaming counterpart of <see cref="LoggingBehavior{TRequest, TResult}" />: logs the start, item count and
-///     elapsed time of a streamed request, or its failure.
+///     elapsed time of a streamed request, or how it ended otherwise: an unexpected failure at Error, with the exception;
+///     a rejection, the server being unable to serve it, or its cancellation by the caller in one line below Error, as
+///     <see cref="LoggingBehavior{TRequest, TResult}" /> describes.
 /// </summary>
 /// <typeparam name="TRequest">The request type.</typeparam>
 /// <typeparam name="TItem">The streamed element type.</typeparam>
@@ -24,6 +25,7 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
         StreamHandlerDelegate<TItem> next,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(next);
         return ExecuteAsync();
 
@@ -31,32 +33,33 @@ public sealed class StreamLoggingBehavior<TRequest, TItem>(
         {
             var requestName = typeof(TRequest).Name;
             var startTimestamp = _timeProvider.GetTimestamp();
-            logger.LogInformation("Streaming {RequestName}", requestName);
+            LoggingBehaviorLog.Streaming(logger, requestName);
 
             var count = 0L;
-            await using var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
-
-            while (true)
+            var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
+            await using (enumerator.ConfigureAwait(false))
             {
-                bool moved;
-                try
+                while (true)
                 {
-                    moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Streaming {RequestName} failed after {Count} item(s) and {ElapsedMs:0.##}ms",
-                        requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
-                    throw;
-                }
+                    bool moved;
+                    try
+                    {
+                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        LoggingBehaviorLog.StreamEnded(
+                            logger, ex, cancellationToken, requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        throw;
+                    }
 
-                if (!moved) break;
-                count++;
-                yield return enumerator.Current;
+                    if (!moved) break;
+                    count++;
+                    yield return enumerator.Current;
+                }
             }
 
-            logger.LogInformation("Streamed {RequestName}: {Count} item(s) in {ElapsedMs:0.##}ms",
-                requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            LoggingBehaviorLog.Streamed(logger, requestName, count, _timeProvider.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
     }
 }

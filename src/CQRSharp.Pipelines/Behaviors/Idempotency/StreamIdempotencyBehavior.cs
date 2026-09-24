@@ -1,8 +1,10 @@
 using System.Runtime.ExceptionServices;
+using CQRSharp.Core.Idempotency;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.Logging;
 
-namespace CQRSharp.Pipelines.Behaviors.Idempotency;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The streaming counterpart of <see cref="IdempotencyBehavior{TRequest,TResult}" />: enforces at-most-once
@@ -14,7 +16,8 @@ namespace CQRSharp.Pipelines.Behaviors.Idempotency;
 /// <typeparam name="TItem">The type of the streamed items.</typeparam>
 public sealed class StreamIdempotencyBehavior<TRequest, TItem>(
     ILogger<StreamIdempotencyBehavior<TRequest, TItem>> logger,
-    IIdempotencyStore store) : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
+    IIdempotencyStore store,
+    IRequestFingerprinter? fingerprinter = null) : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior, ICqrsIdempotencyBehaviorMarker
     where TRequest : IRequest
 {
     /// <inheritdoc />
@@ -40,16 +43,19 @@ public sealed class StreamIdempotencyBehavior<TRequest, TItem>(
         CancellationToken cancellationToken)
 #pragma warning restore CS8425
     {
-        var key = idempotent.IdempotencyKey;
-        if (string.IsNullOrEmpty(key))
-            throw new InvalidOperationException(
-                $"{typeof(TRequest).Name} implements {nameof(IIdempotentRequest)} but supplied an empty {nameof(IIdempotentRequest.IdempotencyKey)}.");
+        var key = IdempotencyClaims.KeyOf<TRequest>(idempotent);
 
         // A stream's items are not stored, so a completed stream cannot be replayed: any duplicate is rejected.
-        var claim = await store.TryClaimAsync(key, cancellationToken).ConfigureAwait(false);
+        var claim = await IdempotencyClaims.ClaimAsync(store, key, idempotent, fingerprinter, cancellationToken).ConfigureAwait(false);
+        if (claim.Status == IdempotencyClaimStatus.PayloadMismatch)
+        {
+            IdempotencyLog.StreamMismatch(logger, typeof(TRequest).Name, key);
+            throw new IdempotencyKeyMismatchException(key);
+        }
+
         if (!claim.IsClaimed)
         {
-            logger.LogInformation("Rejected duplicate streaming request {RequestName} with idempotency key {Key}.", typeof(TRequest).Name, key);
+            IdempotencyLog.StreamRejected(logger, typeof(TRequest).Name, key);
             throw new DuplicateRequestException(key, claim.Status == IdempotencyClaimStatus.InProgress);
         }
 
@@ -57,34 +63,59 @@ public sealed class StreamIdempotencyBehavior<TRequest, TItem>(
         Exception? failure = null;
         try
         {
-            await using var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
-            while (true)
+            var reachedEnd = false;
+            var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
+            var disposed = false;
+            try
             {
-                try
+                while (true)
                 {
-                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                    try
                     {
-                        completed = true;
+                        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                        {
+                            reachedEnd = true;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        failure = ex;
                         break;
                     }
-                }
-                catch (Exception ex)
-                {
-                    failure = ex;
-                    break;
+
+                    yield return enumerator.Current;
                 }
 
-                yield return enumerator.Current;
+                disposed = true;
+                var (ended, suppressed) = await StreamDisposal.DisposeAsync(enumerator, failure).ConfigureAwait(false);
+                if (suppressed is not null) IdempotencyLog.StreamDisposalFailed(logger, suppressed, typeof(TRequest).Name);
+                failure = ended;
             }
+            finally
+            {
+                // The consumer stopped enumerating early: the stream it wraps is disposed along with this one.
+                if (!disposed)
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
+            }
+
+            // Only a stream that ran to its end and was disposed cleanly completed: one whose disposal fails is a
+            // failure its caller sees, so its key is released for the retry rather than recorded as done.
+            completed = reachedEnd && failure is null;
         }
         finally
         {
             // Runs on a fault and also when the consumer disposes the enumerator early: either way the request did not
-            // complete. A non-cancellable token so the cleanup happens even though the request itself was cancelled.
+            // complete. Bookkeeping never replaces the stream's own outcome: a failing store is logged.
             if (completed)
-                await store.CompleteAsync(key, null, CancellationToken.None).ConfigureAwait(false);
-            else
-                await store.ReleaseAsync(key, CancellationToken.None).ConfigureAwait(false);
+            {
+                if (await IdempotencyClaims.CompleteAsync(store, key, claim, null).ConfigureAwait(false) is { } storeFailure)
+                    IdempotencyLog.StreamCompletionNotStored(logger, storeFailure, typeof(TRequest).Name, key);
+            }
+            else if (await IdempotencyClaims.ReleaseAsync(store, key, claim).ConfigureAwait(false) is { } storeFailure)
+            {
+                IdempotencyLog.StreamReleaseFailed(logger, storeFailure, typeof(TRequest).Name, key);
+            }
         }
 
         if (failure is not null)

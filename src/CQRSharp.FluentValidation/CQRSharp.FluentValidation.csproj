@@ -1,26 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <!--
-            Deliberately NO IsAotCompatible / EnableAotAnalyzer here: FluentValidation builds its rules from
+            Deliberately no IsAotCompatible here: FluentValidation builds its rules from
             expression trees that it compiles at runtime, so it cannot be Native AOT'd or fully trimmed. The
             registration verbs are instead annotated with [RequiresDynamicCode]/[RequiresUnreferencedCode] so
             callers building AOT/trimmed apps get a clear analyzer warning at the call site.
         -->
-    </PropertyGroup>
-
-    <!-- Multi-TFM gating copied from Core.csproj: widen only when the building SDK supports the newer TFM. -->
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -29,7 +20,8 @@
         <Title>FluentValidation integration for CQRSharp, running your AbstractValidator classes in the validation behavior.</Title>
         <Description>A FluentValidation adapter for CQRSharp. One line of setup makes every registered FluentValidation IValidator&lt;TRequest&gt; run inside CQRSharp's validation pipeline behavior, alongside any native IRequestValidator&lt;TRequest&gt;; Error-severity failures are reported through RequestValidationException. FluentValidation compiles expression trees at runtime, so this package is not Native-AOT or full-trim compatible.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Initial release.
+            Version 5.0.0. First release: UseFluentValidation() runs FluentValidation validators in the CQRSharp validation behavior.
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

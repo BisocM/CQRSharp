@@ -25,11 +25,46 @@ env:
   PACKAGE_OUTPUT: artifacts/packages
 
 jobs:
+  # Packages are immutable once pushed, and the tag marks what the next release's review starts from, so only a
+  # commit of Release is ever published or tagged. A publishing run dispatched on another ref fails here, loudly and
+  # before the gate spends its time, instead of skipping the publish quietly; a dry run may run on any ref.
+  release-guard:
+    name: Release branch guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse to publish from a ref other than Release
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.dry_run && github.ref != 'refs/heads/Release' }}
+        run: |
+          echo "::error::A publishing run must be dispatched on Release (this one is on ${GITHUB_REF}). Dispatch it on Release, or tick dry_run to rehearse on this ref."
+          exit 1
+
   # The full gate (see validate.yml). Its `nuget-packages` artifact - built, tested and validated there - is what
   # gets published below; nothing is rebuilt in between.
   validate:
     name: Validate
+    needs: release-guard
     uses: ./.github/workflows/validate.yml
+
+  # A manual dry run is the rehearsal of a release, so it gets the advisory LLM review too (a real release was reviewed
+  # on its pull request into Release; see ci.yml). Reviewing here, right before an immutable push, would change nothing.
+  release-review:
+    name: Release review (advisory)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the release-notes check reads the commits since the last v<version> tag
+
+      - name: LLM release review (bisocm, advisory)
+        continue-on-error: true
+        env:
+          BISOCM_API_KEY: ${{ secrets.BISOCM_API_KEY }}
+        run: python3 .github/scripts/llm_review.py
 
   publish:
     name: Publish
@@ -39,17 +74,19 @@ jobs:
     permissions:
       contents: read
       id-token: write  # mint the GitHub OIDC token for NuGet Trusted Publishing (keyless publish)
+    outputs:
+      published: ${{ steps.published.outputs.published }}
+      version: ${{ steps.validate.outputs.package_version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # the advisory review reads the commit subjects since the last release
 
+      # global.json requires the .NET 10 SDK for every dotnet command in the repository, `dotnet nuget push` included.
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Download packages
         uses: actions/download-artifact@v4
@@ -63,26 +100,22 @@ jobs:
         # not change the version leaves should_publish=false and every step below is skipped.
         run: python3 .github/scripts/validate_packages.py "${{ env.PACKAGE_OUTPUT }}" --check-nuget
 
-      - name: LLM pre-publish review (bisocm, advisory)
-        # Run when a publish will actually happen (new version) or on any manual dispatch, so dry runs still get the
-        # review but a Release push that did not change the version doesn't burn bisocm calls.
-        if: ${{ steps.validate.outputs.should_publish == 'true' || github.event_name == 'workflow_dispatch' }}
-        continue-on-error: true
-        env:
-          BISOCM_API_KEY: ${{ secrets.BISOCM_API_KEY }}
-        run: python3 .github/scripts/llm_review.py
+      - name: Check the changelog has this version's release notes
+        # The GitHub release is created from this section after the push; a missing one must fail before the push.
+        run: python3 .github/scripts/release_notes.py "${{ steps.validate.outputs.package_version }}" > /dev/null
 
       - name: NuGet login (OIDC -> short-lived key, Trusted Publishing)
         # Exchanges the GitHub OIDC token for a 1-hour nuget.org key. Run immediately before the push (the key expires)
-        # and only when a publish will actually happen.
-        if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && steps.validate.outputs.should_publish == 'true' }}
+        # and only when a publish will actually happen: a commit of Release, pushed or dispatched without dry_run (the
+        # release guard has already refused a publishing dispatch on any other ref).
+        if: ${{ github.ref == 'refs/heads/Release' && (github.event_name == 'push' || !inputs.dry_run) && steps.validate.outputs.should_publish == 'true' }}
         id: nuget_login
         uses: NuGet/login@v1
         with:
           user: BisocM  # nuget.org username (profile name) the Trusted Publishing policy is configured for
 
       - name: Publish to NuGet.org
-        if: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/Release') || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && steps.validate.outputs.should_publish == 'true' }}
+        if: ${{ github.ref == 'refs/heads/Release' && (github.event_name == 'push' || !inputs.dry_run) && steps.validate.outputs.should_publish == 'true' }}
         # Pushing a .nupkg also pushes the .snupkg next to it. --skip-duplicate completes a partially published version.
         run: |
           for pkg in "${{ env.PACKAGE_OUTPUT }}"/*.nupkg; do
@@ -91,3 +124,41 @@ jobs:
               --source "${{ env.NUGET_SOURCE }}" \
               --skip-duplicate
           done
+
+      - name: Record the publish
+        id: published
+        if: ${{ github.ref == 'refs/heads/Release' && (github.event_name == 'push' || !inputs.dry_run) && steps.validate.outputs.should_publish == 'true' }}
+        run: echo "published=true" >> "${GITHUB_OUTPUT}"
+
+  # Marks what was published: the v<version> tag on the published commit, and a GitHub release whose notes are that
+  # version's CHANGELOG.md section. The tag is also where the next release's review measures its changes from.
+  github-release:
+    name: Tag and GitHub release
+    needs: publish
+    if: ${{ needs.publish.outputs.published == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write  # create the tag and the release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create the v${{ needs.publish.outputs.version }} tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          set -eo pipefail
+          tag="v${VERSION}"
+          # A re-run after a partial failure: the release already exists, and the packages cannot be pushed twice.
+          if gh release view "${tag}" > /dev/null 2>&1; then
+            echo "::notice::Release ${tag} already exists."
+            exit 0
+          fi
+          notes="${RUNNER_TEMP}/release-notes.md"
+          python3 .github/scripts/release_notes.py "${VERSION}" > "${notes}"
+          prerelease=""
+          case "${VERSION}" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "${tag}" --target "${GITHUB_SHA}" --title "CQRSharp ${VERSION}" --notes-file "${notes}" ${prerelease}

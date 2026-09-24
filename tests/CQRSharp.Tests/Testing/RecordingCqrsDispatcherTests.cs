@@ -16,7 +16,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         var command = new RenameUser(7, "Ada");
 
-        var result = await _dispatcher.Send(command);
+        var result = await _dispatcher.Send(command, TestContext.Current.CancellationToken);
 
         result.IsSuccess.Should().BeTrue();
         _dispatcher.SentRequests.Should().ContainSingle().Which.Should().BeSameAs(command);
@@ -48,8 +48,8 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>(query => $"user-{query.Id}");
 
-        (await _dispatcher.Send(new GetUserName(1))).Should().Be("user-1");
-        (await _dispatcher.Send(new GetUserName(2))).Should().Be("user-2");
+        (await _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken)).Should().Be("user-1");
+        (await _dispatcher.Send(new GetUserName(2), TestContext.Current.CancellationToken)).Should().Be("user-2");
     }
 
     [Fact]
@@ -59,8 +59,8 @@ public sealed class RecordingCqrsDispatcherTests
             .Setup<GetUserName, string>("Ada")
             .Setup<RenameUser, CommandResult>(CommandResult.FromError("taken", 409));
 
-        (await _dispatcher.Send(new GetUserName(1))).Should().Be("Ada");
-        var result = await _dispatcher.Send(new RenameUser(1, "Ada"));
+        (await _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken)).Should().Be("Ada");
+        var result = await _dispatcher.Send(new RenameUser(1, "Ada"), TestContext.Current.CancellationToken);
         result.IsSuccess.Should().BeFalse();
         result.ErrorCode.Should().Be(409);
     }
@@ -70,7 +70,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>("first").Setup<GetUserName, string>("second");
 
-        (await _dispatcher.Send(new GetUserName(1))).Should().Be("second");
+        (await _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken)).Should().Be("second");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>("base");
 
-        (await _dispatcher.Send(new GetUserNameVerbose(1))).Should().Be("base");
+        (await _dispatcher.Send(new GetUserNameVerbose(1), TestContext.Current.CancellationToken)).Should().Be("base");
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>("Ada");
 
-        (await _dispatcher.Send((object)new GetUserName(1))).Should().Be("Ada");
-        (await _dispatcher.Send((object)new RenameUser(1, "Ada"))).Should().BeOfType<CommandResult>()
+        (await _dispatcher.Send((object)new GetUserName(1), TestContext.Current.CancellationToken)).Should().Be("Ada");
+        (await _dispatcher.Send((object)new RenameUser(1, "Ada"), TestContext.Current.CancellationToken)).Should().BeOfType<CommandResult>()
             .Which.IsSuccess.Should().BeTrue();
         _dispatcher.SentRequests.Should().HaveCount(2);
     }
@@ -126,7 +126,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Throws<RenameUser>(command => new InvalidOperationException($"cannot rename {command.Id}"));
 
-        var task = _dispatcher.Send(new RenameUser(7, "Ada"));
+        var task = _dispatcher.Send(new RenameUser(7, "Ada"), TestContext.Current.CancellationToken);
 
         // Reaching this line at all proves Send did not throw synchronously; the failure lives in the task.
         var act = () => task;
@@ -149,7 +149,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>(_ => throw new KeyNotFoundException());
 
-        var task = _dispatcher.Send(new GetUserName(1));
+        var task = _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken);
 
         var act = () => task;
         await act.Should().ThrowAsync<KeyNotFoundException>();
@@ -160,8 +160,8 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.SetupStream<CountTo, int>(request => Enumerable.Range(1, request.Max));
 
-        var typed = await ToListAsync(_dispatcher.Stream(new CountTo(3)));
-        var boxed = await ToListAsync(_dispatcher.Stream((object)new CountTo(2)));
+        var typed = await ToListAsync(_dispatcher.Stream(new CountTo(3), TestContext.Current.CancellationToken));
+        var boxed = await ToListAsync(_dispatcher.Stream((object)new CountTo(2), TestContext.Current.CancellationToken));
 
         typed.Should().Equal(1, 2, 3);
         boxed.Should().Equal(1, 2);
@@ -213,7 +213,7 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Throws<CountTo>(new TimeoutException());
 
-        var stream = _dispatcher.Stream(new CountTo(3));
+        var stream = _dispatcher.Stream(new CountTo(3), TestContext.Current.CancellationToken);
         var act = () => ToListAsync(stream);
 
         await act.Should().ThrowAsync<TimeoutException>();
@@ -222,7 +222,7 @@ public sealed class RecordingCqrsDispatcherTests
     [Fact]
     public async Task Publish_records_notifications_and_can_be_made_to_fail()
     {
-        await _dispatcher.Publish(new UserRenamed(7));
+        await _dispatcher.Publish(new UserRenamed(7), TestContext.Current.CancellationToken);
         _dispatcher.Throws<UserDeleted>(new InvalidOperationException("handler failed"));
 
         var act = () => _dispatcher.Publish(new UserDeleted(7));
@@ -238,10 +238,10 @@ public sealed class RecordingCqrsDispatcherTests
     {
         _dispatcher.Setup<GetUserName, string>("Ada").SetupStream<CountTo, int>(_ => [1]);
 
-        await _dispatcher.Send(new GetUserName(1));
-        await _dispatcher.Publish(new UserRenamed(1));
-        _ = _dispatcher.Stream(new CountTo(1));
-        await _dispatcher.Send(new RenameUser(1, "Ada"));
+        await _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken);
+        await _dispatcher.Publish(new UserRenamed(1), TestContext.Current.CancellationToken);
+        _ = _dispatcher.Stream(new CountTo(1), TestContext.Current.CancellationToken);
+        await _dispatcher.Send(new RenameUser(1, "Ada"), TestContext.Current.CancellationToken);
 
         _dispatcher.Dispatched.Select(entry => entry.Kind).Should().Equal(
             DispatchKind.Send, DispatchKind.Publish, DispatchKind.Stream, DispatchKind.Send);
@@ -251,7 +251,7 @@ public sealed class RecordingCqrsDispatcherTests
         _dispatcher.ClearRecorded();
 
         _dispatcher.Dispatched.Should().BeEmpty();
-        (await _dispatcher.Send(new GetUserName(1))).Should().Be("Ada");
+        (await _dispatcher.Send(new GetUserName(1), TestContext.Current.CancellationToken)).Should().Be("Ada");
     }
 
     [Fact]

@@ -1,12 +1,10 @@
-using CQRSharp.Pipelines;
-
 namespace CQRSharp.Sample.Domain.Events;
 
-// Exercises the source-generated, AOT-safe outbox serializer over a non-trivial shape: nested objects, a
-// collection of nested objects, an array, scalars, and an enum. Defining it is enough for the NativeAOT publish
-// to compile — and thereby validate — every generated WriteObj/ReadObj/WriteColl/ReadColl helper, because the
-// generated INotificationSerializer that references them is DI-rooted by the outbox. The hand-rolled emitter uses
-// only Utf8JsonReader/Utf8JsonWriter (no reflection, no JsonSerializer), so it stays trim/AOT-clean.
+/// <summary>
+///     Published when an order is placed. Its shape (nested objects, a list of them, an array, an enum, scalars, all set
+///     through property setters) is what the generated outbox serializer has to write and read back; the self-test sends
+///     one through the outbox and compares what the handler receives with what was published.
+/// </summary>
 [NotificationName("sample.order.placed")]
 public sealed class OrderPlacedNotification : INotification
 {
@@ -14,8 +12,8 @@ public sealed class OrderPlacedNotification : INotification
     public DateTimeOffset PlacedAt { get; set; }
     public OrderStatus Status { get; set; }
     public ShippingAddress ShipTo { get; set; } = new();
-    public IReadOnlyList<OrderLine> Lines { get; set; } = new List<OrderLine>();
-    public string[] Tags { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<OrderLine> Lines { get; set; } = [];
+    public string[] Tags { get; set; } = [];
 }
 
 public enum OrderStatus
@@ -25,14 +23,14 @@ public enum OrderStatus
     Shipped
 }
 
-public sealed class ShippingAddress
+public sealed record ShippingAddress
 {
     public string Street { get; set; } = string.Empty;
     public string City { get; set; } = string.Empty;
     public string PostalCode { get; set; } = string.Empty;
 }
 
-public sealed class OrderLine
+public sealed record OrderLine
 {
     public string Sku { get; set; } = string.Empty;
     public int Quantity { get; set; }

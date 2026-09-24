@@ -3,7 +3,7 @@
   "profiles": {
     "DebugRoslynSourceGenerator": {
       "commandName": "DebugRoslynComponent",
-      "targetProject": "../CQRSharp.Sample/CQRSharp.Sample.csproj"
+      "targetProject": "../../samples/CQRSharp.Sample/CQRSharp.Sample.csproj"
     }
   }
 }

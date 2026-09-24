@@ -1,6 +1,6 @@
-using CQRSharp.Pipelines;
 using CQRSharp.EntityFrameworkCore;
-using CQRSharp.EntityFrameworkCore.Persistence;
+using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
 using CQRSharp.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -18,13 +18,20 @@ namespace CQRSharp.Tests.Integrations.EntityFrameworkCore;
 /// </summary>
 public sealed class EfCoreOutboxStoreContractTests : OutboxStoreContractTests
 {
+    private SqliteConnection? _connection;
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_connection is not null) await _connection.DisposeAsync();
+    }
+
     protected override FakeTimeProvider Time { get; } = new();
 
     protected override async Task<IOutboxStore> CreateStoreAsync()
     {
         // A :memory: SQLite database exists only while a connection to it is open. Open and keep this one for the
         // lifetime of the test so the schema and rows persist across the store's individual operations.
-        var connection = new SqliteConnection("Filename=:memory:");
+        var connection = _connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
 
         var options = new DbContextOptionsBuilder<TestDbContext>()

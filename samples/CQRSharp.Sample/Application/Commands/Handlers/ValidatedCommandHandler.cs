@@ -5,9 +5,11 @@ namespace CQRSharp.Sample.Application.Commands.Handlers;
 
 public sealed class ValidatedCommandHandler(SampleDiagnostics diagnostics) : ICommandHandler<ValidatedCommand>
 {
+    public const string RunKey = "validated-command";
+
     public Task<CommandResult> Handle(ValidatedCommand command, CancellationToken cancellationToken)
     {
-        diagnostics.RecordValidatedCommandHandlerInvocation();
+        diagnostics.CountRun(RunKey);
         return Task.FromResult(CommandResult.FromSuccess());
     }
 }

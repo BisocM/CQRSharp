@@ -1,58 +1,31 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Testing</RootNamespace>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <IsPackable>true</IsPackable>
-        <!-- A test-SUPPORT library: it carries abstract xUnit suites for consumers to derive from, but has no runnable
-             tests of its own, so runners and `dotnet test` must not treat it as a test assembly. -->
+        <!-- A test-support library with no tests of its own; runners must not treat it as a test assembly. -->
         <IsTestProject>false</IsTestProject>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     </PropertyGroup>
 
     <PropertyGroup>
         <PackageId>CQRSharp.Testing</PackageId>
-        <PackageTags>CQRS;CQRSharp;Testing;xUnit;ContractTests;Outbox;Idempotency</PackageTags>
-        <Title>Test support for CQRSharp: store contract suites and a recording dispatcher.</Title>
-        <Description>Test support for CQRSharp. Ships the abstract xUnit contract suites every IOutboxStore and IIdempotencyStore implementation must pass (atomic claims, claim tokens and leases, renew, release, retries, dead-lettering, FIFO order, concurrency, stored idempotent results) so a custom store proves the same semantics as the built-in in-memory, EF Core, and Redis stores, plus RecordingCqrsDispatcher, a dependency-free fake ICqrsDispatcher for unit-testing controllers and services that send requests or publish notifications. Assertions use plain xUnit; no mocking or assertion library is forced on the consumer.</Description>
+        <PackageTags>CQRS;CQRSharp;Testing;Fakes</PackageTags>
+        <Title>Test support for CQRSharp: a recording dispatcher.</Title>
+        <Description>Test support for CQRSharp, independent of any test framework: RecordingCqrsDispatcher, a fake ICqrsDispatcher that records every Send, Stream and Publish and answers with stubbed results, for unit-testing controllers and services that dispatch requests or publish notifications. The store contract suites ship separately, in CQRSharp.Testing.Xunit.V3 (xUnit v3).</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Initial release.
+            Version 5.0.0. First release: RecordingCqrsDispatcher.
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
-        <!-- Referenced for ICqrsDispatcher, which RecordingCqrsDispatcher implements; the contract suites themselves
-             target only the Abstractions store contracts. -->
+        <!-- For ICqrsDispatcher, which RecordingCqrsDispatcher implements. -->
         <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <!-- The narrowest xUnit v2 surface the suites need: attributes/extensibility + Assert. Deliberately NOT the
-             `xunit` meta-package or `xunit.core`: those drag the analyzers and the test-container build props onto
-             every consumer and would mark this library itself as a test project. Consumers bring their own xunit. -->
-        <PackageReference Include="xunit.extensibility.core"/>
-        <!-- Xunit.SkippableFact only asks for execution >= 2.4.0, and 2.4.0 pins extensibility.core to exactly 2.4.0
-             (NU1608 against the 2.9.3 above). Naming the matching execution version keeps the graph coherent here and
-             for consumers, whose own xunit 2.9.x brings the same one. -->
-        <PackageReference Include="xunit.extensibility.execution"/>
-        <PackageReference Include="xunit.assert"/>
-        <!-- Provides [SkippableFact] + Skip.IfNot for runtime-conditional skipping (e.g. a store whose backing service
-             is absent), which xUnit v2 does not support natively. -->
-        <PackageReference Include="Xunit.SkippableFact"/>
-        <!-- FakeTimeProvider is part of the suite's public surface: the store-under-test reads its clock from it. -->
-        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
     </ItemGroup>
 
 </Project>

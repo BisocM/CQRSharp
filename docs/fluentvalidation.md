@@ -61,9 +61,10 @@ services.AddCqrsGenerated(b => b.UseFluentValidation());
 services.AddValidatorsFromAssemblyContaining<CreateUserValidator>();
 ```
 
-`UseFluentValidation()` registers the adapter **and** enables the validation behavior, exactly as
-`UseValidation()` does (so, like every pack verb, it also activates the pipeline pack — see
-[built-in behaviors](pipeline-behaviors.md#built-in-behaviors)).
+`UseFluentValidation()` registers the adapter. The validation behavior that runs it is already part of every
+`AddCqrsGenerated(b => ...)` registration unless `UseValidation(false)` turns it off, so nothing else needs enabling.
+`UseValidation(false)` turns FluentValidation validators off together with every other validator, whatever the order of
+the two calls.
 
 The integration **never scans assemblies itself**. Registering the validators is FluentValidation's job:
 `AddValidatorsFromAssemblyContaining<T>()` / `AddValidatorsFromAssembly(...)` come from the separate
@@ -79,18 +80,19 @@ pipeline, so scoped validators (and validators with scoped dependencies such as 
 
 ## What happens at runtime
 
-The validation behavior resolves `IEnumerable<IRequestValidator<TRequest>>` for the request being
-dispatched. The integration registers one open-generic entry in that set,
-`FluentValidationRequestValidator<TRequest>`, which in turn resolves every
-`FluentValidation.IValidator<TRequest>` in the container and runs each with `ValidateAsync`, passing
-the dispatch's cancellation token through (so `MustAsync` / `WhenAsync` rules observe it).
+The validation behavior runs every `IRequestValidator<TRequest>` of the request being dispatched: the ones the source
+generator discovered and the ones registered in the container. The integration registers one open-generic entry among
+them, `FluentValidationRequestValidator<TRequest>` (namespace `CQRSharp.FluentValidation`), which in turn resolves every
+`FluentValidation.IValidator<TRequest>` in the container and runs each with `ValidateAsync`, passing the dispatch's
+cancellation token through (so `MustAsync` / `WhenAsync` rules observe it).
 
 - **No FluentValidation validator for a request** — the adapter is a no-op and reports zero failures.
   Nothing needs to be registered per request type.
 - **Several validators for one request** — all of them run, in registration order, and their failures
   are combined.
 - **A failure** — the behavior throws `RequestValidationException` before the handler runs, as for
-  native validators. Catch it at your API boundary and translate `Failures` into a 400 response.
+  native validators. [CQRSharp.AspNetCore](aspnetcore.md#exception-mapping) maps it to a 400 validation
+  ProblemDetails.
 - **Streaming requests** are covered too: the stream validation behavior consumes the same
   `IRequestValidator<TRequest>` set.
 
@@ -131,7 +133,8 @@ yourself where you want to report them.
 
 FluentValidation validators and native `IRequestValidator<TRequest>` implementations can target the
 same request. Both run, and the validation behavior aggregates their failures into one
-`RequestValidationException`:
+`RequestValidationException`. A native validator needs no registration: the source generator registers every
+non-generic `IRequestValidator<TRequest>` it can see.
 
 ```csharp
 public sealed class CreateUserNameIsFree(IUserDirectory users) : IRequestValidator<CreateUser>
@@ -153,23 +156,20 @@ using FluentFailure = FluentValidation.Results.ValidationFailure;
 
 (`using FluentValidation;` alone — all a validator class needs — does not clash.)
 
-Do not rely on the relative order of native and FluentValidation failures in `Failures`; it follows
-container registration order.
+Do not rely on the relative order of native and FluentValidation failures in `Failures`.
 
 ## Registering without the builder
 
-`UseFluentValidation()` is shorthand for the `IServiceCollection` extension plus `UseValidation()`.
-Use the pieces directly when you wire things outside the builder callback:
+`UseFluentValidation()` calls the `IServiceCollection` extension `AddCqrsFluentValidation()`. Use it directly when you
+wire things outside the builder callback:
 
 ```csharp
-services.AddCqrsGenerated(b => b.UseValidation());
+services.AddCqrsGenerated(b => b.ValidateOnStart());
 services.AddCqrsFluentValidation();
 services.AddValidatorsFromAssemblyContaining<CreateUserValidator>();
 ```
 
-`AddCqrsFluentValidation()` only registers the adapter (idempotently — calling it, or
-`UseFluentValidation()`, more than once registers it once). It does not enable the validation behavior:
-without an active pipeline pack the adapter is registered but never consulted. Unlike the builder's own
-order-insensitive verbs, `UseFluentValidation()` applies the adapter registration to `Services`
-immediately; a later `UseValidation(false)` still switches validation off and simply leaves the adapter
-inert.
+`AddCqrsFluentValidation()` only registers the adapter, once however often it (or `UseFluentValidation()`) is called.
+It does not register the validation behavior: `AddCqrsGenerated`, in either form, does that unless
+`UseValidation(false)` turns it off, and with validation off the adapter is never consulted.
+Unlike the builder's own verbs, `UseFluentValidation()` applies the adapter registration to `Services` immediately.

@@ -1,6 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-using CQRSharp.Pipelines;
+using CQRSharp.Persistence;
 
 namespace CQRSharp.Core.Idempotency;
 
@@ -28,9 +29,9 @@ internal sealed class JsonIdempotencyResultSerializer(JsonSerializerOptions opti
         }
     }
 
-    public bool TryDeserialize<TResult>(byte[] payload, out TResult result)
+    public bool TryDeserialize<TResult>(byte[] payload, [MaybeNullWhen(false)] out TResult result)
     {
-        result = default!;
+        result = default;
         if (!TryGetTypeInfo<TResult>(out var typeInfo)) return false;
 
         try

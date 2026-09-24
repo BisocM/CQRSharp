@@ -1,17 +1,20 @@
-using CQRSharp.Pipelines;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
-namespace CQRSharp.Redis.Idempotency;
+namespace CQRSharp.Redis;
 
 /// <summary>
-///     A durable <see cref="IIdempotencyStore" /> backed by Redis. Each idempotency key maps to a single Redis key
-///     (<c>{KeyPrefix}{key}</c>). A claim is an atomic <c>SET key 1 NX EX retention</c>: the key is created only if it
-///     does not already exist, so concurrent claimants race on one server-side operation and exactly one wins. The
-///     <c>EX</c> expiry IS the deduplication window — server-timed by Redis — so no client clock (and thus no
-///     <see cref="TimeProvider" />) is needed, and a crashed claimant's key self-heals once the retention elapses.
-///     The stored value is a per-claim token, so a release only ever deletes the claim it made: a claimant whose claim
-///     expired mid-flight (and was taken over) cannot delete its successor's live claim.
+///     A durable <see cref="IIdempotencyStore" /> backed by Redis. Each idempotency key maps to two Redis keys: its value
+///     (<c>{KeyPrefix}k:{key}</c>, holding <c>p:&lt;token&gt;</c> while the request is in flight and the completed form
+///     afterwards) and its payload fingerprint (<c>{KeyPrefix}f:{key}</c>). A claim is an atomic <c>SET … NX PX
+///     retention</c> run inside a Lua script together with the fingerprint write: the value is created only if it does
+///     not already exist, so concurrent claimants race on one server-side operation and exactly one wins. The <c>PX</c>
+///     expiry IS the deduplication window, timed by Redis, so no client clock (and thus no <see cref="TimeProvider" />) is
+///     needed, and a crashed claimant's key frees itself once the retention elapses. The value's token makes completion
+///     and release compare-and-swap operations: a claimant whose claim expired mid-flight (and was taken over) can
+///     neither complete nor delete its successor's claim. The fingerprint carries the same expiry, so a key reused with a
+///     different payload is reported as a mismatch for as long as the claim is remembered.
 /// </summary>
 internal sealed class RedisIdempotencyStore : IIdempotencyStore
 {
@@ -20,16 +23,34 @@ internal sealed class RedisIdempotencyStore : IIdempotencyStore
     private readonly int _database;
     private readonly TimeSpan _retention;
 
-    // The token of each claim this process currently holds, so ReleaseAsync(key) can prove ownership to Redis.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _heldClaims = new(StringComparer.Ordinal);
-
-    // The key's value is "p:<token>" while the request is in flight and "c:<result bytes>" once it completed.
+    // The value is "p:<token>" while the request is in flight. Once it completed it is "c" when the request stored no
+    // result and "c:<result bytes>" when it stored one - an empty result included, which is "c:" alone.
     private const string PendingPrefix = "p:";
     private const byte CompletedMarker = (byte)'c';
+    private const byte ResultSeparator = (byte)':';
 
-    // Compare-and-delete: remove the key only while it still carries this claimant's token.
+    // Claim: SET NX PX is atomically duplicate-safe on its own (the write lands iff the key was absent). Alongside it the
+    // payload fingerprint is kept in a sibling key with the same expiry. A losing claim compares its fingerprint with the
+    // stored one and returns [status, value]: 1 claimed, 2 payload mismatch, 0 held - with the held value, which the GET
+    // always finds: the SET NX failed because the key exists, and Redis freezes key expiry while a script runs.
+    // KEYS: value key, fingerprint key. ARGV: token, ttl ms, fingerprint ('' for none). The two keys are
+    // "{prefix}k:{key}" and "{prefix}f:{key}": a fixed-position discriminator, so no user key can alias another's
+    // fingerprint, and the prefix's hash tag keeps both in one cluster slot.
+    private const string ClaimScript = @"
+if redis.call('SET', KEYS[1], ARGV[1], 'NX', 'PX', ARGV[2]) then
+    if ARGV[3] ~= '' then redis.call('SET', KEYS[2], ARGV[3], 'PX', ARGV[2]) end
+    return {1, ''}
+end
+if ARGV[3] ~= '' then
+    local stored = redis.call('GET', KEYS[2])
+    if stored and stored ~= ARGV[3] then return {2, ''} end
+end
+return {0, redis.call('GET', KEYS[1])}";
+
+    // Compare-and-delete: remove the key (and its fingerprint) only while it still carries this claimant's token.
     private const string ReleaseScript = @"
 if redis.call('GET', KEYS[1]) == ARGV[1] then
+    redis.call('DEL', KEYS[2])
     return redis.call('DEL', KEYS[1])
 end
 return 0";
@@ -39,8 +60,8 @@ return 0";
     private const string CompleteScript = @"
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 local ttl = redis.call('PTTL', KEYS[1])
-if ttl > 0 then
-    redis.call('SET', KEYS[1], ARGV[2], 'PX', ttl)
+if ttl >= 0 then
+    redis.call('SET', KEYS[1], ARGV[2], 'PX', math.max(ttl, 1))
 else
     redis.call('SET', KEYS[1], ARGV[2])
 end
@@ -55,59 +76,66 @@ return 1";
         _retention = opts.Retention;
     }
 
-    public async Task<IdempotencyClaim> TryClaimAsync(string key, CancellationToken cancellationToken)
+    public async Task<IdempotencyClaim> TryClaimAsync(string key, string? fingerprint, CancellationToken cancellationToken)
     {
-        // SET NX EX is atomically duplicate-safe on its own: the write lands iff the key was absent, so the boolean it
-        // returns is exactly "newly claimed". The retention TTL doubles as the dedup window and the crash self-heal.
+        // The retention TTL doubles as the dedup window and the crash self-heal; the fingerprint expires with the claim.
         var db = _mux.GetDatabase(_database);
         var token = PendingPrefix + Guid.NewGuid().ToString("N");
-        var redisKey = (RedisKey)(_keyPrefix + key);
+        var result = (RedisResult[])(await RedisScripts.EvaluateAsync(
+            db,
+            ClaimScript,
+            [ValueKey(key), FingerprintKey(key)],
+            [token, (long)_retention.TotalMilliseconds, fingerprint ?? string.Empty]).ConfigureAwait(false))!;
 
-        // Bounded loop: the key can expire between a lost SET NX and the GET that inspects the winner.
-        for (var attempt = 0; attempt < 3; attempt++)
+        switch ((int)result[0])
         {
-            if (await db.StringSetAsync(redisKey, token, _retention, When.NotExists).ConfigureAwait(false))
-            {
-                _heldClaims[key] = token;
-                return IdempotencyClaim.Claimed;
-            }
-
-            var existing = (byte[]?)await db.StringGetAsync(redisKey).ConfigureAwait(false);
-            if (existing is null) continue;
-
-            if (existing.Length == 0 || existing[0] != CompletedMarker)
-                return IdempotencyClaim.InProgress;
-
-            // "c:" followed by the stored result; nothing after the prefix means the request stored none.
-            return IdempotencyClaim.Completed(existing.Length > 2 ? existing[2..] : null);
+            case 1:
+                // The pending value is the claim's identity: completion and release compare-and-swap on it.
+                return IdempotencyClaim.ClaimedWith(token);
+            case 2:
+                return IdempotencyClaim.PayloadMismatch;
         }
 
-        return IdempotencyClaim.InProgress;
+        var existing = (byte[]?)result[1];
+        if (existing is null || existing.Length == 0 || existing[0] != CompletedMarker)
+            return IdempotencyClaim.InProgress;
+
+        // "c" alone: the request stored no result; "c:" and what follows (possibly nothing): the result it stored.
+        return IdempotencyClaim.Completed(existing.Length >= 2 ? existing[2..] : null);
     }
 
-    public async Task CompleteAsync(string key, byte[]? result, CancellationToken cancellationToken)
+    public async Task CompleteAsync(string key, string claimToken, byte[]? result, CancellationToken cancellationToken)
     {
-        // Only a claim this process made, and only while Redis still holds that very claim.
-        if (!_heldClaims.TryRemove(key, out var token))
-            return;
+        // Only while Redis still holds that very claim: a key taken over since carries another token.
+        if (string.IsNullOrEmpty(claimToken)) return;
 
-        var completed = new byte[2 + (result?.Length ?? 0)];
-        completed[0] = CompletedMarker;
-        completed[1] = (byte)':';
-        result?.CopyTo(completed, 2);
+        byte[] completed;
+        if (result is null)
+        {
+            completed = [CompletedMarker];
+        }
+        else
+        {
+            completed = new byte[2 + result.Length];
+            completed[0] = CompletedMarker;
+            completed[1] = ResultSeparator;
+            result.CopyTo(completed, 2);
+        }
 
         var db = _mux.GetDatabase(_database);
-        await db.ScriptEvaluateAsync(CompleteScript, [(RedisKey)(_keyPrefix + key)], [(RedisValue)token, (RedisValue)completed]).ConfigureAwait(false);
+        await RedisScripts.EvaluateAsync(db, CompleteScript, [ValueKey(key)], [claimToken, completed]).ConfigureAwait(false);
     }
 
-    public async Task ReleaseAsync(string key, CancellationToken cancellationToken)
+    public async Task ReleaseAsync(string key, string claimToken, CancellationToken cancellationToken)
     {
-        // Only a claim this process made can be released, and only while Redis still holds that very claim. An unknown,
-        // expired or taken-over key is left alone.
-        if (!_heldClaims.TryRemove(key, out var token))
-            return;
+        // Only while Redis still holds that very claim: an unknown, expired or taken-over key is left alone.
+        if (string.IsNullOrEmpty(claimToken)) return;
 
         var db = _mux.GetDatabase(_database);
-        await db.ScriptEvaluateAsync(ReleaseScript, [(RedisKey)(_keyPrefix + key)], [(RedisValue)token]).ConfigureAwait(false);
+        await RedisScripts.EvaluateAsync(db, ReleaseScript, [ValueKey(key), FingerprintKey(key)], [claimToken]).ConfigureAwait(false);
     }
+
+    private RedisKey ValueKey(string key) => _keyPrefix + "k:" + key;
+
+    private RedisKey FingerprintKey(string key) => _keyPrefix + "f:" + key;
 }

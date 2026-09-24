@@ -1,43 +1,35 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
+    <!--
+        The end-to-end self-test and the Native AOT canary for the runtime: every scenario in
+        Infrastructure/SelfTest runs on startup and the process exits non-zero when one fails. CI runs it as a framework
+        build and publishes and runs it as a Native AOT binary for net8.0 and net10.0 (.github/workflows/validate.yml);
+        CQRSharp.Sample.AspNetCore is the canary for the HTTP edge.
+    -->
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <IsPackable>false</IsPackable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
         <RootNamespace>CQRSharp.Sample</RootNamespace>
-        <LangVersion>default</LangVersion>
-        <TargetFrameworks>net8.0</TargetFrameworks>
-        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <PublishAot>true</PublishAot>
-        <RunAnalyzers>true</RunAnalyzers>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <!-- The generated module lands in obj/, where it can be read next to the code it was generated from. -->
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <!-- The generic host and its console logging; CQRSharp itself depends only on the hosting abstractions. -->
+        <PackageReference Include="Microsoft.Extensions.Hosting"/>
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
-        <!-- A second handler-bearing assembly so the Native AOT publish exercises CQRSharp's multi-assembly codegen
-             path (its module is wired by this app's AddCqrsGenerated; see SampleHostedService.RunExternalModuleTestAsync). -->
+        <!-- A second handler-bearing assembly, so the Native AOT publish covers the multi-assembly codegen path: its module
+             is wired by this app's single AddCqrsGenerated (see SelfTestRunner.RunExternalModuleTestAsync). -->
         <ProjectReference Include="..\CQRSharp.Sample.ExternalModule\CQRSharp.Sample.ExternalModule.csproj"/>
-        <!-- The Redis integration is referenced only so the NativeAOT Sample publish exercises its IL (the publish
-             workflow greps the published output for Redis types). It is registered guarded and never connected — the
-             in-memory store stays the one used at runtime — see Program.cs. -->
+        <!-- The self-test registers the Redis stores in a container of its own and builds and validates it without
+             connecting (SelfTestRunner.RunRedisRegistrationTestAsync), so their registration and option validation are
+             part of the Native AOT publish and run in it. -->
         <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
-        <ProjectReference Include="..\..\src\CQRSharp.Generators\CQRSharp.Generators.csproj"
-                          OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false"/>
     </ItemGroup>
 
 </Project>

@@ -5,10 +5,16 @@
         (PackageId, Title, Description, PackageTags, TargetFrameworks, PackageReleaseNotes) remain in each project.
     -->
     <PropertyGroup>
+        <!--
+            The target frameworks of every multi-targeting CQRSharp project. global.json requires the .NET 10 SDK, which
+            builds all three, so a package can never be packed with a framework silently missing.
+        -->
+        <CQRSharpTargetFrameworks>net8.0;net9.0;net10.0</CQRSharpTargetFrameworks>
+
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
         <Version>5.0.0</Version>
-        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
+        <PackageProjectUrl>https://github.com/BisocM/CQRSharp</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>

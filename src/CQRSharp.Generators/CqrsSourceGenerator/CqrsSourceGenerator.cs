@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -12,219 +13,225 @@ namespace CQRSharp.Generators.CqrsSourceGenerator;
 [Generator]
 public sealed partial class CqrsSourceGenerator : IIncrementalGenerator
 {
-    private static readonly DiagnosticDescriptor WellKnownTypeUnresolvedDiagnostic = new(
-        "CQRGEN007",
-        "CQRSharp well-known type could not be resolved",
-        "The CQRSharp framework type for role '{0}' could not be resolved from the referenced CQRSharp assemblies. Source generation will be incomplete; ensure the CQRSharp package versions are consistent.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Error,
-        true);
-
-    private static readonly DiagnosticDescriptor CoreNotReferencedDiagnostic = new(
-        "CQRGEN008",
-        "CQRSharp.Core is not referenced",
-        "CQRSharp.Abstractions is referenced but CQRSharp.Core is not, so CQRSharp source generation is skipped. Reference CQRSharp.Core (or the CQRSharp meta-package) to enable it.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Info,
-        true);
-
-    private static readonly DiagnosticDescriptor DuplicateNotificationNameDiagnostic = new(
-        "CQRGEN002",
-        "Duplicate NotificationName",
-        "Duplicate [NotificationName] '{0}' found on: {1}. Stable names must be unique for outbox serialization.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Error,
-        true);
-
-    private static readonly DiagnosticDescriptor OpenGenericHandlerDiagnostic = new(
-        "CQRGEN009",
-        "Open-generic handler is not registered",
-        "'{0}' is an open-generic handler, which CQRSharp does not register — only closed, non-generic handler types are wired. Declare a concrete (closed) handler or register it manually; otherwise dispatching its request throws \"no handler\" at runtime.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Warning,
-        true);
-
-    private static readonly DiagnosticDescriptor InaccessibleBoundTypeDiagnostic = new(
-        "CQRGEN010",
-        "Handler binding skipped: a bound type is inaccessible",
-        "'{0}' is registered by the generator, but its binding to '{1}' is skipped because '{1}' is less accessible than internal, so dispatching that request throws \"no handler\" at runtime. Make '{1}' public or internal.",
-        "CQRSharp.Generators",
-        DiagnosticSeverity.Warning,
-        true);
+    /// <summary>The names of the pipeline's steps, which the caching tests assert on.</summary>
+    private static class TrackingNames
+    {
+        public const string Candidates = "CqrsCandidates";
+        public const string KnownSnapshot = "CqrsKnownSnapshot";
+        public const string GenerationModels = "CqrsGenerationModels";
+        public const string GenerationInput = "CqrsGenerationInput";
+        public const string BootstrapCallSites = "CqrsBootstrapCallSites";
+        public const string DiagnosticsInput = "CqrsDiagnosticsInput";
+    }
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Project each candidate type into a small, value-equatable model in the transform. Because no symbols or
-        // Compilation flow past this point, an edit that doesn't change a type's CQRSharp shape yields identical
-        // models and the whole output step short-circuits (and nothing symbol-bearing is held across generations).
+        // The semantic transform runs for every class, struct and record on each edit; what it yields is a small
+        // value-equatable model with no symbol or Compilation in it, so everything after it is skipped when the models
+        // compare equal. Structs take part for the notifications they declare.
         var candidates = context.SyntaxProvider
             .CreateSyntaxProvider(
-                static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+                static (node, _) => node is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax,
                 static (ctx, ct) => TransformCandidate(ctx, ct))
             .Where(static model => model is not null)
             .Select(static (model, _) => model!)
-            .Collect();
+            .WithTrackingName(TrackingNames.Candidates);
 
-        // Compilation-level facts the per-candidate transform can't see (Core referenced? Pipelines builder present?),
-        // resolved once into an equatable snapshot so this branch only retriggers when those facts actually change.
-        var knownSnapshot = context.CompilationProvider.Select(static (compilation, _) => CreateKnownSnapshot(compilation));
+        // Compilation-level facts the per-candidate transform can't see (Core referenced? Pipelines builder present? the
+        // referenced modules?). Recomputed for every compilation; the steps after it re-run only when they change.
+        var knownSnapshot = context.CompilationProvider
+            .Select(static (compilation, _) => CreateKnownSnapshot(compilation))
+            .WithTrackingName(TrackingNames.KnownSnapshot);
 
-        var config = context.AnalyzerConfigOptionsProvider.Select(static (provider, _) => GeneratorConfig.From(provider.GlobalOptions));
+        // Code generation reads the models without their source locations: an edit that only moves a CQRSharp type
+        // (a line added above it) leaves the generated code as it is and does not re-run this output.
+        var generationInput = candidates
+            .Select(static (model, _) => model.WithoutLocations())
+            .WithTrackingName(TrackingNames.GenerationModels)
+            .Collect()
+            .Combine(knownSnapshot)
+            .WithTrackingName(TrackingNames.GenerationInput);
 
-        var combined = candidates.Combine(knownSnapshot).Combine(config);
+        context.RegisterSourceOutput(generationInput, static (spc, source) => Generate(spc, source.Left, source.Right));
 
-        context.RegisterSourceOutput(combined, static (spc, source) =>
-        {
-            var ((models, known), config) = source;
-            Execute(spc, models, known, config);
-        });
+        // Where this assembly calls the generated entry points, which is where it composes its reference graph: the call
+        // sites CQRGEN019 marks when that composition is ambiguous, and, among them, the ones by plain name that CQRGEN015
+        // marks when a referenced assembly's copy is visible here (a call qualified with the bootstrap type is already
+        // unambiguous).
+        var bootstrapCallSites = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => IsBootstrapCallShape(node),
+                static (ctx, ct) => ClassifyBootstrapCall(ctx, ct) is { } isPlain && LocationInfo.CreateFrom(ctx.Node) is { } location
+                    ? new BootstrapCallSiteModel(location, isPlain)
+                    : null)
+            .Where(static site => site is not null)
+            .Select(static (site, _) => site!)
+            .Collect()
+            .WithTrackingName(TrackingNames.BootstrapCallSites);
+
+        // Diagnostics read the models with their locations, so they are reported where the code is.
+        var diagnosticsInput = candidates
+            .Collect()
+            .Combine(knownSnapshot)
+            .Combine(bootstrapCallSites)
+            .WithTrackingName(TrackingNames.DiagnosticsInput);
+
+        context.RegisterSourceOutput(diagnosticsInput, static (spc, source) => ReportDiagnostics(spc, source.Left.Left, source.Left.Right, source.Right));
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<CandidateModel> candidates,
-        KnownSnapshot known,
-        GeneratorConfig config)
+    private static bool IsBootstrapCallShape(SyntaxNode node)
+        => node is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access } &&
+           access.Name.Identifier.Text == "AddCqrsGenerated";
+
+    // Whether a call named AddCqrsGenerated calls the generated bootstrap: true for a plain call, an extension-method call
+    // on a service collection (services.AddCqrsGenerated()); false for one through the bootstrap type, by its name or an
+    // alias (CqrsGeneratedBootstrap.AddCqrsGenerated(services)); null for anything else. Bound semantically where it can
+    // be, and by name where it cannot: this assembly's own bootstrap is not in the compilation the syntax provider sees,
+    // so a call through it does not bind.
+    private static bool? ClassifyBootstrapCall(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
+    {
+        var access = (MemberAccessExpressionSyntax)((InvocationExpressionSyntax)ctx.Node).Expression;
+        var model = ctx.SemanticModel;
+
+        if (model.GetAliasInfo(access.Expression, ct) is { Target: var aliased })
+            return aliased is INamedTypeSymbol { Name: CqrsKnownSymbols.BootstrapTypeName } ? false : null;
+
+        var qualifier = model.GetSymbolInfo(access.Expression, ct);
+        switch (qualifier.Symbol ?? qualifier.CandidateSymbols.FirstOrDefault())
+        {
+            case ITypeSymbol type:
+                return type.Name == CqrsKnownSymbols.BootstrapTypeName ? false : null;
+            case INamespaceSymbol:
+                return null;
+        }
+
+        if (RightmostName(access.Expression) == CqrsKnownSymbols.BootstrapTypeName) return false;
+
+        var serviceCollection = model.Compilation.GetTypeByMetadataName("Microsoft.Extensions.DependencyInjection.IServiceCollection");
+        var receiver = model.GetTypeInfo(access.Expression, ct).Type;
+        return serviceCollection is not null && receiver is not null &&
+               (SymbolEqualityComparer.Default.Equals(receiver, serviceCollection) ||
+                receiver.AllInterfaces.Contains(serviceCollection, SymbolEqualityComparer.Default))
+            ? true
+            : null;
+
+        static string? RightmostName(ExpressionSyntax expression)
+            => expression switch
+            {
+                IdentifierNameSyntax identifier => identifier.Identifier.Text,
+                MemberAccessExpressionSyntax member => member.Name.Identifier.Text,
+                AliasQualifiedNameSyntax alias => alias.Name.Identifier.Text,
+                QualifiedNameSyntax qualified => qualified.Right.Identifier.Text,
+                _ => null
+            };
+    }
+
+    // Emits the generated sources. Reports nothing but a crash: every other diagnostic comes from ReportDiagnostics, which
+    // reads the same models through the same helpers, so what is reported and what is emitted agree.
+    private static void Generate(SourceProductionContext context, ImmutableArray<CandidateModel> candidates, KnownSnapshot known)
     {
         try
         {
-            // Surface well-known-type resolution problems loudly instead of silently emitting an empty registry.
-            ReportWellKnownTypeIssues(known, context);
+            // Every generated module implements CQRSharp.Core's ICqrsModule, so without Core there is nothing to emit;
+            // code emitted against a missing framework type would only bury CQRGEN007 under compile errors.
+            if (!known.CoreReferenced || known.MissingRequiredTypeNames.Count > 0) return;
 
-            var stableNotifications = CollectSerializableNotifications(candidates, context);
+            var suppressed = GeneratedFileSuppressions(candidates);
+            var stableNotifications = SerializableNotifications(candidates);
+            var fingerprints = Fingerprints(candidates).Where(f => f.Root is not null).ToArray();
             var hasModule = HasModuleContent(candidates);
 
-            // Every assembly with registerable content emits its own uniquely-namespaced module (dispatchers,
-            // registry data, registrar) — never colliding across assemblies in one reference graph.
+            // Every assembly with registerable content emits its own uniquely-namespaced module (its tables and its
+            // registrar), never colliding across assemblies in one reference graph.
             if (hasModule)
             {
                 context.AddSource("CqrsModule.g.cs",
-                    SourceText.From(GenerateModule(candidates, known, stableNotifications, context, config), Encoding.UTF8));
-                context.AddSource("GeneratedRequestDispatcher.g.cs",
-                    SourceText.From(GenerateDispatcher(candidates, known), Encoding.UTF8));
-                context.AddSource("GeneratedStreamRequestDispatcher.g.cs",
-                    SourceText.From(GenerateStreamDispatcher(candidates, known), Encoding.UTF8));
-                context.AddSource("GeneratedDirectNotificationDispatcher.g.cs",
-                    SourceText.From(GenerateNotificationDispatcher(candidates, known), Encoding.UTF8));
-                context.AddSource("GeneratedCqrsDiagnostics.g.cs",
-                    SourceText.From(GenerateDiagnostics(candidates, known), Encoding.UTF8));
+                    SourceText.From(GenerateModule(candidates, known, stableNotifications, fingerprints.Length > 0, suppressed), Encoding.UTF8));
 
                 if (stableNotifications.Count > 0)
                     context.AddSource("GeneratedOutboxNotificationSerializer.g.cs",
-                        SourceText.From(GenerateOutboxNotificationSerializer(stableNotifications, known), Encoding.UTF8));
+                        SourceText.From(GenerateOutboxNotificationSerializer(stableNotifications, known, suppressed), Encoding.UTF8));
+
+                if (fingerprints.Length > 0)
+                    context.AddSource("GeneratedRequestFingerprinter.g.cs",
+                        SourceText.From(GenerateRequestFingerprinter(fingerprints, known, suppressed), Encoding.UTF8));
             }
 
-            // Every CQRSharp-referencing assembly emits the internal AddGenerated/AddCqrsGenerated entry points (which
-            // wire this assembly's module plus every referenced assembly's module). Internal visibility means they
-            // never collide across assemblies, so there is no "composition root" to designate — you call
+            // Every CQRSharp.Core-referencing assembly emits the internal AddCqrsGenerated entry points (which wire
+            // this assembly's module plus every referenced assembly's module). Internal visibility means they never
+            // collide across assemblies, so there is no "composition root" to designate — you call
             // AddCqrsGenerated from wherever you set up DI, and it wires that assembly's whole reference graph.
-            if (known.CoreReferenced)
-                context.AddSource("CqrsGeneratedBootstrap.g.cs",
-                    SourceText.From(GenerateBootstrap(known, hasModule), Encoding.UTF8));
+            context.AddSource("CqrsGeneratedBootstrap.g.cs",
+                SourceText.From(GenerateBootstrap(known, hasModule), Encoding.UTF8));
 
-            var markersSourceCode = GenerateAssemblyMarkers(candidates, known, hasModule);
-            context.AddSource("CqrsGeneratedAssemblyMarkers.g.cs", SourceText.From(markersSourceCode, Encoding.UTF8));
-
-            ReportInaccessibleHandlers(candidates, context);
-            ReportOpenGenericHandlers(candidates, context);
-            ReportInaccessibleBoundTypes(candidates, context);
+            context.AddSource("CqrsGeneratedAssemblyMarkers.g.cs",
+                SourceText.From(GenerateAssemblyMarkers(candidates, known, hasModule, suppressed), Encoding.UTF8));
         }
         catch (Exception ex)
         {
-            context.ReportDiagnostic(Diagnostic.Create(
-                new DiagnosticDescriptor("CQRGEN999", "Unhandled Exception in CqrsSourceGenerator",
-                    "Unhandled exception: {0}", "CQRSharp.Generators", DiagnosticSeverity.Error, true),
-                Location.None, ex.ToString()));
+            ReportCrash(context, ex);
         }
     }
 
-    // Aggregates notification models across candidates: reports CQRGEN005 (unserializable stable-named notifications)
-    // and CQRGEN002 (duplicate stable names), then returns the deduped, ordered serializable set.
-    private static IReadOnlyList<NotificationModel> CollectSerializableNotifications(
-        ImmutableArray<CandidateModel> candidates,
-        SourceProductionContext context)
+    // Whether this compilation has anything to register, i.e. whether a per-assembly module should be emitted.
+    private static bool HasModuleContent(ImmutableArray<CandidateModel> candidates)
     {
-        var notifications = candidates
-            .Where(c => c.Notification is not null)
+        foreach (var candidate in candidates)
+            if (candidate.Handlers.Count > 0 ||
+                candidate.HandlerForwarderInterfaces.Count > 0 ||
+                candidate.DiscoveredServiceInterfaces.Count > 0 ||
+                candidate.Request is not null ||
+                candidate.Notification is not null ||
+                candidate.HandledNotifications.Count > 0 ||
+                candidate.ContextFactories.Count > 0 ||
+                candidate.ExceptionHooks.Count > 0 ||
+                candidate.NotificationClosedBehaviors.Count > 0 ||
+                candidate.NotificationClosedBehaviorGaps.Count > 0)
+                return true;
+
+        return false;
+    }
+
+    // The request bindings of every handler, by request type: one entry per request, which SelectDeterministicBinding
+    // then narrows to one binding when several handlers claim it (CQRGEN004).
+    private static Dictionary<string, List<HandlerImplModel>> HandlerBindingsByRequest(ImmutableArray<CandidateModel> candidates)
+        => candidates
+            .SelectMany(c => c.Handlers)
+            .GroupBy(h => h.Request.RequestTypeName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+    private static HandlerImplModel SelectDeterministicBinding(List<HandlerImplModel> bindings)
+        => bindings
+            .OrderBy(b => b.ImplTypeName, StringComparer.Ordinal)
+            .ThenBy(b => b.InterfaceNameOrdinal, StringComparer.Ordinal)
+            .First();
+
+    // The stable-named notifications the outbox serializer covers: one per stable name (CQRGEN002 reports a clash),
+    // ordered by name, leaving out the ones whose shape cannot be serialized (CQRGEN005).
+    private static IReadOnlyList<NotificationModel> SerializableNotifications(ImmutableArray<CandidateModel> candidates)
+        => candidates
+            .Where(c => c.Notification is { StableName: not null, OutboxRoot: not null })
             .Select(c => c.Notification!)
-            .ToArray();
-
-        foreach (var notification in notifications.Where(n => n.StableName is not null && n.OutboxError is not null))
-        {
-            var location = notification.OutboxErrorLocation?.ToLocation() ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(
-                OutboxNotificationNotAotJsonSerializableDiagnostic,
-                location,
-                notification.TypeName,
-                notification.OutboxError));
-        }
-
-        var stable = notifications
-            .Where(n => n.StableName is not null && n.OutboxRoot is not null)
-            .ToArray();
-
-        foreach (var group in stable
-                     .GroupBy(n => n.StableName, StringComparer.Ordinal)
-                     .Where(g => g.Count() > 1))
-        {
-            var types = string.Join(", ", group.Select(n => n.TypeName));
-            context.ReportDiagnostic(Diagnostic.Create(DuplicateNotificationNameDiagnostic, Location.None, group.Key!, types));
-        }
-
-        return stable
             .GroupBy(n => n.StableName, StringComparer.Ordinal)
             .Select(g => g.First())
             .OrderBy(n => n.StableName, StringComparer.Ordinal)
             .ThenBy(n => n.TypeName, StringComparer.Ordinal)
             .ToArray();
-    }
 
-    private static void ReportWellKnownTypeIssues(KnownSnapshot known, SourceProductionContext context)
-    {
-        if (!known.AbstractionsPresent) return;
+    // The idempotent requests this module fingerprints, each with the candidate it was read from: the requests declared
+    // here, and the requests handled here that no other module fingerprints. One per request type; those whose payload
+    // cannot be rendered carry the reason instead of a graph (CQRGEN014).
+    private static IReadOnlyList<FingerprintModel> Fingerprints(ImmutableArray<CandidateModel> candidates)
+        => FingerprintsWithCandidates(candidates).Select(f => f.Model).OrderBy(m => m.TypeName, StringComparer.Ordinal).ToArray();
 
-        if (!known.CoreReferenced)
-        {
-            context.ReportDiagnostic(Diagnostic.Create(CoreNotReferencedDiagnostic, Location.None));
-            return;
-        }
-
-        foreach (var roleName in known.MissingRequiredRoleNames)
-            context.ReportDiagnostic(Diagnostic.Create(WellKnownTypeUnresolvedDiagnostic, Location.None, roleName));
-    }
-
-    private static void ReportInaccessibleHandlers(ImmutableArray<CandidateModel> candidates, SourceProductionContext context)
-    {
-        foreach (var candidate in candidates.Where(c => c is { IsConcrete: true, IsAccessible: false, ImplementsAnyKnownHandlerInterface: true }))
-        {
-            var location = candidate.Location?.ToLocation() ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(HandlerNotAccessibleDiagnostic, location, candidate.TypeName));
-        }
-    }
-
-    // CQRGEN009: an open-generic dispatch handler is silently unregistered (the generator wires only closed types),
-    // surfacing only as a runtime "no handler". Flag it at the declaration so the gap is caught at build time.
-    private static void ReportOpenGenericHandlers(ImmutableArray<CandidateModel> candidates, SourceProductionContext context)
-    {
-        foreach (var candidate in candidates.Where(c => c.IsOpenGenericHandler))
-        {
-            var location = candidate.Location?.ToLocation() ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(OpenGenericHandlerDiagnostic, location, candidate.TypeName));
-        }
-    }
-
-    // CQRGEN010: a handler is registered, but a binding to a less-accessible request/result/context/notification type is
-    // silently dropped (BuildHandlerImpls skips it). Flag each offending type at the handler so the gap is caught at build.
-    private static void ReportInaccessibleBoundTypes(ImmutableArray<CandidateModel> candidates, SourceProductionContext context)
-    {
-        foreach (var candidate in candidates.Where(c => c.InaccessibleBoundTypeNames.Count > 0))
-        {
-            var location = candidate.Location?.ToLocation() ?? Location.None;
-            foreach (var typeName in candidate.InaccessibleBoundTypeNames)
-                context.ReportDiagnostic(Diagnostic.Create(
-                    InaccessibleBoundTypeDiagnostic, location, candidate.TypeName, typeName));
-        }
-    }
+    private static (CandidateModel Candidate, FingerprintModel Model)[] FingerprintsWithCandidates(ImmutableArray<CandidateModel> candidates)
+        => candidates
+            .Where(c => c.Fingerprint is not null)
+            .Select(c => (Candidate: c, Model: c.Fingerprint!))
+            .Concat(candidates.SelectMany(c => c.HandledRequestFingerprints.Select(f => (Candidate: c, Model: f))))
+            .GroupBy(f => f.Model.TypeName, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToArray();
 
     // Emits an XML <summary> doc comment for a member of the generated code, at the given indentation.
     private static void EmitSummary(StringBuilder sb, string indent, string text)

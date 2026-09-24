@@ -1,14 +1,18 @@
 using System.Diagnostics;
-using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Telemetry;
+using CQRSharp.Core.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Behaviors.Timeout;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Enforces a timeout across the full enumeration of a streaming request.
+///     Bounds a streaming request's whole enumeration by <see cref="TimeoutOptions.Timeout" />: when the time runs out it
+///     cancels the token the stream receives and, once the stream observes the cancellation, throws
+///     <see cref="RequestTimeoutException" />. Like <see cref="TimeoutBehavior{TRequest, TResult}" />, the timeout is
+///     cooperative.
 /// </summary>
+/// <typeparam name="TRequest">The streaming request type.</typeparam>
+/// <typeparam name="TItem">The streamed element type.</typeparam>
 public sealed class StreamTimeoutBehavior<TRequest, TItem>(
     ILogger<StreamTimeoutBehavior<TRequest, TItem>> logger,
     IOptions<TimeoutOptions> options,
@@ -19,7 +23,7 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <inheritdoc />
-    public int PipelineExecutionPriority => 300;
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Timeout;
 
     /// <inheritdoc />
     public IAsyncEnumerable<TItem> Handle(
@@ -34,10 +38,9 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
 
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
-            using var activity = PipelineTelemetry.StartActivity("Timeout.Guard", request);
+            using var activity = PipelineTelemetry.StartActivity<TRequest>("Timeout.Guard");
             var timeout = options.Value.Timeout;
-
-            activity?.SetTag("cqrsharp.timeout_ms", timeout.TotalMilliseconds);
+            activity?.SetTag(CqrsTelemetry.Tags.TimeoutMilliseconds, timeout.TotalMilliseconds);
 
             using var timeoutCancellationTokenSource = new CancellationTokenSource(timeout, _timeProvider);
             using var linkedCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
@@ -45,29 +48,28 @@ public sealed class StreamTimeoutBehavior<TRequest, TItem>(
                 timeoutCancellationTokenSource.Token);
             var combinedCancellationToken = linkedCancellationTokenSource.Token;
 
-            logger.LogInformation(
-                "Timeout for {ReqName} set for {TimeoutMilliseconds}ms",
-                request.GetType().Name,
-                timeout.TotalMilliseconds);
-
-            await using var enumerator = next(combinedCancellationToken).GetAsyncEnumerator(combinedCancellationToken);
-
-            while (true)
+            var enumerator = next(combinedCancellationToken).GetAsyncEnumerator(combinedCancellationToken);
+            await using (enumerator.ConfigureAwait(false))
             {
-                bool moved;
-                try
+                while (true)
                 {
-                    moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-                {
-                    logger.LogError("{RequestName} stream timed out", typeof(TRequest).Name);
-                    activity?.SetStatus(ActivityStatusCode.Error, "Stream timed out.");
-                    throw new TimeoutException($"{typeof(TRequest).Name} stream timed out.");
-                }
+                    bool moved;
+                    try
+                    {
+                        // Each step resumes in the consumer's flow: the span is made current again for the steps below it.
+                        if (activity is not null) Activity.Current = activity;
+                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException ex) when (timeoutCancellationTokenSource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                    {
+                        TimeoutLog.StreamTimedOut(logger, typeof(TRequest).Name, timeout.TotalMilliseconds);
+                        activity?.SetStatus(ActivityStatusCode.Error, "Stream timed out.");
+                        throw new RequestTimeoutException(typeof(TRequest), timeout, ex);
+                    }
 
-                if (!moved) break;
-                yield return enumerator.Current;
+                    if (!moved) break;
+                    yield return enumerator.Current;
+                }
             }
 
             activity?.SetStatus(ActivityStatusCode.Ok);

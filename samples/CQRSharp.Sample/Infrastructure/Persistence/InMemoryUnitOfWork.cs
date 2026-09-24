@@ -1,45 +1,36 @@
 using System.Data;
-using CQRSharp.Pipelines;
-using Microsoft.Extensions.DependencyInjection;
+using CQRSharp.Persistence;
+using CQRSharp.Sample.Infrastructure.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Infrastructure.Persistence;
 
-public sealed class InMemoryUnitOfWork(ILogger<InMemoryUnitOfWork> logger, IServiceProvider serviceProvider)
-    : IExplicitUnitOfWork
+// The sample keeps no data of its own, so its unit of work only marks a transaction open and logs; a real one commits
+// its data store's transaction (saving pending changes first) and rolls it back (discarding them).
+public sealed class InMemoryUnitOfWork(ILogger<InMemoryUnitOfWork> logger) : IUnitOfWork
 {
     public bool HasActiveTransaction { get; private set; }
 
-    public async Task BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    public Task BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken)
     {
-        logger.LogInformation("--- UoW: Beginning Transaction (Isolation: {Level}) ---", isolationLevel);
+        if (HasActiveTransaction) throw new InvalidOperationException("A transaction is already active.");
         HasActiveTransaction = true;
-        await Task.CompletedTask;
+        SampleLog.TransactionBegun(logger, isolationLevel);
+        return Task.CompletedTask;
     }
 
-    public async Task CommitAsync(CancellationToken cancellationToken)
+    public Task CommitAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("--- UoW: Committing Transaction ---");
-        await SaveChangesAsync(cancellationToken);
+        if (!HasActiveTransaction) throw new InvalidOperationException("No transaction is active.");
         HasActiveTransaction = false;
+        SampleLog.TransactionCommitted(logger);
+        return Task.CompletedTask;
     }
 
-    public async Task RollbackAsync(CancellationToken cancellationToken)
+    public Task RollbackAsync(CancellationToken cancellationToken)
     {
-        logger.LogWarning("--- UoW: Rolling Back Transaction ---");
         HasActiveTransaction = false;
-        await Task.CompletedTask;
+        SampleLog.TransactionRolledBack(logger);
+        return Task.CompletedTask;
     }
-
-    public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
-    {
-        logger.LogInformation("--- UoW: Saving changes... ---");
-        return Task.FromResult(0);
-    }
-
-    public Task CreateSavepointAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task RollbackToSavepointAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;
-    public Task ReleaseSavepointAsync(string name, CancellationToken cancellationToken) => Task.CompletedTask;
-    public TService GetService<TService>() where TService : class => serviceProvider.GetRequiredService<TService>();
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

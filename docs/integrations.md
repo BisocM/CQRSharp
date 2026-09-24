@@ -1,8 +1,8 @@
 # Integrations
 
-The outbox and idempotency features need a **store**. The core package ships in-memory stores for
-development; for durable, production persistence, add an integration package and select its store verb
-inside `UseOutbox` / `UseIdempotency`.
+The [outbox](outbox.md) and [idempotency](idempotency-and-resilience.md#idempotency) features need a **store**. The core
+package ships in-memory stores for development; for durable storage, add an integration package and select its store
+verb inside `UseOutbox` / `UseIdempotency`.
 
 - [Redis](#redis)
 - [Entity Framework Core](#entity-framework-core)
@@ -15,38 +15,77 @@ inside `UseOutbox` / `UseIdempotency`.
 dotnet add package CQRSharp.Redis
 ```
 
-`CQRSharp.Redis` provides a durable `IOutboxStore` and `IIdempotencyStore` backed by Redis, and is
-**100% Native-AOT-clean**. All claim, lease, and finalize logic runs as **atomic server-side Lua**, so
-two processors never claim the same outbox message and crashed claimants are reclaimed after a
-visibility timeout. The idempotency store rejects duplicates via atomic set-if-not-exists claims with a
-server-side expiry window.
-
-Select it through the store builders:
+`CQRSharp.Redis` provides a durable `IOutboxStore` with its `IInboxStore`, and a durable `IIdempotencyStore`, backed by
+StackExchange.Redis. It is Native-AOT compatible. Every outbox claim, lease and finalize runs as one server-side Lua
+script, so two processors never claim one message and a crashed claimant's messages are reclaimed after the visibility
+timeout. The idempotency store claims a key atomically, remembers the payload fingerprint, and keeps a completed
+request's result for replay.
 
 ```csharp
 services.AddCqrsGenerated(b => b
-    .UseOutbox(o => o.Transactional().UseRedis("localhost:6379"))
+    .UseOutbox(o => o.UseRedis("localhost:6379"))
     .UseIdempotency(i => i.UseRedis("localhost:6379")));
 ```
 
-`UseRedis(...)` accepts either a connection string or an existing `IConnectionMultiplexer` (so you can
-share one multiplexer across your app). The same lower-level extensions —
-`AddRedisOutboxStore(...)` / `AddRedisIdempotencyStore(...)` — are available on `IServiceCollection` if
-you wire stores outside the builder.
+The Redis store does not join a unit-of-work transaction: a transactional request's notifications are stored right
+after its commit (see [How a publish reaches the store](outbox.md#how-a-publish-reaches-the-store)).
 
-Two operational notes for the Redis outbox:
+### Connections
 
-- **Visibility timeout.** One lease covers a whole claimed batch, which the processor dispatches
-  sequentially, so `RedisOutboxOptions.VisibilityTimeout` (default **5 minutes**) must comfortably exceed
-  `BatchSize × your slowest handler`. Too short, and a second instance reclaims — and re-delivers — the
-  tail of a batch that is still being worked through.
-- **Redis Cluster.** The store's Lua scripts touch several keys under `KeyPrefix` atomically, so on a
-  cluster those keys must share a hash slot. The default prefix, `{cqrsharp:outbox}:`, carries a hash tag for
-  exactly that reason; a custom prefix must keep one (`{...}`). Upgrading from 4.x, where the default was
-  `cqrsharp:outbox:`: set that value explicitly to keep draining messages already stored under it.
-- **One connection.** The outbox and idempotency stores share a single `IConnectionMultiplexer`. Passing two
-  different connection strings is rejected at registration; to use two servers, register the multiplexers
-  yourself and pass them to `UseRedis(IConnectionMultiplexer)`.
+Each `UseRedis` verb, on either builder, takes the connection in one of three forms, and each store runs on exactly the
+connection it is given, whatever `IConnectionMultiplexer` the application registers:
+
+| Form | Lifetime |
+| --- | --- |
+| `UseRedis("host:6379")`, a connection string | Opened when a store is first resolved, shared by every CQRSharp Redis store given the same string, and closed when the service provider is disposed. |
+| `UseRedis(multiplexer)`, an `IConnectionMultiplexer` | Used as given; CQRSharp never disposes it. |
+| `UseRedis(sp => ...)`, a factory | Runs once per service provider for each store (the outbox and its inbox share one call). It must return a connection the application or the container owns; CQRSharp never disposes it. |
+
+The factory form fits a connection the container already holds, such as Aspire's `AddRedisClient` or a keyed
+registration:
+
+```csharp
+.UseOutbox(o => o.UseRedis(sp => sp.GetRequiredService<IConnectionMultiplexer>()))
+```
+
+CQRSharp.Redis registers no `IConnectionMultiplexer` in the container. The outbox and the idempotency store may use
+different servers: pass each builder its own connection. Outside the builder, `AddRedisOutboxStore(...)` and
+`AddRedisIdempotencyStore(...)` on `IServiceCollection` take the same three forms plus an optional options callback. A
+blank connection string is rejected when the verb is called.
+
+### Options
+
+`RedisOutboxOptions` (namespace `CQRSharp.Redis`), set through `UseRedis(connection, o => ...)`:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `KeyPrefix` | `{cqrsharp:outbox}:` | Prefix of every key the outbox and inbox use. Must contain a non-empty hash tag; see below. |
+| `VisibilityTimeout` | `5 min` | How long a claim is leased before another processor may reclaim the message. At least 1 ms. |
+| `DeadLetterRetention` | `null` | How long a dead letter is kept, from when it failed. `null` keeps dead letters until they are requeued or purged. At least 1 ms when set. |
+| `InboxRetention` | `7 days` | How long an inbox record is kept. Must comfortably exceed `VisibilityTimeout`. At least 1 ms. |
+| `Database` | `-1` | The logical database; `-1` is the connection's default. |
+
+`RedisIdempotencyOptions`:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `KeyPrefix` | `{cqrs:idemp}:` | Prefix of the store's keys: `{KeyPrefix}k:{key}` holds a key's claim or result, `{KeyPrefix}f:{key}` its fingerprint. Must contain a non-empty hash tag. |
+| `Retention` | `24 h` | How long a claimed key is remembered, counted from the claim: the deduplication window. Redis times the expiry. At least 1 ms. |
+| `Database` | `-1` | The logical database; `-1` is the connection's default. |
+
+Invalid values fail host start, each reported once.
+
+- **Hash tag.** A store's scripts touch several keys at once, which Redis Cluster allows only when every key hashes to
+  one slot. A key with a hash tag (the text between the first `{` and the next `}`) is slotted by the tag alone, so
+  the tag in the prefix keeps all of a store's keys in one slot. The rule is enforced on a single server too, so a
+  store keeps working when it moves to a cluster. Changing a prefix does not move data stored under the old one.
+- **Visibility timeout.** The processor renews a message's lease just before dispatching it once half the lease has
+  passed, but never while its handler runs. Set `VisibilityTimeout` comfortably above twice the slowest single
+  handler; a longer value only delays recovery after a crash. A message whose lease lapsed and was reclaimed before
+  its turn is skipped, not delivered twice.
+- **Retention.** A processed message is deleted as soon as it is marked processed; the inbox is what recognises a
+  redelivery of it, for `InboxRetention`. Dead letters live in their own sorted set, listed, requeued and purged
+  through `IOutboxStore`. An inbox record is `{KeyPrefix}inbox:{messageId}:{handler}` with a TTL of `InboxRetention`.
 
 ## Entity Framework Core
 
@@ -54,64 +93,128 @@ Two operational notes for the Redis outbox:
 dotnet add package CQRSharp.EntityFrameworkCore
 ```
 
-`CQRSharp.EntityFrameworkCore` provides a durable `IOutboxStore` and `IIdempotencyStore` backed by a
-`DbContext`: the outbox uses an atomic claim with an optimistic-concurrency **visibility lease**,
-persisted retry/back-off, and dead-lettering; the idempotency store uses a keyed table with an
-optimistic-concurrency claim and a retention window.
+`CQRSharp.EntityFrameworkCore` provides, over your `DbContext`:
+
+- a durable `IOutboxStore` with its `IInboxStore`: a claim backed by a row version, persisted retries and dead letters;
+- a durable `IIdempotencyStore`: a keyed table with an optimistic-concurrency claim and a retention window;
+- `EfCoreUnitOfWork<TContext>`, the unit of work over the context's transaction.
+
+Each target framework of the package is built against its own EF Core major: `net8.0` against EF Core 8 (8.0.10 or
+later, below 9), `net9.0` against EF Core 9 (9.0.2 or later), `net10.0` against EF Core 10 (10.0.0 or later). An app on
+`net8.0` cannot use EF Core 9; target `net9.0` for it.
 
 ```csharp
+services.AddDbContext<AppDbContext>(o => o.UseSqlServer(connectionString));
+
 services.AddCqrsGenerated(b => b
-    .UseOutbox(o => o.Transactional().UseEntityFrameworkCore<AppDbContext>())
+    .UseEntityFrameworkCoreUnitOfWork<AppDbContext>()
+    .UseOutbox(o => o.UseEntityFrameworkCore<AppDbContext>())
     .UseIdempotency(i => i.UseEntityFrameworkCore<AppDbContext>()));
 ```
 
-The outbox store participates in your `DbContext`'s transaction, which is what makes the **transactional
-outbox** atomic with your business writes. Configure your `DbContext` to include the outbox/idempotency
-entities per the package's model setup.
+None of the verbs registers the `DbContext`; register it yourself. `UseEntityFrameworkCoreUnitOfWork<TContext>()` is
+`UseUnitOfWork(sp => new EfCoreUnitOfWork<TContext>(sp.GetRequiredService<TContext>()))`; see
+[Unit of work](unit-of-work.md#the-entity-framework-core-unit-of-work) for its semantics. Outside the builder,
+`AddEntityFrameworkCoreOutboxStore<TContext>()` and `AddEntityFrameworkCoreIdempotencyStore<TContext>()` register the
+stores.
 
-> **Schema change in 5.0.** `CqrsIdempotencyKeys` gained two columns — `Completed` (bool, not null) and `Result`
-> (binary, nullable) — so a completed request's outcome can be replayed. Add a migration when upgrading from 4.x.
+The outbox store and its inbox are scoped and write through the scope's `TContext`. While a transaction is open on that
+context (an `EfCoreUnitOfWork<TContext>` over the same instance, or one the application began), they **join** it: a
+request's notifications, or a delivery's inbox record, commit with the handler's changes. Without a transaction, a
+direct store (a publish from outside any request, or the end-of-request store in `Enabled` mode) calls
+`SaveChangesAsync` on the scoped context, which also saves every other change tracked on it: save or discard your own
+changes before publishing. The idempotency store is the opposite: it opens its own scope and context for every
+operation, so a claim never joins, or saves, the work of the request it guards.
 
-The idempotency store is deliberately the opposite: it resolves a **fresh `DbContext` per claim/release**
-(through a DI scope), so a claim never joins — or flushes — the unit of work of the request it guards.
+### Mapping the tables
 
-> **Retention.** Both stores keep their tables bounded on their own, piggybacking on normal operation (no
-> extra job): processed outbox messages are deleted after `EfCoreOutboxStoreOptions.ProcessedRetention`
-> (default 7 days; `null` keeps them forever; **dead-lettered messages are never purged**), at most once per
-> `PurgeInterval`, and expired idempotency keys are swept from the claim path.
+Map the tables in your `DbContext`, then add a migration:
 
-> **Not Native-AOT compatible.** EF Core uses runtime query compilation, so the EF integration is marked
-> `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]` and is **not** AOT- or full-trim-safe. If you
-> publish with Native AOT, use the Redis store (or a custom AOT-safe store) instead. See
-> [Native AOT](native-aot.md).
+```csharp
+using CQRSharp.EntityFrameworkCore;
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.ApplyCqrsOutbox();                                     // CqrsOutboxMessages and CqrsInboxRecords
+    modelBuilder.ApplyCqrsIdempotency(
+        IdempotencyEntityConfiguration.SqlServerBinaryCollation);       // CqrsIdempotencyKeys; SQL Server only
+}
+```
+
+- Idempotency keys compare ordinally and case-sensitively. On SQL Server, whose default collation folds case, pass
+  `IdempotencyEntityConfiguration.SqlServerBinaryCollation` (`Latin1_General_100_BIN2`); on SQLite and PostgreSQL call
+  `ApplyCqrsIdempotency()` without a collation.
+- Both stores check the context's **model** at host start: a context that does not map the tables, or on SQL Server an
+  idempotency key column without a case-sensitive collation, fails start with the fix in the message. The database
+  schema itself is not checked, so apply the migration.
+- The idempotency key column holds up to 450 characters (`IdempotencyEntityConfiguration.KeyMaxLength`) and the
+  fingerprint up to 128 (`FingerprintMaxLength`); the store refuses a longer one with an `InvalidOperationException`
+  before touching the database. The outbox holds handler names and partition keys of up to 256 characters
+  (`OutboxEntityConfiguration.HandlerNameMaxLength` and `PartitionKeyMaxLength`).
+- The entity types (`OutboxEntity`, `InboxEntity`, `IdempotencyEntity`) have virtual properties and change
+  notifications, so they map in contexts that use lazy-loading or change-tracking proxies.
+
+Upgrading from 4.x changes the schema; the [CHANGELOG](../CHANGELOG.md) lists the migration steps.
+
+### Options and retention
+
+`EfCoreOutboxStoreOptions` (namespace `CQRSharp.EntityFrameworkCore`), set through
+`UseEntityFrameworkCore<TContext>(o => ...)`:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `VisibilityTimeout` | `5 min` | How long a claim is leased before another processor may reclaim the message. |
+| `MaxClaimAttempts` | `3` | How often a batch claim that lost the row-version race to another processor is tried again before the contested messages are left for the next poll. At least 1. |
+| `ProcessedRetention` | `7 days` | How long a processed message is kept; `null` keeps processed messages forever. |
+| `DeadLetterRetention` | `null` | How long a dead letter is kept, from when it failed; `null` keeps dead letters until they are requeued or purged. |
+| `InboxRetention` | `7 days` | How long an inbox record is kept. Must comfortably exceed `VisibilityTimeout`. |
+| `PurgeInterval` | `1 h` | The time between two purges. At most the longest delay a timer can wait (about 49 days). |
+
+`EfCoreIdempotencyStoreOptions.Retention` (default `24 h`) is how long a claimed key is remembered: the deduplication
+window.
+
+Every duration must be greater than zero, and at most 10 years except `PurgeInterval`; a value out of range fails host
+start, each reported once.
+
+Retention runs in hosted services the store verbs register, never on a request or a claim. The outbox service deletes
+processed messages, dead letters past `DeadLetterRetention` and inbox records when the host starts and then every
+`PurgeInterval`, and is idle while the outbox is off. The idempotency service deletes expired keys when the host starts
+and then every `Retention`, at least hourly. Both delete in pages of 1,000 rows, and a failed purge is logged and tried
+again an interval later. An app without the generic host runs no hosted services, and so gets no retention.
+
+> **Execution strategies.** `EfCoreUnitOfWork` refuses to begin a transaction on a context configured with a retrying
+> execution strategy (`EnableRetryOnFailure`), which rejects a transaction the application begins itself. Retry whole
+> requests with [`UseResilience`](idempotency-and-resilience.md#resilience--retries) instead.
+
+> **Not Native-AOT compatible.** EF Core compiles queries at runtime, so the package's registration verbs are annotated
+> `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]`. If you publish with Native AOT, use the Redis store or an
+> AOT-safe store of your own; see [Native AOT](native-aot.md).
 
 ## Choosing a store
 
-| Store | Package | Durable | Native AOT | Concurrency model |
-| --- | --- | --- | --- | --- |
-| In-memory | `CQRSharp.Core` | No | Yes | In-process only |
-| Redis | `CQRSharp.Redis` | Yes | Yes | Atomic server-side Lua claim + visibility timeout |
-| EF Core | `CQRSharp.EntityFrameworkCore` | Yes | No | Optimistic-concurrency claim lease |
+| Store | Package | Durable | Native AOT | Claims | Joins the unit of work |
+| --- | --- | --- | --- | --- | --- |
+| In-memory | `CQRSharp.Core` | No | Yes | In-process lock | No |
+| Redis | `CQRSharp.Redis` | Yes | Yes | Server-side Lua script and visibility timeout | No |
+| EF Core | `CQRSharp.EntityFrameworkCore` | Yes | No | Row-version claim and visibility timeout | Yes, while a transaction is open on its context |
 
-The outbox and idempotency stores are chosen **independently** — you can run a Redis outbox with an EF
-idempotency store, or any other mix.
+A store that joins the unit of work makes a transactional request's notifications atomic with its data, and, with the
+inbox, a delivery exactly-once for what its handler writes through that context. Any other store is written right after
+the commit; see [How a publish reaches the store](outbox.md#how-a-publish-reaches-the-store) and
+[The inbox](outbox.md#the-inbox-effectively-once-delivery).
+
+The outbox and idempotency stores are chosen independently: a Redis outbox with an EF Core idempotency store, or any
+other mix. Every explicit store registration, builder verb or `Add*Store` method, replaces the store of its kind that is
+already registered, whatever the order relative to `AddCqrsGenerated`; the last explicit choice wins, and the outbox and
+inbox stores are always replaced as a pair.
 
 ## Writing your own
 
-Both store contracts are small and documented:
+Implement the contracts in `CQRSharp.Persistence` and register them through the `UseStore(Action<IServiceCollection>)`
+hook on either builder:
 
-- [`IOutboxStore`](outbox.md#custom-stores) — `StoreAsync`, `GetPendingAsync` (atomic claim, issuing an
-  `OutboxClaim` per message), and the claim-checked `MarkAsProcessedAsync`, `IncrementAttemptAsync`
-  (retry/back-off), `MarkAsFailedAsync` (dead-letter), `RenewAsync` and `ReleaseAsync`. Run the shared
-  contract suite against your store — see [Claims and leases](outbox.md#claims-and-leases).
-- [`IIdempotencyStore`](idempotency-and-resilience.md#idempotency) — `TryClaimAsync`, `ReleaseAsync`.
+- `IOutboxStore` and `IInboxStore`: see [Custom stores](outbox.md#custom-stores).
+- `IIdempotencyStore`: see [Idempotency](idempotency-and-resilience.md#the-store-contract).
 
-Register a custom store through the `UseStore(Action<IServiceCollection>)` hook on either builder:
-
-```csharp
-.UseOutbox(o => o.Transactional().UseStore(s => s.AddSingleton<IOutboxStore, MyStore>()))
-```
-
-Then verify it against the shared **store contract tests** before relying on it — see
-[Testing](testing.md). Honoring the contract (atomic claims, persisted retry counts, case-sensitive
-idempotency keys) is what guarantees correct behavior under concurrency and restarts.
+Then verify the store against the contract suites in `CQRSharp.Testing.Xunit.V3`; see
+[The testing packages](testing-package.md#contract-testing-an-outbox-store).

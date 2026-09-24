@@ -1,19 +1,19 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using CQRSharp.Pipelines;
-using CQRSharp;
-using CQRSharp.Core.Background.Outbox;
-using CQRSharp.Core.Background.Outbox.Types;
-using CQRSharp.Core.Background.TaskQueue;
-using CQRSharp.Core.Background.TaskQueue.Telemetry;
+using CQRSharp.Core;
+using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Exceptions;
 using CQRSharp.Core.Idempotency;
+using CQRSharp.Core.Modules;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Outbox;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace CQRSharp;
 
@@ -22,67 +22,53 @@ namespace CQRSharp;
 /// </summary>
 public static class DependencyInjectionExtensions
 {
-	/// <summary>
-	///     Low-level core registration. <b>Prefer <c>AddCqrsGenerated(...)</c></b>, which also applies the
-	///     source-generated handler routing. Calling <c>AddCqrs</c> directly registers the dispatcher but NOT the
-	///     routing, so the first <c>Send</c>/<c>Stream</c>/<c>Publish</c> finds no handler and fails at runtime. This is
-	///     intended only for the generated bootstrap and the fluent builder, which call it internally.
-	/// </summary>
-	/// <param name="services">The <see cref="IServiceCollection" /> to add the services to.</param>
-	/// <param name="configureQueue">An optional action to configure the background task queue options.</param>
-	/// <param name="configureOutbox">An optional action to configure notification outbox options.</param>
-	/// <param name="configureDispatcher">
-	///     An optional action to configure dispatcher options such as <see cref="DispatcherOptions.RunMode" /> and
-	///     <see cref="DispatcherOptions.ScopeMode" />.
-	/// </param>
-	/// <param name="configureValidation">
-	///     An optional action to configure the fail-fast startup validator (its <see cref="CqrsValidationPolicy" />).
-	///     Defaults to <see cref="CqrsValidationPolicy.ThrowOnError" />, aborting host start when a configuration error
-	///     is found.
-	/// </param>
-	/// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
-	[EditorBrowsable(EditorBrowsableState.Never)]
-	public static IServiceCollection AddCqrs(this IServiceCollection services,
-        Action<BackgroundTaskQueueOptions>? configureQueue = null,
-        Action<OutboxOptions>? configureOutbox = null,
-        Action<DispatcherOptions>? configureDispatcher = null,
-        Action<CqrsStartupValidationOptions>? configureValidation = null)
+    /// <summary>
+    ///     The core registration the source-generated <c>AddCqrsGenerated</c> entry points call. Call
+    ///     <c>AddCqrsGenerated(...)</c> instead: this registers the dispatcher but not the source-generated handler routing,
+    ///     so on its own the first <c>Send</c>/<c>Stream</c>/<c>Publish</c> finds no handler. Options are configured through
+    ///     the <c>AddCqrsGenerated</c> builder or <c>services.Configure&lt;T&gt;</c>.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection" /> to add the services to.</param>
+    /// <returns>The <see cref="IServiceCollection" /> so that additional calls can be chained.</returns>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public static IServiceCollection AddCqrs(this IServiceCollection services)
     {
-        services.AddOptions<BackgroundTaskQueueOptions>()
-            .Configure(opts => configureQueue?.Invoke(opts))
-            .Validate(o => o.Capacity > 0, "BackgroundTaskQueueOptions.Capacity must be greater than zero.")
-            .Validate(o => o.CallbackChannelCapacity > 0, "BackgroundTaskQueueOptions.CallbackChannelCapacity must be greater than zero.")
-            .Validate(o => o.NotificationMaxRetries >= 1, "BackgroundTaskQueueOptions.NotificationMaxRetries must be at least 1.")
-            .Validate(o => o.ConsumerStartTimeout > TimeSpan.Zero, "BackgroundTaskQueueOptions.ConsumerStartTimeout must be greater than zero.")
-            .ValidateOnStart();
-
-        services.Configure<DispatcherOptions>(opts => configureDispatcher?.Invoke(opts));
-
-        // Register the outbox configuration faithfully (every property, not just Mode).
-        services.Configure<OutboxOptions>(opts => configureOutbox?.Invoke(opts));
+        // Every options type is validated at host start by a validator class registered once, so a second AddCqrs (each
+        // AddCqrsGenerated call runs one) reports a failure once rather than once per call.
+        AddValidatedOptions<BackgroundTaskQueueOptions, BackgroundTaskQueueOptionsValidator>(services);
+        AddValidatedOptions<DispatcherOptions, DispatcherOptionsValidator>(services);
+        AddValidatedOptions<OutboxOptions, OutboxOptionsValidator>(services);
 
         // The single clock seam: every time-dependent component reads "now" through TimeProvider, so behavior is
         // deterministic under test (via FakeTimeProvider) and overridable by consumers. Defaults to the system clock;
         // a consumer that registers their own TimeProvider before/after AddCqrs wins.
         services.TryAddSingleton(TimeProvider.System);
 
-        services.TryAddScoped<IOutbox, Outbox>();
-        services.TryAddScoped<OutboxBufferingState>();
+        // The scope's outbox buffer is a runtime detail with ownership rules only the runtime keeps: resolved as itself.
+        services.TryAddScoped<ScopedOutbox>();
 
-        services.TryAddSingleton<IQueueMetricsReporter, OpenTelemetryQueueMetricsReporter>();
-        services.TryAddTransient<IRequestContextFactory, DefaultRequestContextFactory>();
+        // The wake-up between whoever stores outbox messages in this process and the processor: cheap, so always there.
+        services.TryAddSingleton<OutboxSignal>();
+        services.TryAddSingleton<IOutboxSignal>(sp => sp.GetRequiredService<OutboxSignal>());
 
         // Per-scope objects are built from factories over pre-resolved singletons: creating a DI scope and dispatching
         // once (every web request) should cost a few allocations, not a series of container lookups.
         services.TryAddSingleton<RequestPlanCache>();
+        services.TryAddSingleton<CqrsMetrics>();
         services.TryAddSingleton<PipelineExecutorShared>();
-        // Transient, not scoped: the executor holds no per-scope state beyond the provider it was resolved from, and the
-        // (scoped) ICqrsDispatcher keeps the instance it resolves — so a scope still ends up with one, without paying the
-        // scope's resolved-services cache for it.
-        services.TryAddTransient<IPipelineExecutor>(sp => new PipelineExecutor(sp, sp.GetRequiredService<PipelineExecutorShared>()));
-        services.TryAddSingleton<IRequestExceptionHookRegistry, RequestExceptionHookRegistry>();
+        services.TryAddSingleton<IRequestExceptionHookRegistry>(RequestExceptionHookRegistry.Empty);
 
-        services.TryAddScoped<IDirectNotificationDispatcher, DirectNotificationDispatcher>();
+        AddValidatedOptions<NotificationOptions, NotificationOptionsValidator>(services);
+
+        // What an in-process publish needs that is the same for every scope, built once from the modules the composition
+        // registers; the scoped dispatcher only adds the scope.
+        services.TryAddSingleton(sp => new NotificationRouting(
+            sp.GetServices<ICqrsModule>(),
+            sp.GetService<INotificationSubscriptionRegistry>(),
+            sp.GetRequiredService<IOptions<NotificationOptions>>().Value.PublishStrategy,
+            sp.GetService<IServiceProviderIsService>(),
+            sp.GetRequiredService<CqrsMetrics>()));
+        services.TryAddScoped<IDirectNotificationDispatcher>(sp => new DirectNotificationDispatcher(sp, sp.GetRequiredService<NotificationRouting>()));
         services.TryAddScoped<INotificationDispatcher, NotificationDispatcher>();
 
         // Single CQRSharp façade: inject one thing (scoped to preserve DI scope semantics).
@@ -99,56 +85,48 @@ public static class DependencyInjectionExtensions
 
         services.AddLogging();
 
-        // Fail-fast startup validation: surfaces silent fallbacks (an unbacked outbox, a transactional outbox that
-        // cannot detect a transaction, outbox-bypassing notifications, a missing generated registry) as loud, early
-        // failures at host start. TryAddEnumerable keeps the hosted service single even if AddCqrs runs twice.
-        services.AddOptions<CqrsStartupValidationOptions>()
-            .Configure(o => configureValidation?.Invoke(o))
-            .ValidateOnStart();
+        // Fail-fast startup validation: surfaces silent fallbacks (an unbacked outbox, a transactional outbox with no
+        // unit of work, outbox-bypassing notifications, a marker without its behavior) as loud, early failures before any
+        // hosted service starts. TryAddEnumerable keeps the hosted service single even if AddCqrs runs twice.
+        AddValidatedOptions<CqrsStartupValidationOptions, CqrsStartupValidationOptionsValidator>(services);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CqrsStartupValidator>());
 
-        // Register the outbox processor only when the outbox is actually enabled. The mode is read from a throwaway
-        // copy so the decision can be made at registration time; the real options were configured above. With the
-        // honest default (OutboxMode.Disabled) this means no configuration ⇒ no processor, matching the stated default.
-        var effectiveOutbox = new OutboxOptions();
-        configureOutbox?.Invoke(effectiveOutbox);
-        if (effectiveOutbox.Mode != OutboxMode.Disabled)
-            services.AddOutboxProcessor();
+        // The outbox processor is always registered: whether the outbox is on is only known once the options are
+        // final (a Configure<OutboxOptions> or a configuration binding after this call counts too), so the processor
+        // reads the effective mode when the host starts and idles while it is Disabled.
+        services.AddOutboxProcessor();
 
         return services;
     }
 
-	/// <summary>
-	///     Registers the outbox processor as a hosted background service.
-	///     This is required for notifications sent via the outbox pattern to be processed.
-	///     It is recommended to also register an <see cref="IOutboxStore" /> implementation.
-	/// </summary>
-	/// <param name="services">The service collection.</param>
-	/// <param name="configureOptions">An action to configure the outbox processor options.</param>
-	/// <returns>The service collection for chaining.</returns>
-	public static IServiceCollection AddOutboxProcessor(
-        this IServiceCollection services,
-        Action<OutboxProcessorOptions>? configureOptions = null)
+    // The processor's options (validated on start) and the hosted service itself. Tuned through
+    // UseOutbox(o => o.ConfigureProcessor(...)) or services.Configure<OutboxProcessorOptions>(...).
+    internal static IServiceCollection AddOutboxProcessor(this IServiceCollection services)
     {
-        services.AddOptions<OutboxProcessorOptions>()
-            .Configure(opts => configureOptions?.Invoke(opts))
-            .Validate(o => o.PollingInterval > TimeSpan.Zero,
-                "OutboxProcessorOptions.PollingInterval must be greater than zero (a non-positive interval would hot-loop the processor).")
-            .Validate(o => o.BatchSize > 0, "OutboxProcessorOptions.BatchSize must be greater than zero.")
-            .Validate(o => o.MaxRetryAttempts >= 1, "OutboxProcessorOptions.MaxRetryAttempts must be at least 1.")
-            .ValidateOnStart();
+        AddValidatedOptions<OutboxProcessorOptions, OutboxProcessorOptionsValidator>(services);
 
         services.AddHostedService<OutboxProcessor>();
         return services;
     }
 
+    private static void AddValidatedOptions<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TValidator>(IServiceCollection services)
+        where TOptions : class
+        where TValidator : class, IValidateOptions<TOptions>
+    {
+        services.AddOptions<TOptions>().ValidateOnStart();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<TOptions>, TValidator>());
+    }
+
     /// <summary>
-    ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />. The store is NOT
-    ///     durable — messages live in process memory and are lost on restart — so it is intended for development,
-    ///     tests, and single-node demos, not production (use a database- or Redis-backed store there). Prefer enabling
-    ///     the outbox through the fluent builder (<c>UseOutbox</c> with <c>o.UseInMemoryStore()</c>), which selects the
-    ///     mode, registers this store, and runs the processor in one step; call this primitive directly only to wire a
-    ///     store outside the builder.
+    ///     Registers the in-process in-memory outbox store as the <see cref="IOutboxStore" />, together with the matching
+    ///     in-memory <see cref="IInboxStore" />. The store is NOT durable — messages live in process memory and are lost
+    ///     on restart — so it is intended for development, tests, and single-node demos, not production (use a database-
+    ///     or Redis-backed store there). Like every explicit store registration it <b>replaces</b> the outbox and inbox
+    ///     stores already registered, whichever registered them, so the last explicit choice wins. The store is used once
+    ///     the outbox is on (the builder's <c>UseOutbox(...)</c>, or <see cref="OutboxOptions.Mode" />); prefer
+    ///     <c>UseOutbox(o =&gt; o.UseInMemoryStore())</c>, which turns it on and registers this store in one step.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory store options.</param>
@@ -157,25 +135,45 @@ public static class DependencyInjectionExtensions
         this IServiceCollection services,
         Action<InMemoryOutboxStoreOptions>? configure = null)
     {
-        services.AddOptions<InMemoryOutboxStoreOptions>()
-            .Configure(opts => configure?.Invoke(opts))
-            .Validate(o => o.VisibilityTimeout > TimeSpan.Zero,
-                "InMemoryOutboxStoreOptions.VisibilityTimeout must be greater than zero.")
-            .ValidateOnStart();
+        AddInMemoryOutboxStoreOptions(services, configure);
 
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<IOutboxStore, InMemoryOutboxStore>();
+        // Swapped as a pair: a durable outbox left beside this inbox (or the other way round) would record deliveries
+        // somewhere other than where the messages live.
+        services.RemoveAll<IOutboxStore>();
+        services.RemoveAll<IInboxStore>();
+        services.AddSingleton<IOutboxStore, InMemoryOutboxStore>();
+        services.AddSingleton<IInboxStore, InMemoryInboxStore>();
 
         return services;
+    }
+
+    // The builder's default for a bare UseOutbox(...): the in-memory pair, only while no outbox store is registered at
+    // all. A store registered earlier is kept, one registered later replaces this, and a custom outbox store without
+    // an inbox is not given an in-memory one.
+    internal static void AddInMemoryOutboxStoreFallback(IServiceCollection services)
+    {
+        if (services.Any(d => d.ServiceType == typeof(IOutboxStore))) return;
+
+        AddInMemoryOutboxStoreOptions(services, null);
+        services.AddSingleton<IOutboxStore, InMemoryOutboxStore>();
+        services.TryAddSingleton<IInboxStore, InMemoryInboxStore>();
+    }
+
+    private static void AddInMemoryOutboxStoreOptions(IServiceCollection services, Action<InMemoryOutboxStoreOptions>? configure)
+    {
+        AddValidatedOptions<InMemoryOutboxStoreOptions, InMemoryOutboxStoreOptionsValidator>(services);
+        if (configure is not null) services.Configure(configure);
+
+        services.TryAddSingleton(TimeProvider.System);
     }
 
     /// <summary>
     ///     Registers the in-process in-memory idempotency store as the <see cref="IIdempotencyStore" />, so requests
     ///     implementing <c>IIdempotentRequest</c> are deduplicated. The store is NOT durable — claims live in process
     ///     memory and are lost on restart — so it deduplicates only within a single process lifetime; use a database-
-    ///     or Redis-backed store for cross-process at-most-once semantics. Prefer enabling idempotency through the fluent
-    ///     builder (<c>UseIdempotency</c> with <c>i.UseInMemoryStore()</c>), which turns on the behavior and registers
-    ///     this store together; call this primitive directly only to wire a store outside the builder.
+    ///     or Redis-backed store for cross-process at-most-once semantics. Like every explicit store registration it
+    ///     <b>replaces</b> the idempotency store already registered, so the last explicit choice wins. Prefer
+    ///     <c>UseIdempotency(i =&gt; i.UseInMemoryStore())</c>, which turns on the behavior and registers this store together.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">An optional action to configure the in-memory idempotency store options.</param>
@@ -184,29 +182,53 @@ public static class DependencyInjectionExtensions
         this IServiceCollection services,
         Action<InMemoryIdempotencyStoreOptions>? configure = null)
     {
-        services.AddOptions<InMemoryIdempotencyStoreOptions>()
-            .Configure(opts => configure?.Invoke(opts))
-            .Validate(o => o.Retention > TimeSpan.Zero,
-                "InMemoryIdempotencyStoreOptions.Retention must be greater than zero.")
-            .ValidateOnStart();
-
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+        AddInMemoryIdempotencyStoreOptions(services, configure);
+        services.RemoveAll<IIdempotencyStore>();
+        services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
         return services;
     }
 
-	/// <summary>
-	///     Registers a custom implementation of INotificationSerializer as a singleton.
-	///     This method is compatible with trimming and Native AOT.
-	/// </summary>
-	/// <param name="services">The IServiceCollection to add the service to.</param>
-	/// <typeparam name="TSerializer">The type of the concrete serializer implementation.</typeparam>
-	/// <returns>The IServiceCollection so that additional calls can be chained.</returns>
-	public static IServiceCollection AddNotificationSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSerializer>(
+    // The builder's default for a bare UseIdempotency(): the in-memory store, only while no idempotency store is
+    // registered. A store registered earlier is kept, and one registered later replaces this.
+    internal static void AddInMemoryIdempotencyStoreFallback(IServiceCollection services)
+    {
+        if (services.Any(d => d.ServiceType == typeof(IIdempotencyStore))) return;
+
+        AddInMemoryIdempotencyStoreOptions(services, null);
+        services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+    }
+
+    private static void AddInMemoryIdempotencyStoreOptions(IServiceCollection services, Action<InMemoryIdempotencyStoreOptions>? configure)
+    {
+        AddValidatedOptions<InMemoryIdempotencyStoreOptions, InMemoryIdempotencyStoreOptionsValidator>(services);
+        if (configure is not null) services.Configure(configure);
+
+        services.TryAddSingleton(TimeProvider.System);
+    }
+
+    /// <summary>
+    ///     Registers <typeparamref name="TSerializer" /> as the application's one <see cref="INotificationSerializer" />
+    ///     (a singleton), replacing the source-generated serializer completely, whether this runs before or after
+    ///     <c>AddCqrsGenerated</c>. From then on it alone decides which notifications are durable and under which names:
+    ///     while an outbox mode is active, a notification its <see cref="INotificationSerializer.TryGetNotificationName" />
+    ///     names is stored in the outbox under that name, and any other is dispatched in-process. The generated
+    ///     serializers are not consulted, so it must name, serialize and deserialize every notification that should
+    ///     be durable, the <see cref="NotificationNameAttribute" /> ones included. A second call replaces the first.
+    ///     Compatible with trimming and Native AOT.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <typeparam name="TSerializer">The serializer, resolved from the container once.</typeparam>
+    /// <returns>The service collection so that additional calls can be chained.</returns>
+    public static IServiceCollection AddNotificationSerializer<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSerializer>(
         this IServiceCollection services)
         where TSerializer : class, INotificationSerializer
     {
+        ArgumentNullException.ThrowIfNull(services);
+
+        // Not a plain Add: an already registered generated serializer must not linger beside this one as a second
+        // answer to what is durable. When AddCqrsGenerated runs later, its TryAdd leaves this registration alone.
+        services.RemoveAll<INotificationSerializer>();
         services.AddSingleton<INotificationSerializer, TSerializer>();
         return services;
     }

@@ -1,36 +1,33 @@
+using CQRSharp.Sample.Infrastructure.Logging;
 using CQRSharp.Sample.Infrastructure.SelfTest;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Sample.Infrastructure.Interceptors;
 
+/// <summary>
+///     A pre- and post-handler in one attribute, placed on the requests it applies to. It runs inside the pipeline, right
+///     around the handler; the post-handler reads the outcome, so it can tell a returned result from a thrown exception.
+/// </summary>
 [AttributeUsage(AttributeTargets.Class)]
-public class CustomInterceptorAttribute(int priority) : Attribute, ICommandInterceptor
+public sealed class CustomInterceptorAttribute(int priority) : Attribute, IPreHandlerAttribute, IPostHandlerAttribute
 {
     public int PreHandlerExecutionPriority => priority;
     public int PostHandlerExecutionPriority => priority;
 
-    public async Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider,
-        CancellationToken cancellationToken)
+    public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
-        var logger = serviceProvider.GetService<ILogger<CustomInterceptorAttribute>>();
-        logger?.LogInformation(
-            "[PRE-HANDLER] Intercepting request of type {RequestType} with priority {Priority}",
-            request.GetType().Name, PreHandlerExecutionPriority);
-
-        serviceProvider.GetService<SampleDiagnostics>()?.RecordInterceptorPre(request.GetType());
-        await Task.CompletedTask;
+        serviceProvider.GetRequiredService<SampleDiagnostics>().RecordInterceptorPre(request.GetType());
+        return Task.CompletedTask;
     }
 
-    public async Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider,
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider,
         CancellationToken cancellationToken)
     {
-        var logger = serviceProvider.GetService<ILogger<CustomInterceptorAttribute>>();
-        logger?.LogInformation(
-            "[POST-HANDLER] Completed handling request of type {RequestType} with priority {Priority}",
-            request.GetType().Name, PostHandlerExecutionPriority);
+        var logger = serviceProvider.GetRequiredService<ILogger<CustomInterceptorAttribute>>();
+        SampleLog.InterceptedRequest(logger, request.GetType().Name, outcome.Threw ? "threw" : "returned");
 
-        serviceProvider.GetService<SampleDiagnostics>()?.RecordInterceptorPost(request.GetType());
-        await Task.CompletedTask;
+        serviceProvider.GetRequiredService<SampleDiagnostics>().RecordInterceptorPost(request.GetType(), outcome);
+        return Task.CompletedTask;
     }
 }

@@ -1,52 +1,49 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
         <LangVersion>default</LangVersion>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <!--
-            Deliberately NO IsAotCompatible / EnableAotAnalyzer here: EF Core relies on runtime query
+            Deliberately no IsAotCompatible here: EF Core relies on runtime query
             compilation (expression trees, reflection) and cannot be Native AOT'd or fully trimmed. The
             public surface is instead annotated with [RequiresDynamicCode]/[RequiresUnreferencedCode] so
             callers building AOT/trimmed apps get a clear analyzer warning at the call site.
         -->
     </PropertyGroup>
 
-    <!-- Multi-TFM gating copied from Core.csproj: widen only when the building SDK supports the newer TFM. -->
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    </PropertyGroup>
-
     <PropertyGroup>
         <PackageTags>CQRS;CQRSharp;EntityFrameworkCore;Outbox;Idempotency</PackageTags>
         <Title>EF Core integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
-        <Description>An Entity Framework Core integration for CQRSharp. Its first feature is a durable IOutboxStore backed by a DbContext: atomic claim with an optimistic-concurrency visibility lease, persisted retry/back-off and dead-lettering. It also provides a durable IIdempotencyStore backed by a keyed table with an optimistic-concurrency claim and a retention window. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
+        <Description>An Entity Framework Core integration for CQRSharp: a durable IOutboxStore (leased claims, ordered partitions, retries, dead letters, retention), an IInboxStore, an IIdempotencyStore with claim tokens, payload fingerprints and result replay, and a unit of work over the DbContext (UseEntityFrameworkCoreUnitOfWork&lt;TContext&gt;()) that commits a request's changes with its outbox messages. Each target framework is built against its own EF Core major: net8.0 against EF Core 8, net9.0 against EF Core 9, net10.0 against EF Core 10. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. Breaking schema change: the idempotency table gains Completed and Result columns (result replay) - add a migration after upgrading. Outbox claims are backed by the row version, so several instances can drain one outbox. Fixes the idempotency store being a singleton over the scoped DbContext (a startup failure under scope validation). Stores purge processed outbox messages (ProcessedRetention) and expired idempotency keys, release claims only when they still own them, and detach entities whose save failed. Breaking: the authoring surface is flattened to two namespaces, CQRSharp and CQRSharp.Pipelines (replace your CQRSharp.Abstractions.* / CQRSharp.Core.* usings; the CQRSharp meta-package applies both as global usings). See CHANGELOG.md for the full list.
+            Version 5.0.0 (breaking; add a migration). Outbox rows carry a handler name, partition key and failure time, and ApplyCqrsOutbox() maps the CqrsInboxRecords table; the idempotency table stores the result and a payload fingerprint. On SQL Server, map the idempotency key with IdempotencyEntityConfiguration.SqlServerBinaryCollation.
+            New: EfCoreUnitOfWork&lt;TContext&gt; and hosted retention services. Each target framework builds against its own EF Core major (8, 9, 10). The store classes are internal; register them through the store verbs.
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
         <!-- Referenced for the OutboxStoreBuilder/IdempotencyStoreBuilder the UseEntityFrameworkCore&lt;T&gt; fluent
-             verbs extend; the store impls themselves still target only the Abstractions contracts. -->
+             verbs extend; the store implementations target only the Abstractions contracts. -->
         <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <!-- Referenced for the ICqrsBuilder the UseEntityFrameworkCoreUnitOfWork&lt;T&gt; verb extends. -->
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
     </ItemGroup>
 
+    <!--
+        Versioned per target framework in Directory.Packages.props: each target is compiled against, and depends on, its
+        own EF Core major. The Microsoft.Extensions abstractions come from EF Core and CQRSharp.Core; referencing them
+        here at the Core floor would downgrade what EF Core 9 and 10 require (NU1605).
+    -->
     <ItemGroup>
         <PackageReference Include="Microsoft.EntityFrameworkCore"/>
         <!-- ToTable/IsRowVersion and the other fluent relational mapping APIs live in the Relational package; the
              base EF Core metapackage does not include it. The outbox is a relational table, so this is required. -->
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational"/>
-        <PackageReference Include="Microsoft.Extensions.Options"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     </ItemGroup>
 
     <ItemGroup>

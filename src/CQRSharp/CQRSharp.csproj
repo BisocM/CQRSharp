@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
 
         <IncludeBuildOutput>false</IncludeBuildOutput>
 
@@ -10,20 +10,18 @@
         <NoWarn>$(NoWarn);CS2008;NU5128</NoWarn>
     </PropertyGroup>
 
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-    </PropertyGroup>
-
     <PropertyGroup>
         <!-- Meta-package: no lib output, so no symbol package. -->
         <IncludeSymbols>false</IncludeSymbols>
-        <Title>A lightweight, extensible, and attribute-driven Command Query Responsibility Segregation (CQRS) framework for .NET applications.</Title>
-        <PackageTags>CQRS;CQRSharp;NativeAOT</PackageTags>
-        <Description>A lightweight, attribute-driven CQRS framework for .NET 8/9/10 with first-class Native AOT support. A Roslyn source generator wires up command, query, stream, and notification dispatch at compile time — no runtime reflection — and bundled analyzers catch wiring mistakes as you type. Install this meta-package for the full plug-and-play setup: abstractions, runtime, source generator, and analyzers.</Description>
+        <Title>CQRSharp: a source-generated, Native-AOT-safe CQRS framework for .NET.</Title>
+        <PackageTags>CQRS;CQRSharp;NativeAOT;SourceGenerator</PackageTags>
+        <Description>A CQRS framework for .NET 8/9/10 that is wired at compile time. A Roslyn source generator emits the command, query, stream and notification dispatch and the handler registrations as plain C#, so there is no runtime reflection and the whole thing is trimming- and Native-AOT-safe; analyzers catch wiring mistakes as you type. Pipeline behaviors (validation and exception handling on by default; logging, retries, timeouts, rate limiting, idempotency and unit of work opt-in) and a transactional outbox come behind one fluent builder. Install this meta-package for the full setup: the contracts, the runtime, the pipeline behaviors, the source generator and the analyzers.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0, a major release with breaking changes. Application code uses the CQRSharp and CQRSharp.Pipelines namespaces (global usings with ImplicitUsings); store and unit-of-work implementations add CQRSharp.Persistence.
+            Handler interfaces take no context type argument, AddCqrsGenerated is configured through its builder and registers validation and exception handling in both forms (opt out with UseValidation(false) / UseExceptionHandling(false)), and startup validation runs only when you call ValidateOnStart().
+            Rebuild every assembly that runs the source generator, and drain the outbox with 4.x processors before upgrading.
+            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
@@ -31,32 +29,25 @@
         <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
         <ProjectReference Include="..\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           PrivateAssets="all"/>
-        <ProjectReference Include="..\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
-                          PrivateAssets="all"/>
         <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
         <!--
-            Ship the source generator AND the analyzers in the meta-package. The analyzers ALSO ship with
-            CQRSharp.Abstractions, so they run in a handler project that references only the abstractions (e.g. one that
-            forgot the generator — CQRA010). NuGet does not flow analyzer assets transitively, so the meta-package's
-            dependency on Abstractions carries exclude="Analyzers"; the meta-package therefore ships its own copy for its
-            direct consumers, who get exactly one (the transitive copy is excluded).
+            The source generator ships in this package only: a project that declares handlers references the
+            meta-package, and the generator is what registers them. The analyzers are not repeated here; they ship in
+            CQRSharp.Abstractions and reach the meta-package's consumers through its dependencies (see
+            src/Directory.Build.props).
         -->
         <None Include="..\CQRSharp.Generators\bin\$(Configuration)\netstandard2.0\CQRSharp.Generators.dll"
-              Pack="true"
-              PackagePath="analyzers/dotnet/cs"
-              Visible="false"/>
-        <None Include="..\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
               Pack="true"
               PackagePath="analyzers/dotnet/cs"
               Visible="false"/>
     </ItemGroup>
 
     <ItemGroup>
-        <!-- Ship convenience global usings (buildTransitive) so a consumer can author handlers without importing
-             five separate namespaces. See build/CQRSharp.props. -->
+        <!-- Global usings for the authoring surface (CQRSharp and CQRSharp.Pipelines), so a consumer writes handlers
+             without importing them. See build/CQRSharp.props. -->
         <None Include="build/CQRSharp.props" Pack="true" PackagePath="buildTransitive/CQRSharp.props" Visible="false"/>
     </ItemGroup>
 

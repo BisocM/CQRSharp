@@ -55,11 +55,12 @@ Some properties of the design are worth knowing when you assess an issue:
   authorization layer: deciding who may dispatch which request is the application's job. "A handler can do something
   dangerous" is not a vulnerability in the library; the library dispatching a request to the wrong handler, skipping a
   configured behavior, or leaking state between requests or DI scopes is.
-- **The outbox persists serialized notification payloads.** Durable notifications are written as JSON to the configured
-  store (in-memory, Redis, or your EF Core database) and deserialized later by the generated, reflection-free serializer
-  into the notification types known at compile time. A stored message names its type by its stable
-  `[NotificationName]`, which is looked up in that generated, closed set — a payload cannot name an arbitrary CLR type
-  to instantiate.
+- **The outbox persists serialized notification payloads.** Durable notifications are written to the configured store
+  (in-memory, Redis, or your EF Core database) and read back later by the registered `INotificationSerializer`. The
+  default, generated serializer is reflection-free JSON over the notification types known at compile time: a stored
+  message names its type by its stable `[NotificationName]`, which is looked up in that closed set, so a payload cannot
+  name an arbitrary CLR type to instantiate. A serializer an application registers with
+  `AddNotificationSerializer<T>()` replaces it and is responsible for the same guarantee.
   Anyone who can write to the outbox store can cause notifications to be delivered to your handlers, so the store must
   be protected like any other application database. Payloads are not encrypted by the library; do not put secrets in
   notifications unless the store itself is appropriately secured.

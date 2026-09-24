@@ -7,42 +7,93 @@
 
     <ItemGroup>
         <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
-        <PackageVersion Include="coverlet.collector" Version="6.0.4"/>
         <PackageVersion Include="FluentAssertions" Version="8.1.1"/>
         <PackageVersion Include="FluentValidation" Version="12.1.1"/>
         <PackageVersion Include="Mediator.Abstractions" Version="3.0.2"/>
         <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2"/>
         <PackageVersion Include="MediatR" Version="[12.5.0]"/>
-        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.2" Condition="'$(TargetFramework)' == 'net10.0'"/>
-        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="8.0.10" Condition="'$(TargetFramework)' == 'net8.0'"/>
-        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="9.0.2" Condition="'$(TargetFramework)' == 'net9.0'"/>
         <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4"/>
+        <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.3.4"/>
         <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4"/>
         <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0"/>
         <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0"/>
-        <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="8.0.10"/>
-        <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.10"/>
-        <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10"/>
+        <!-- The SqlServer provider's own floor is a SqlClient with open advisories; pin the current line for the tests. -->
+        <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.7"/>
+        <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0"/>
+        <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0"/>
+        <PackageVersion Include="Testcontainers.Redis" Version="4.15.0"/>
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="9.0.2"/>
-        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
-        <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2"/>
-        <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.2"/>
         <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
         <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
         <PackageVersion Include="Moq" Version="4.20.72"/>
-        <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10"/>
+        <!-- The native SQLite the EF Core Sqlite provider loads in the tests; 2.1.12 and later carry a patched SQLite. -->
+        <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13"/>
         <PackageVersion Include="StackExchange.Redis" Version="2.8.16"/>
-        <PackageVersion Include="xunit" Version="2.9.3"/>
-        <PackageVersion Include="xunit.assert" Version="2.9.3"/>
-        <PackageVersion Include="xunit.extensibility.core" Version="2.9.3"/>
-        <PackageVersion Include="xunit.extensibility.execution" Version="2.9.3"/>
-        <PackageVersion Include="xunit.runner.console" Version="2.9.3"/>
-        <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2"/>
-        <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23"/>
+        <!-- Microsoft.Testing.Platform extensions, versioned with the platform xunit.v3 runs on. -->
+        <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2"/>
+        <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.4.0"/>
+        <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0"/>
+        <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5"/>
+        <PackageVersion Include="xunit.v3" Version="4.0.1"/>
+        <PackageVersion Include="xunit.v3.assert" Version="4.0.1"/>
+        <PackageVersion Include="xunit.v3.extensibility.core" Version="4.0.1"/>
+    </ItemGroup>
+
+    <!--
+        Pinned once per target framework, each to that framework's major.
+
+        EF Core and its providers: CQRSharp.EntityFrameworkCore compiles each target framework against that framework's
+        EF Core major, because one binary cannot serve several - EF Core 9 moved ExecuteUpdate/ExecuteDelete into another
+        assembly and EF Core 10 changed ExecuteUpdate's signature, so IL bound to one major fails with
+        MissingMethodException on the next. The version here is the floor the package's consumers inherit for that
+        framework; the tests run each framework against it. EF Core 9 also runs on net8.0, but the net8.0 build binds to
+        EF Core 8, so the net8.0 range stops below 9: restore reports such an app (NU1107, or NU1608 when it references
+        EF Core itself) instead of every claim failing at run time, and it targets net9.0 to use EF Core 9.
+
+        Microsoft.AspNetCore.TestHost must match the shared framework's major: the 8.0 response PipeWriter lacks
+        UnflushedBytes, which System.Text.Json 9+ requires.
+
+        Microsoft.Extensions.Hosting (the sample's host) follows its framework's major as a net8.0 application's does. The
+        9.x line would bring the System.Text.Json 9 package onto net8.0, whose enum converter reports trim warning IL2090
+        in a Native AOT publish that serializes an enum (the sample replays CommandResult<T>, whose ErrorKind is one).
+    -->
+    <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="8.0.10"/>
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="8.0.1"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="[8.0.10,9.0.0)"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="[8.0.10,9.0.0)"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Proxies" Version="8.0.10"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.10"/>
+        <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Proxies" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.2"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.2"/>
+        <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.2"/>
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.0"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.0"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Proxies" Version="10.0.0"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0"/>
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0"/>
+        <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0"/>
     </ItemGroup>
 
 </Project>

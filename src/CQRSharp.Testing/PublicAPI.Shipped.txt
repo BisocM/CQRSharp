@@ -1,7 +1,4 @@
 #nullable enable
-abstract CQRSharp.Testing.IdempotencyStoreContractTests.CreateStoreAsync() -> System.Threading.Tasks.Task<CQRSharp.Pipelines.IIdempotencyStore!>!
-abstract CQRSharp.Testing.OutboxStoreContractTests.CreateStoreAsync() -> System.Threading.Tasks.Task<CQRSharp.Pipelines.IOutboxStore!>!
-abstract CQRSharp.Testing.OutboxStoreContractTests.Time.get -> Microsoft.Extensions.Time.Testing.FakeTimeProvider!
 CQRSharp.Testing.DispatchedMessage
 CQRSharp.Testing.DispatchedMessage.DispatchedMessage() -> void
 CQRSharp.Testing.DispatchedMessage.DispatchedMessage(CQRSharp.Testing.DispatchKind Kind, object! Message) -> void
@@ -13,36 +10,6 @@ CQRSharp.Testing.DispatchKind
 CQRSharp.Testing.DispatchKind.Publish = 2 -> CQRSharp.Testing.DispatchKind
 CQRSharp.Testing.DispatchKind.Send = 0 -> CQRSharp.Testing.DispatchKind
 CQRSharp.Testing.DispatchKind.Stream = 1 -> CQRSharp.Testing.DispatchKind
-CQRSharp.Testing.IdempotencyStoreContractTests
-CQRSharp.Testing.IdempotencyStoreContractTests.A_claimed_but_unfinished_key_reports_in_progress() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.A_completed_key_cannot_be_released() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.A_completed_key_reports_completed_and_hands_back_the_stored_result() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.A_key_completed_without_a_result_reports_completed_with_none() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.Completing_an_unknown_key_is_a_no_op() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.Concurrent_claims_of_the_same_key_yield_exactly_one_winner() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.IdempotencyStoreContractTests() -> void
-CQRSharp.Testing.IdempotencyStoreContractTests.Releasing_an_unknown_key_is_a_no_op() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.Releasing_a_claim_makes_the_key_claimable_again() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.TryClaim_on_an_already_claimed_key_is_rejected_as_a_duplicate() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.IdempotencyStoreContractTests.TryClaim_on_a_fresh_key_succeeds() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests
-CQRSharp.Testing.OutboxStoreContractTests.A_claimed_message_is_not_returned_again_before_its_visibility_timeout() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.A_message_stuck_in_progress_is_reclaimed_after_the_visibility_timeout() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.A_stale_claim_cannot_touch_a_message_another_processor_now_holds() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.Concurrent_GetPending_calls_never_claim_the_same_message_twice() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.GetPending_claims_a_stored_message_and_transitions_it_to_in_progress() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.GetPending_never_claims_more_than_the_batch_size() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.GetPending_returns_messages_in_FIFO_order_by_creation_time() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.GetPending_skips_a_message_whose_back_off_has_not_elapsed() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.IncrementAttempt_on_an_unknown_message_returns_zero() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.IncrementAttempt_on_a_processed_message_does_not_resurrect_it() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.IncrementAttempt_raises_the_count_reschedules_to_pending_and_returns_the_new_count() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.MarkAsFailed_dead_letters_a_message_so_it_is_never_claimed_again() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.MarkAsProcessed_makes_a_message_terminal_and_is_idempotent() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.Marking_processed_after_a_reclaim_does_not_let_a_stale_attempt_resurrect_it() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.OutboxStoreContractTests() -> void
-CQRSharp.Testing.OutboxStoreContractTests.Release_makes_a_claimed_message_immediately_claimable_without_counting_an_attempt() -> System.Threading.Tasks.Task!
-CQRSharp.Testing.OutboxStoreContractTests.Renew_extends_the_lease_so_a_slow_batch_is_not_reclaimed() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.RecordingCqrsDispatcher
 CQRSharp.Testing.RecordingCqrsDispatcher.ClearRecorded() -> void
 CQRSharp.Testing.RecordingCqrsDispatcher.Dispatched.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Testing.DispatchedMessage>!
@@ -65,4 +32,3 @@ CQRSharp.Testing.RecordingCqrsDispatcher.Stream<TItem>(CQRSharp.IStreamRequest<T
 CQRSharp.Testing.RecordingCqrsDispatcher.Streamed<TRequest>() -> System.Collections.Generic.IReadOnlyList<TRequest>!
 CQRSharp.Testing.RecordingCqrsDispatcher.Throws<TMessage>(System.Exception! exception) -> CQRSharp.Testing.RecordingCqrsDispatcher!
 CQRSharp.Testing.RecordingCqrsDispatcher.Throws<TMessage>(System.Func<TMessage, System.Exception!>! exceptionFactory) -> CQRSharp.Testing.RecordingCqrsDispatcher!
-virtual CQRSharp.Testing.OutboxStoreContractTests.VisibilityTimeout.get -> System.TimeSpan

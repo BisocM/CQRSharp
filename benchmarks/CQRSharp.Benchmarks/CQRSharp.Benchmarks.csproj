@@ -13,8 +13,6 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
-        <!-- Three libraries each define IRequest/INotification/IPipelineBehavior; every file names its own explicitly. -->
-        <NoWarn>$(NoWarn);CQRA001;CQRA003</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,30 +1,31 @@
-using System.Data;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
-using CQRSharp.Core.Background.Outbox;
 using CQRSharp.Core.Pipelines;
-using CQRSharp.Pipelines.Telemetry;
+using CQRSharp.Persistence;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CQRSharp.Pipelines.Behaviors.Transactions;
+namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Wraps streaming request execution in a Unit of Work transaction when the request is transactional.
+///     Runs a transactional streaming request in a transaction of the scope's <see cref="IUnitOfWork" />, as
+///     <see cref="UnitOfWorkBehavior{TRequest,TResult}" /> does a command or query: committed once the stream has been
+///     enumerated to its end, rolled back when it faults or its consumer stops early.
 /// </summary>
+/// <typeparam name="TRequest">The type of the streaming request.</typeparam>
+/// <typeparam name="TItem">The type of the stream's items.</typeparam>
+/// <param name="logger">The behavior's logger.</param>
+/// <param name="unitOfWork">The scope's unit of work.</param>
+/// <param name="options">The unit-of-work options.</param>
+/// <param name="services">The request's scoped services, from which the outbox services are resolved when a commit stores notifications.</param>
 public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
     ILogger<StreamUnitOfWorkBehavior<TRequest, TItem>> logger,
     IUnitOfWork unitOfWork,
-    IOutbox outbox,
     IOptions<UnitOfWorkOptions> options,
-    IOutboxStore? outboxStore = null,
-    INotificationSerializer? serializer = null,
-    TimeProvider? timeProvider = null)
+    IServiceProvider services)
     : IStreamPipelineBehavior<TRequest, TItem>, IPrioritizedPipelineBehavior
     where TRequest : IRequest
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
     /// <inheritdoc />
     public int PipelineExecutionPriority => CqrsPipelinePriorities.UnitOfWork;
 
@@ -37,65 +38,77 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(next);
 
-        var isTransactional = request is ITransactionalCommand or ITransactionalQuery;
-        if (!isTransactional) return next(cancellationToken);
+        if (!UnitOfWorkSupport.IsTransactional(request)) return next(cancellationToken);
 
-        // The activity is started inside each iterator: a "using" here would stop it as soon as this (non-iterator)
-        // method returns, before the stream is enumerated, leaving a zero-length span.
-        if (unitOfWork is IExplicitUnitOfWork explicitUow)
-            return HandleExplicitTransaction(request, next, cancellationToken, explicitUow);
-
-        return HandleImplicitTransaction(request, next, cancellationToken);
-    }
-
-    private static Activity? StartTransactionActivity(TRequest request)
-    {
-        var activity = PipelineTelemetry.StartActivity("UoW.Transaction", request);
-        activity?.SetTag("cqrsharp.request_type", typeof(TRequest).Name);
-        return activity;
-    }
-
-    private IAsyncEnumerable<TItem> HandleExplicitTransaction(
-        TRequest request,
-        StreamHandlerDelegate<TItem> next,
-        CancellationToken cancellationToken,
-        IExplicitUnitOfWork explicitUow)
-    {
         return ExecuteAsync();
 
+        // The activity is started inside the iterator: a "using" in Handle would stop it as soon as Handle returns,
+        // before the stream is enumerated, leaving a zero-length span.
         async IAsyncEnumerable<TItem> ExecuteAsync()
         {
-            using var activity = StartTransactionActivity(request);
+            using var activity = PipelineTelemetry.StartActivity<TRequest>("UoW.Transaction");
 
-            if (explicitUow.HasActiveTransaction)
+            var transaction = await UnitOfWorkTransaction.BeginAsync(
+                unitOfWork, request, options.Value, services, logger, activity, typeof(TRequest).Name, cancellationToken).ConfigureAwait(false);
+            if (transaction is null)
             {
-                logger.LogTrace("Participating in existing transaction for {RequestName}", typeof(TRequest).Name);
-                activity?.AddEvent(new ActivityEvent("Participating in existing transaction"));
-
-                await foreach (var item in next(cancellationToken).WithCancellation(cancellationToken).ConfigureAwait(false))
-                    yield return item;
-
-                yield break;
-            }
-
-            var level = GetIsolationLevel(request);
-            activity?.SetTag("db.isolation_level", level.ToString());
-
-            await explicitUow.BeginTransactionAsync(level, cancellationToken).ConfigureAwait(false);
-            activity?.AddEvent(new ActivityEvent("Transaction Started"));
-
-            var completed = false;
-            Exception? failure = null;
-
-            try
-            {
-                await using (var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken))
+                // Taking part in another request's transaction: nothing to settle here, but the stream is disposed the
+                // way every layer disposes it, so a failing disposal never replaces the stream's own failure.
+                Exception? participatingFailure = null;
+                var participating = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
+                var participatingDisposed = false;
+                try
                 {
                     while (true)
                     {
                         bool moved;
                         try
                         {
+                            // Each step resumes in the consumer's flow: the span is made current again, so what the rest
+                            // of the pipeline starts during the step is parented to it.
+                            if (activity is not null) Activity.Current = activity;
+                            moved = await participating.MoveNextAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            participatingFailure = ex;
+                            break;
+                        }
+
+                        if (!moved) break;
+                        yield return participating.Current;
+                    }
+
+                    participatingDisposed = true;
+                    participatingFailure = await DisposeAsync(participating, participatingFailure).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // The consumer stopped enumerating early: the stream it wraps is disposed along with this one.
+                    if (!participatingDisposed)
+                        await participating.DisposeAsync().ConfigureAwait(false);
+                }
+
+                if (participatingFailure is not null)
+                    ExceptionDispatchInfo.Capture(participatingFailure).Throw();
+                yield break;
+            }
+
+            var completed = false;
+            Exception? failure = null;
+            try
+            {
+                var reachedEnd = false;
+                var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken);
+                var disposed = false;
+                try
+                {
+                    while (true)
+                    {
+                        bool moved;
+                        try
+                        {
+                            if (activity is not null) Activity.Current = activity;
                             moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
                         }
                         catch (Exception ex)
@@ -106,168 +119,54 @@ public sealed class StreamUnitOfWorkBehavior<TRequest, TItem>(
 
                         if (!moved)
                         {
-                            completed = true;
+                            reachedEnd = true;
                             break;
                         }
 
                         yield return enumerator.Current;
                     }
+
+                    disposed = true;
+                    failure = await DisposeAsync(enumerator, failure).ConfigureAwait(false);
                 }
+                finally
+                {
+                    // The consumer stopped enumerating early: the stream it wraps is disposed along with this one.
+                    if (!disposed)
+                        await enumerator.DisposeAsync().ConfigureAwait(false);
+                }
+
+                // Decided only once the handler's enumerator is disposed: a stream whose disposal fails did not complete,
+                // and is rolled back as the failure it is.
+                completed = reachedEnd && failure is null;
             }
             finally
             {
+                // Runs on a fault, and on an early disposal by the consumer (which never resumes past the loop above).
                 if (!completed)
                 {
                     if (failure is not null)
-                    {
-                        logger.LogError(failure, "Transaction failed for {RequestName}. Rolling back.", typeof(TRequest).Name);
-                        activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to an exception.");
-                    }
+                        await transaction.RollBackAfterFailureAsync(failure, cancellationToken).ConfigureAwait(false);
                     else
-                    {
-                        logger.LogWarning(
-                            "Streaming request {RequestName} did not complete; rolling back transaction.",
-                            typeof(TRequest).Name);
-                        activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to incomplete stream consumption.");
-                    }
-
-                    await RollbackAsync(explicitUow, activity).ConfigureAwait(false);
-                }
-            }
-
-            if (!completed)
-            {
-                if (failure is not null)
-                    ExceptionDispatchInfo.Capture(failure).Throw();
-
-                yield break;
-            }
-
-            // A failed outbox save or commit must roll back too; otherwise the transaction stays open and every later
-            // transactional request in this scope silently "participates" in it and is never committed.
-            try
-            {
-                await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
-                await explicitUow.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception commitEx)
-            {
-                logger.LogError(commitEx, "Commit failed for {RequestName}. Rolling back.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Transaction rolled back due to a commit failure.");
-                await RollbackAsync(explicitUow, activity).ConfigureAwait(false);
-                throw;
-            }
-
-            activity?.AddEvent(new ActivityEvent("Transaction Committed"));
-            activity?.SetStatus(ActivityStatusCode.Ok);
-        }
-    }
-
-    private async Task RollbackAsync(IExplicitUnitOfWork explicitUow, Activity? activity)
-    {
-        // The rolled-back work never happened, so neither did its notifications.
-        outbox.Drain();
-
-        try
-        {
-            // Never the caller's token: it is typically what ended the stream, and a rollback that is cancelled before
-            // it starts leaves the transaction open for every later request in this scope.
-            await explicitUow.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
-            activity?.AddEvent(new ActivityEvent("Transaction Rolled Back"));
-        }
-        catch (Exception rollbackEx)
-        {
-            // A failing rollback must not mask the original failure (rethrown by the caller).
-            logger.LogError(rollbackEx, "Rollback failed for {RequestName} after a streaming transaction error.",
-                typeof(TRequest).Name);
-        }
-    }
-
-    private IAsyncEnumerable<TItem> HandleImplicitTransaction(
-        TRequest request,
-        StreamHandlerDelegate<TItem> next,
-        CancellationToken cancellationToken)
-    {
-        return ExecuteAsync();
-
-        async IAsyncEnumerable<TItem> ExecuteAsync()
-        {
-            using var activity = StartTransactionActivity(request);
-
-            logger.LogTrace("Beginning implicit transaction for {RequestName}", typeof(TRequest).Name);
-
-            Exception? failure = null;
-            var completed = false;
-
-            await using (var enumerator = next(cancellationToken).GetAsyncEnumerator(cancellationToken))
-            {
-                while (true)
-                {
-                    bool moved;
-                    try
-                    {
-                        moved = await enumerator.MoveNextAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        failure = ex;
-                        break;
-                    }
-
-                    if (!moved)
-                    {
-                        completed = true;
-                        break;
-                    }
-
-                    yield return enumerator.Current;
+                        await transaction.RollBackAbandonedAsync(UnitOfWorkSupport.CommitsChanges(request)).ConfigureAwait(false);
                 }
             }
 
             if (failure is not null)
-            {
-                logger.LogError(failure, "Implicit transaction failed for {RequestName}. The operation will be rolled back.", typeof(TRequest).Name);
-                activity?.SetStatus(ActivityStatusCode.Error, "Implicit transaction failed.");
-                outbox.Drain();
                 ExceptionDispatchInfo.Capture(failure).Throw();
-                yield break;
-            }
 
-            if (!completed) yield break;
-
-            if (request is ITransactionalCommand)
-            {
-                await SaveNotificationsFromOutboxAsync(cancellationToken).ConfigureAwait(false);
-
-                logger.LogTrace("Committing implicit transaction for {RequestName}", typeof(TRequest).Name);
-                await unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-                activity?.AddEvent(new ActivityEvent("Implicit Transaction Committed"));
-            }
-
-            activity?.SetStatus(ActivityStatusCode.Ok);
+            if (UnitOfWorkSupport.CommitsChanges(request))
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            else
+                await transaction.RollBackReadOnlyAsync().ConfigureAwait(false);
         }
     }
 
-    private IsolationLevel GetIsolationLevel(TRequest request)
+    // Disposes the wrapped stream once it ran to its end or failed; see StreamDisposal.
+    private async ValueTask<Exception?> DisposeAsync(IAsyncEnumerator<TItem> enumerator, Exception? failure)
     {
-        return request switch
-        {
-            ITransactionalCommand treq when treq.IsolationLevel != IsolationLevel.Unspecified => treq.IsolationLevel,
-            ITransactionalQuery tquery when tquery.IsolationLevel != IsolationLevel.Unspecified => tquery.IsolationLevel,
-            _ => options.Value.DefaultIsolationLevel
-        };
-    }
-
-    private async Task SaveNotificationsFromOutboxAsync(CancellationToken cancellationToken)
-    {
-        var notifications = outbox.Drain();
-        if (notifications.Count == 0) return;
-
-        if (outboxStore is null || serializer is null)
-            throw new InvalidOperationException(
-                "IOutbox is registered, but IOutboxStore or INotificationSerializer are missing. Please check your DI configuration.");
-
-        var messages = OutboxMessageFactory.Create(notifications, serializer, _timeProvider);
-        await outboxStore.StoreAsync(messages, cancellationToken).ConfigureAwait(false);
+        var (ended, suppressed) = await StreamDisposal.DisposeAsync(enumerator, failure).ConfigureAwait(false);
+        if (suppressed is not null) UnitOfWorkTransaction.LogStreamDisposalFailed(logger, suppressed, typeof(TRequest).Name);
+        return ended;
     }
 }

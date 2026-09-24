@@ -1,17 +1,18 @@
 namespace CQRSharp.Pipelines;
 
 /// <summary>
-///     Specifies the scope for rate limiting, determining how rate limits are applied.
+///     Which requests of one caller share a token bucket.
 /// </summary>
 public enum RateLimitScope
 {
     /// <summary>
-    ///     Rate limiting applies globally for each user across all commands.
+    ///     One bucket per caller (<see cref="IRateLimitedContext.UserId" />), shared by every rate-limited request type.
     /// </summary>
     Global,
 
     /// <summary>
-    ///     Rate limiting applies per command for each user.
+    ///     One bucket per caller and request type: exhausting one type's budget leaves the caller's other request types
+    ///     (commands, queries and streams alike) unaffected.
     /// </summary>
-    PerCommand
+    PerRequestType
 }

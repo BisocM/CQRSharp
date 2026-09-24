@@ -1,8 +1,11 @@
+using System.ComponentModel;
 namespace CQRSharp.Core.Exceptions;
 
 /// <summary>
-///     Represents the result of executing request exception hooks.
+///     What running a request's exception hooks came to: whether a handler handled the exception, and the response it
+///     supplied.
 /// </summary>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public readonly record struct RequestExceptionHandlingOutcome(bool Handled, object? Response)
 {
     /// <summary>
