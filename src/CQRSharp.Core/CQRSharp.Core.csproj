@@ -19,7 +19,7 @@
             Version 5.0.0 (breaking). The outbox delivers per handler and in order per partition key, under leases, with an inbox, dead-letter operations, backlog gauges and the AddCqrsOutbox() health check; a request's notifications are stored when it succeeds and discarded when it fails.
             Notifications reach the handlers of their runtime type. A new CQRSharp meter joins renamed span attributes (every name is on CqrsTelemetry), and every log line has an event id.
             The background queue drains within ShutdownTimeout and reports refused work as BackgroundTaskRejectedException. Core no longer depends on Microsoft.Extensions.Hosting.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

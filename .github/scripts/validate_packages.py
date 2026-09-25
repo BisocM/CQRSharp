@@ -6,7 +6,8 @@
 Structure: the exact expected set of packages, one aligned version, every library built for every target framework with
 its XML docs and a symbol package, the meta-package's embedded generator, the analyzers shipped exactly once (in
 CQRSharp.Abstractions) and flowing through every dependency on another CQRSharp package, the template's pinned version,
-and the shared README / license / icon in each package.
+the shared README / license / icon in each package, and links in the README and release notes that open this version's
+files on GitHub.
 
 --check-nuget additionally asks nuget.org which packages already have this version and writes `should_publish` (whether
 anything is left to push, so a push to Release that did not change the version publishes nothing) and `package_version`
@@ -127,6 +128,30 @@ def check_pinned(package_id: str, version: str, dependencies: list[ElementTree.E
                  f"other to exactly {expected}.")
 
 
+# A link into this repository names a ref; in a package it must be the version's tag (the release workflow creates it).
+REPOSITORY_LINK = re.compile(r"https://github\.com/BisocM/CQRSharp/(?:blob|tree)/([^/\s)]+)/")
+MARKDOWN_LINK_TARGET = re.compile(r"\]\(([^)\s]+)\)")
+
+
+def check_links(package_id: str, version: str, z: zipfile.ZipFile) -> None:
+    # nuget.org shows the README on its own, so a path relative to the repository leads nowhere there; the root
+    # Directory.Build.props rewrites each one at pack time to the file at this version's tag.
+    tag = f"v{version}"
+    readme = z.read("README.md").decode("utf-8") if "README.md" in z.namelist() else ""
+    for target in MARKDOWN_LINK_TARGET.findall(readme):
+        if not re.match(r"[A-Za-z][A-Za-z0-9+.\-]*:|#", target):
+            fail(f"{package_id}: README.md links to the relative path {target!r}, which nuget.org cannot resolve.")
+
+    nuspec = next(n for n in z.namelist() if n.endswith(".nuspec"))
+    release_notes = ElementTree.fromstring(z.read(nuspec)).find("{*}metadata/{*}releaseNotes")
+    notes = "" if release_notes is None else release_notes.text or ""
+    for source, text in (("README.md", readme), ("the release notes", notes)):
+        for ref in REPOSITORY_LINK.findall(text):
+            if ref != tag:
+                fail(f"{package_id}: {source} links to the repository at {ref!r}; a package links to its own tag, "
+                     f"{tag!r}.")
+
+
 def check_meta(names: set[str]) -> None:
     if GENERATOR not in names:
         fail(f"{META}: the meta-package must embed {GENERATOR} for plug-and-play.")
@@ -168,6 +193,7 @@ def main() -> int:
             names = set(z.namelist())
             check_analyzers(package_id, names, dependencies)
             check_pinned(package_id, version, dependencies)
+            check_links(package_id, version, z)
 
             for shared in SHARED_FILES:
                 if shared not in names:

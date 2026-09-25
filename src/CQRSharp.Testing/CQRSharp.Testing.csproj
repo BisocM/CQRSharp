@@ -19,7 +19,7 @@
         <Description>Test support for CQRSharp, independent of any test framework: RecordingCqrsDispatcher, a fake ICqrsDispatcher that records every Send, Stream and Publish and answers with stubbed results, for unit-testing controllers and services that dispatch requests or publish notifications. The store contract suites ship separately, in CQRSharp.Testing.Xunit.V3 (xUnit v3).</Description>
         <PackageReleaseNotes>
             Version 5.0.0. First release: RecordingCqrsDispatcher.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

@@ -21,7 +21,7 @@
         <PackageReleaseNotes>
             Version 5.0.0 (breaking; add a migration). Outbox rows carry a handler name, partition key and failure time, and ApplyCqrsOutbox() maps the CqrsInboxRecords table; the idempotency table stores the result and a payload fingerprint. On SQL Server, map the idempotency key with IdempotencyEntityConfiguration.SqlServerBinaryCollation.
             New: EfCoreUnitOfWork&lt;TContext&gt; and hosted retention services. Each target framework builds against its own EF Core major (8, 9, 10). The store classes are internal; register them through the store verbs.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

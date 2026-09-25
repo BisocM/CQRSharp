@@ -3,17 +3,17 @@
 [![NuGet version (CQRSharp)](https://img.shields.io/nuget/v/CQRSharp.svg?style=flat-square)](https://www.nuget.org/packages/CQRSharp/)
 [![Build](https://github.com/BisocM/CQRSharp/actions/workflows/nuget_publish.yml/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/nuget_publish.yml)
 [![CodeQL](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/BisocM/CQRSharp/tree/Release/LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
 Commands, queries and events for .NET 8, 9 and 10, plus the plumbing you would otherwise write around them.
 
 - **Wired at compile time.** A source generator finds your handlers, so there is no reflection or assembly scanning, it
   runs under Native AOT, and a request without a handler shows up in your IDE, not in production.
-- **Faster than MediatR** inside a scope, for requests, streams and notifications ([benchmarks](https://github.com/BisocM/CQRSharp/blob/Release/benchmarks/README.md#latest-results)).
+- **Faster than MediatR** inside a scope, for requests, streams and notifications ([benchmarks](benchmarks/README.md#latest-results)).
 - **Batteries included, pay for what you use.** Validation, retries, timeouts, rate limiting, idempotency, a unit of work
   and a transactional outbox (Redis or EF Core) are one builder call each, and cost nothing where you do not use them.
 
-MIT licensed. [Documentation](https://github.com/BisocM/CQRSharp/blob/Release/docs/README.md) · [Changelog](https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md) · [Project page](https://bisocm.org/projects/cqrsharp)
+MIT licensed. [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Project page](https://bisocm.org/projects/cqrsharp)
 
 ---
 
@@ -52,11 +52,11 @@ public sealed class Users(ICqrsDispatcher dispatcher)
 ```
 
 The snippet needs no `using` lines: the `CQRSharp` meta-package adds global usings for its namespaces
-([Getting started](https://github.com/BisocM/CQRSharp/blob/Release/docs/getting-started.md#global-usings) explains them
+([Getting started](docs/getting-started.md#global-usings) explains them
 and the opt-out). Queries derive from `QueryBase<TResult>`, streams from `StreamRequestBase<TItem>` and are dispatched with
 `dispatcher.Stream`, and notifications implement `INotification` and go through `dispatcher.Publish`. Scaffold a working
 app with `dotnet new cqrsharp`, or read
-[Getting started](https://github.com/BisocM/CQRSharp/blob/Release/docs/getting-started.md).
+[Getting started](docs/getting-started.md).
 
 ### Configuring the pipeline
 
@@ -84,15 +84,15 @@ services.AddCqrsGenerated(b => b
 | `CQRSharp.Abstractions` | The contracts alone (requests, notifications, results, store and unit-of-work interfaces) and the analyzers. A project that only declares requests can reference it; a project that declares handlers needs `CQRSharp`. |
 | `CQRSharp.Core` | The runtime: the dispatcher, the pipeline executor, notification publishing, the background queue, the outbox processor, diagnostics and the in-memory stores. Pulled in by the meta-package. |
 | `CQRSharp.Pipelines` | The built-in behaviors and the fluent builder. Pulled in by the meta-package. |
-| `CQRSharp.Redis` | Redis outbox, inbox and idempotency stores. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/integrations.md) |
-| `CQRSharp.EntityFrameworkCore` | EF Core (relational) outbox, inbox and idempotency stores, and `EfCoreUnitOfWork<TContext>`. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/integrations.md) |
-| `CQRSharp.AspNetCore` | `CommandResult` → `IResult` (the status follows the result's error kind: 400 / 401 / 403 / 404 / 409 / 503), pipeline exceptions → ProblemDetails (400 / 409 / 422 / 429 / 503 / 504), `Idempotency-Key` header handling. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/aspnetcore.md) |
-| `CQRSharp.FluentValidation` | Runs your FluentValidation validators inside the validation behavior. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/fluentvalidation.md) |
-| `CQRSharp.Testing` | `RecordingCqrsDispatcher`, a stub-and-record dispatcher for unit tests; no test-framework dependency. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/testing-package.md) |
-| `CQRSharp.Testing.Xunit.V3` | The store contract-test suites (for a custom outbox, inbox or idempotency store), on xUnit v3. [Docs](https://github.com/BisocM/CQRSharp/blob/Release/docs/testing-package.md) |
+| `CQRSharp.Redis` | Redis outbox, inbox and idempotency stores. [Docs](docs/integrations.md) |
+| `CQRSharp.EntityFrameworkCore` | EF Core (relational) outbox, inbox and idempotency stores, and `EfCoreUnitOfWork<TContext>`. [Docs](docs/integrations.md) |
+| `CQRSharp.AspNetCore` | `CommandResult` → `IResult` (the status follows the result's error kind: 400 / 401 / 403 / 404 / 409 / 503), pipeline exceptions → ProblemDetails (400 / 409 / 422 / 429 / 503 / 504), `Idempotency-Key` header handling. [Docs](docs/aspnetcore.md) |
+| `CQRSharp.FluentValidation` | Runs your FluentValidation validators inside the validation behavior. [Docs](docs/fluentvalidation.md) |
+| `CQRSharp.Testing` | `RecordingCqrsDispatcher`, a stub-and-record dispatcher for unit tests; no test-framework dependency. [Docs](docs/testing-package.md) |
+| `CQRSharp.Testing.Xunit.V3` | The store contract-test suites (for a custom outbox, inbox or idempotency store), on xUnit v3. [Docs](docs/testing-package.md) |
 | `CQRSharp.Templates` | `dotnet new install CQRSharp.Templates`, then `dotnet new cqrsharp`. |
 
-Which packages work under Native AOT: [Native AOT](https://github.com/BisocM/CQRSharp/blob/Release/docs/native-aot.md).
+Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
 
 ---
 
@@ -103,7 +103,7 @@ Which packages work under Native AOT: [Native AOT](https://github.com/BisocM/CQR
   wires the handlers of the calling assembly and of every assembly it references.
 - **Analyzers with code fixes.** Missing or duplicate handlers, a stream request sent with `Send`, a pipeline exemption
   that has no effect, a custom request context without a factory, a direct `AddCqrs()` call: reported as you type
-  (`CQRA*`, `CQRGEN*`). See [Diagnostics](https://github.com/BisocM/CQRSharp/blob/Release/docs/diagnostics.md).
+  (`CQRA*`, `CQRGEN*`). See [Diagnostics](docs/diagnostics.md).
 - **A defined request lifecycle.** Pre- and post-handler interceptors, post-handlers that see the returned value *or* the
   exception, and `Initiated` → `Completed` / `Failed` lifecycle notifications: once a request is initiated, exactly one
   terminal notification follows. Commands, queries and streams follow the same contract.
@@ -114,7 +114,7 @@ Which packages work under Native AOT: [Native AOT](https://github.com/BisocM/CQR
   messages under leases so they can share one outbox. An **inbox** records each delivery, so a redelivered message is
   recognized and skipped; with an EF Core inbox and unit of work over one `DbContext`, the handler's changes and the
   record commit together. Dead letters can be listed, requeued and purged. See
-  [The outbox](https://github.com/BisocM/CQRSharp/blob/Release/docs/outbox.md).
+  [The outbox](docs/outbox.md).
 - **Idempotency that answers the retry.** A duplicate of a completed request gets the **original result** back (a plain
   `CommandResult` always; any other result through a result serializer), a duplicate of one still running gets a
   distinguishable "in progress" (409 with `Retry-After` over HTTP), and a key reused with a **different payload** is
@@ -163,12 +163,12 @@ mediator resolved once from a long-lived DI scope, and a whole request scope (cr
 dispatch once, dispose the scope), which is what a web request pays. `ICqrsDispatcher` is scoped, so the per-scope numbers
 include resolving it in every new scope. MediatR is benchmarked at 12.5.0, its last Apache-2.0 release. The method, the
 scenarios and the commands to reproduce the run are in
-[benchmarks/README.md](https://github.com/BisocM/CQRSharp/blob/Release/benchmarks/README.md).
+[benchmarks/README.md](benchmarks/README.md).
 
 The harness covers a request, a request with one behavior, a notification (published as its own type and as
 `INotification`) and a three-item stream, each both ways. The results of the current harness, as the tables of one full
 run with every library side by side, are published in
-[benchmarks/README.md](https://github.com/BisocM/CQRSharp/blob/Release/benchmarks/README.md#latest-results); compare
+[benchmarks/README.md](benchmarks/README.md#latest-results); compare
 the ratios there, since the absolute times move with the machine.
 
 Three design points keep the per-dispatch cost low: lifecycle notifications and pipeline stages are **pay-for-use**
@@ -194,7 +194,7 @@ docs/         the documentation
 Build and test with `dotnet build CQRSharp.sln -warnaserror` and `dotnet test --project tests/CQRSharp.Tests`. The Redis,
 PostgreSQL and SQL Server tests use the servers named by `CQRSHARP_TEST_REDIS`, `CQRSHARP_TEST_POSTGRES` and
 `CQRSHARP_TEST_SQLSERVER` when set, and otherwise start containers with Testcontainers; without Docker they skip.
-[CONTRIBUTING.md](https://github.com/BisocM/CQRSharp/blob/Release/CONTRIBUTING.md) has the details.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
 ## Contributing
 
@@ -204,4 +204,4 @@ change to the generator should keep `IncrementalGeneratorCachingTests` green and
 
 ## License
 
-[MIT](https://github.com/BisocM/CQRSharp/tree/Release/LICENSE).
+[MIT](LICENSE).

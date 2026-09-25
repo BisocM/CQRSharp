@@ -21,7 +21,7 @@
         <Description>A FluentValidation adapter for CQRSharp. One line of setup makes every registered FluentValidation IValidator&lt;TRequest&gt; run inside CQRSharp's validation pipeline behavior, alongside any native IRequestValidator&lt;TRequest&gt;; Error-severity failures are reported through RequestValidationException. FluentValidation compiles expression trees at runtime, so this package is not Native-AOT or full-trim compatible.</Description>
         <PackageReleaseNotes>
             Version 5.0.0. First release: UseFluentValidation() runs FluentValidation validators in the CQRSharp validation behavior.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

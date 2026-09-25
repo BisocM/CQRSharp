@@ -21,12 +21,15 @@ public issues** — see [SECURITY.md](SECURITY.md).
 ```bash
 dotnet build CQRSharp.sln -c Release -warnaserror
 python3 .github/scripts/check_logging.py
+python3 .github/scripts/check_links.py
 ```
 
 **Zero warnings is a gate**, locally and in CI: compiler warnings, missing XML docs, the trim/AOT analyzers, the public
 API analyzers, the banned-API list and CQRSharp's own analyzers all fail the build. Fix the cause rather than adding a
 `NoWarn` or a `#pragma`; if a suppression really is right, scope it as narrowly as possible and say why in a comment.
-`check_logging.py` checks the [logging contract](#logging); CI runs it first.
+`check_logging.py` checks the [logging contract](#logging); CI runs it first. `check_links.py` checks that every relative
+link between the Markdown files reaches an existing file and heading. Link to docs by relative path, never to a branch on
+GitHub: the packed README gets its links pinned to the version's tag at pack time.
 
 ## Test
 
@@ -140,7 +143,7 @@ tests/        CQRSharp.Tests (the suite), CQRSharp.Tests.ExternalModule (second-
 benchmarks/   BenchmarkDotNet comparison (not in the solution)
 templates/    the `dotnet new cqrsharp` template (CQRSharp.Templates)
 docs/         the documentation (start at docs/README.md)
-.github/      workflows, and the scripts they run (package validation, the logging check, release notes)
+.github/      workflows, and the scripts they run (package validation, the logging and link checks, release notes)
 ```
 
 ## The rules that matter here

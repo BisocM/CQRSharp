@@ -78,6 +78,10 @@ jobs:
       - name: Check the logging contract
         run: python3 .github/scripts/check_logging.py
 
+      # The docs link to each other by relative path; the script fails on one to a missing file or heading.
+      - name: Check the documentation links
+        run: python3 .github/scripts/check_links.py
+
       # The .NET 10 SDK builds every target framework (global.json requires it); the 8 and 9 entries bring the
       # runtimes the net8.0 and net9.0 tests run on. validate_packages.py fails the job if a framework is missing.
       - name: Setup .NET SDKs

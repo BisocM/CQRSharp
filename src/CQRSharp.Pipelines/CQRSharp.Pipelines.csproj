@@ -19,7 +19,7 @@
             Version 5.0.0 (breaking). The pipeline pack is removed: each builder verb registers its own behavior, and both forms of AddCqrsGenerated register validation and exception handling unless UseValidation(false) / UseExceptionHandling(false) turns them off.
             Idempotency replays the original result, rejects a key reused with another payload (IdempotencyKeyMismatchException) and covers streams. The unit-of-work behaviors run on IUnitOfWork and roll back a returned failed CommandResult.
             UseTimeout throws RequestTimeoutException, and retries stop only at the caller's own cancellation and the library's verdicts. RateLimiter is now RequestRateLimiter and RateLimiterOptions is RateLimitingOptions.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

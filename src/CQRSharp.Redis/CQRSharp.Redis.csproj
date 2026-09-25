@@ -19,7 +19,7 @@
             Version 5.0.0 (breaking). A new key layout under the {cqrsharp:outbox}: and {cqrs:idemp}: prefixes, and every KeyPrefix must contain a hash tag; drain the outbox with 4.x processors before upgrading.
             Messages carry a handler name and partition key, claims are leases checked inside the scripts, dead letters can be listed, requeued and purged, and an inbox records deliveries. The idempotency store keeps a claim token, a payload fingerprint and the result.
             CQRSharp no longer registers an IConnectionMultiplexer: each store runs on the connection it is given (a connection string, an instance or a factory).
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

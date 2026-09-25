@@ -23,7 +23,7 @@
             Version 5.0.0 (breaking). The contracts move to two namespaces: CQRSharp (requests, handlers, results, notifications, contexts) and CQRSharp.Persistence (store and unit-of-work contracts).
             CommandResult gains a typed ErrorKind, kind factories and validation failures as data; CommandResult&lt;T&gt; gains a public constructor. Handler interfaces take no context type argument.
             IUnitOfWork is the one unit-of-work contract. IOutboxStore is claim-based and gains dead-letter and backlog operations, IInboxStore is new, and IIdempotencyStore claims carry a token and a payload fingerprint and store the result for replay.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 

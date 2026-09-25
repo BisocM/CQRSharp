@@ -20,7 +20,7 @@
             Version 5.0.0, a major release with breaking changes. Application code uses the CQRSharp and CQRSharp.Pipelines namespaces (global usings with ImplicitUsings); store and unit-of-work implementations add CQRSharp.Persistence.
             Handler interfaces take no context type argument, AddCqrsGenerated is configured through its builder and registers validation and exception handling in both forms (opt out with UseValidation(false) / UseExceptionHandling(false)), and startup validation runs only when you call ValidateOnStart().
             Rebuild every assembly that runs the source generator, and drain the outbox with 4.x processors before upgrading.
-            See https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
         </PackageReleaseNotes>
     </PropertyGroup>
 
