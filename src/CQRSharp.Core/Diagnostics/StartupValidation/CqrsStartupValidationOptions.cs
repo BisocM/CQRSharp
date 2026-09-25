@@ -1,4 +1,3 @@
-
 namespace CQRSharp;
 
 /// <summary>
@@ -8,9 +7,12 @@ namespace CQRSharp;
 public sealed class CqrsStartupValidationOptions
 {
     /// <summary>
-    ///     How the validator reacts to the issues it finds. Defaults to <see cref="CqrsValidationPolicy.Off" /> — the
-    ///     validator is opt-in, through <c>ValidateOnStart()</c> on the builder or this option; <c>ThrowOnError</c>
-    ///     aborts host start when any error is found while leaving warnings non-fatal.
+    ///     How the validator reacts to the issues it finds, or <see langword="null" /> (the default) to leave it to the
+    ///     host environment: <see cref="CqrsValidationPolicy.ThrowOnError" /> when the host's <c>IHostEnvironment</c> is
+    ///     Development, the way the host validates the container there (<c>ValidateOnBuild</c>, <c>ValidateScopes</c>),
+    ///     and <see cref="CqrsValidationPolicy.Off" /> in any other environment or without a host. A value set here, by
+    ///     <c>ValidateOnStart(...)</c> on the builder (<c>ValidateOnStart(false)</c> included) or by configuration, applies
+    ///     in every environment.
     /// </summary>
-    public CqrsValidationPolicy Policy { get; set; } = CqrsValidationPolicy.Off;
+    public CqrsValidationPolicy? Policy { get; set; }
 }

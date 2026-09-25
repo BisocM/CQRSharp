@@ -12,20 +12,37 @@ namespace CQRSharp.Core.Diagnostics;
 ///     warnings) are present.
 /// </summary>
 /// <remarks>
-///     The validation runs in <see cref="StartingAsync" />, which the host calls on every lifecycle service before it
-///     starts any hosted service, also when services start concurrently. So nothing, neither an application service
-///     that dispatches while it starts (a seeder, a migrator) nor the web server, runs against a configuration the
-///     validator is about to reject, whatever order the services were registered in.
+///     <para>
+///         Off outside the Development environment unless a policy is set: it resolves every pipeline behavior of every
+///         request, the cold cost each request type otherwise pays at its first dispatch, all at once before the host
+///         serves anything. In Development it is on unless a policy is set, as the host's own container validation is.
+///         The rules that have a point of first use (<see cref="CqrsConfigurationRules" />) fail or warn at that point in
+///         every environment, validated at startup or not.
+///     </para>
+///     <para>
+///         The validation runs in <see cref="StartingAsync" />, which the host calls on every lifecycle service before it
+///         starts any hosted service, also when services start concurrently. So nothing, neither an application service
+///         that dispatches while it starts (a seeder, a migrator) nor the web server, runs against a configuration the
+///         validator is about to reject, whatever order the services were registered in.
+///     </para>
 /// </remarks>
 internal sealed partial class CqrsStartupValidator(
     IServiceScopeFactory scopeFactory,
     IOptions<CqrsStartupValidationOptions> options,
-    ILogger<CqrsStartupValidator> logger) : IHostedLifecycleService
+    ILogger<CqrsStartupValidator> logger,
+    IHostEnvironment? environment = null) : IHostedLifecycleService
 {
+    /// <summary>
+    ///     The policy in effect: the one set, or, when none is, <see cref="CqrsValidationPolicy.ThrowOnError" /> in the
+    ///     Development environment and <see cref="CqrsValidationPolicy.Off" /> in any other or without a host environment.
+    /// </summary>
+    internal static CqrsValidationPolicy EffectivePolicy(CqrsValidationPolicy? configured, IHostEnvironment? environment)
+        => configured ?? (environment?.IsDevelopment() == true ? CqrsValidationPolicy.ThrowOnError : CqrsValidationPolicy.Off);
+
     /// <inheritdoc />
     public async Task StartingAsync(CancellationToken cancellationToken)
     {
-        var policy = options.Value.Policy;
+        var policy = EffectivePolicy(options.Value.Policy, environment);
         if (policy == CqrsValidationPolicy.Off) return;
 
         // ICqrsDiagnostics is scoped: resolve it, and everything it describes, from a scope of its own.

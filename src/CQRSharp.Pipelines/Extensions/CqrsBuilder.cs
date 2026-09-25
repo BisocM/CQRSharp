@@ -17,7 +17,8 @@ internal sealed class CqrsBuilder(IServiceCollection services) : ICqrsBuilder
     private Action<NotificationOptions>? _configureNotifications;
 
     // Null until ValidateOnStart is called, so a builder that never asked leaves the policy to whoever set it (another
-    // builder call, a Configure<CqrsStartupValidationOptions>, a configuration binding).
+    // builder call, a Configure<CqrsStartupValidationOptions>, a configuration binding) or, when nobody did, to the host
+    // environment.
     private CqrsValidationPolicy? _validationPolicy;
 
     private Func<IServiceProvider, TimeProvider>? _timeProviderFactory;

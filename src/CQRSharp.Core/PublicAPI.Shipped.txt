@@ -199,7 +199,7 @@ CQRSharp.Core.Registries.RequestMetadata.PreHandlers.init -> void
 CQRSharp.Core.Registries.RequestMetadata.RequestMetadata(System.Type! HandlerType, System.Type! ContextType, CQRSharp.IPreHandlerAttribute![]! PreHandlers, CQRSharp.IPostHandlerAttribute![]! PostHandlers, CQRSharp.PipelineExemptionAttribute![]! PipelineExemptions) -> void
 CQRSharp.CqrsStartupValidationOptions
 CQRSharp.CqrsStartupValidationOptions.CqrsStartupValidationOptions() -> void
-CQRSharp.CqrsStartupValidationOptions.Policy.get -> CQRSharp.CqrsValidationPolicy
+CQRSharp.CqrsStartupValidationOptions.Policy.get -> CQRSharp.CqrsValidationPolicy?
 CQRSharp.CqrsStartupValidationOptions.Policy.set -> void
 CQRSharp.CqrsValidationPolicy
 CQRSharp.CqrsValidationPolicy.Off = 0 -> CQRSharp.CqrsValidationPolicy

@@ -60,11 +60,12 @@ public interface ICqrsBuilder
     ICqrsBuilder ConfigureNotifications(Action<NotificationOptions> configure);
 
     /// <summary>
-    ///     Enables (or disables) the fail-fast startup validator: enabled maps to <c>ThrowOnError</c> (abort host start on
-    ///     a configuration error), disabled to <c>Off</c>. For <c>WarnOnly</c> or <c>ThrowOnWarning</c>, use the overload
-    ///     that takes a <see cref="CqrsValidationPolicy" />. The last call wins. A builder that never calls it leaves the
-    ///     policy as it is (<c>Off</c> unless set elsewhere, for example by another <c>AddCqrsGenerated</c> call or a
-    ///     <c>Configure&lt;CqrsStartupValidationOptions&gt;</c>).
+    ///     Enables (or disables) the fail-fast startup validator in every environment: enabled maps to <c>ThrowOnError</c>
+    ///     (abort host start on a configuration error), disabled to <c>Off</c>. For <c>WarnOnly</c> or
+    ///     <c>ThrowOnWarning</c>, use the overload that takes a <see cref="CqrsValidationPolicy" />. The last call wins. A
+    ///     builder that never calls it leaves the policy as it is: set elsewhere (another <c>AddCqrsGenerated</c> call, a
+    ///     <c>Configure&lt;CqrsStartupValidationOptions&gt;</c>, a configuration binding), or else unset, which is
+    ///     <c>ThrowOnError</c> when the host environment is Development and <c>Off</c> otherwise.
     /// </summary>
     /// <param name="enabled"><see langword="true" /> for <c>ThrowOnError</c>; <see langword="false" /> for <c>Off</c>.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -72,7 +73,7 @@ public interface ICqrsBuilder
 
     /// <summary>
     ///     Sets the fail-fast startup validator's policy explicitly (<c>Off</c>, <c>WarnOnly</c>, <c>ThrowOnError</c>, or
-    ///     <c>ThrowOnWarning</c>). The last call wins; see <see cref="ValidateOnStart(bool)" />.
+    ///     <c>ThrowOnWarning</c>), in every environment. The last call wins; see <see cref="ValidateOnStart(bool)" />.
     /// </summary>
     /// <param name="policy">The policy the startup validator applies.</param>
     /// <returns>This builder, for chaining.</returns>

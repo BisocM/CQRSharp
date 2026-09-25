@@ -222,10 +222,11 @@ public sealed class CqrsStartupValidatorTests
         started.Started.Should().BeFalse("no hosted service may start against a configuration the validator rejects");
     }
 
-    [Fact(DisplayName = "Startup validation is opt-in: a seeded error does not abort host start without a policy")]
-    public async Task Validation_is_opt_in()
+    [Fact(DisplayName = "Outside Development startup validation is opt-in: a seeded error does not abort host start without a policy")]
+    public async Task Validation_is_opt_in_outside_development()
     {
         using var host = new HostBuilder()
+            .UseEnvironment(Environments.Production)
             .ConfigureServices(services =>
             {
                 services.AddCqrsGenerated();
@@ -239,6 +240,81 @@ public sealed class CqrsStartupValidatorTests
 
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact(DisplayName = "In Development startup validation is on unless a policy is set: a seeded error aborts host start")]
+    public async Task Validation_is_on_in_development_by_default()
+    {
+        using var host = new HostBuilder()
+            .UseEnvironment(Environments.Development)
+            .ConfigureServices(services =>
+            {
+                services.AddCqrsGenerated(Wired);
+                services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Enabled);
+            })
+            .Build();
+
+        var act = () => host.StartAsync(TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("CQRCONF001");
+    }
+
+    [Fact(DisplayName = "In Development an explicit ValidateOnStart(false) wins over the environment's default")]
+    public async Task Explicit_off_wins_in_development()
+    {
+        using var host = new HostBuilder()
+            .UseEnvironment(Environments.Development)
+            .ConfigureServices(services =>
+            {
+                services.AddCqrsGenerated(b => Wired(b.ValidateOnStart(false)));
+                services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Enabled);
+            })
+            .Build();
+
+        await host.StartAsync(TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Theory(DisplayName = "The policy in effect: a policy set wins everywhere; unset, it is ThrowOnError in Development and Off elsewhere or without a host")]
+    [InlineData(null, "Development", CqrsValidationPolicy.ThrowOnError)]
+    [InlineData(null, "Production", CqrsValidationPolicy.Off)]
+    [InlineData(null, "Staging", CqrsValidationPolicy.Off)]
+    [InlineData(null, null, CqrsValidationPolicy.Off)]
+    [InlineData(CqrsValidationPolicy.Off, "Development", CqrsValidationPolicy.Off)]
+    [InlineData(CqrsValidationPolicy.WarnOnly, "Development", CqrsValidationPolicy.WarnOnly)]
+    [InlineData(CqrsValidationPolicy.ThrowOnWarning, "Production", CqrsValidationPolicy.ThrowOnWarning)]
+    [InlineData(CqrsValidationPolicy.ThrowOnError, null, CqrsValidationPolicy.ThrowOnError)]
+    public void Effective_policy(CqrsValidationPolicy? configured, string? environmentName, CqrsValidationPolicy expected)
+    {
+        var environment = environmentName is null ? null : new TestEnvironment(environmentName);
+
+        CqrsStartupValidator.EffectivePolicy(configured, environment).Should().Be(expected);
+    }
+
+    [Fact(DisplayName = "Without a host environment an unset policy is Off: the validator creates no scope")]
+    public async Task Unset_policy_without_a_host_is_off()
+    {
+        var validator = new CqrsStartupValidator(
+            new CountingScopeFactory(),
+            Options.Create(new CqrsStartupValidationOptions()),
+            NullLogger<CqrsStartupValidator>.Instance);
+
+        await validator.StartingAsync(CancellationToken.None);
+    }
+
+    [Fact(DisplayName = "An unset policy with a Development host environment validates and throws on an error")]
+    public async Task Unset_policy_in_development_validates()
+    {
+        await using var provider = Build(services => services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Enabled));
+        var validator = new CqrsStartupValidator(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new CqrsStartupValidationOptions()),
+            NullLogger<CqrsStartupValidator>.Instance,
+            new TestEnvironment(Environments.Development));
+
+        var act = () => validator.StartingAsync(CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("CQRCONF001");
     }
 
     [Fact(DisplayName = "A clean configuration passes validation under ThrowOnWarning and the host starts")]
@@ -335,6 +411,14 @@ public sealed class CqrsStartupValidatorTests
             CreatedScopes++;
             throw new InvalidOperationException("Off policy must not create a scope.");
         }
+    }
+
+    private sealed class TestEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "CQRSharp.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     private sealed class StartRecorder

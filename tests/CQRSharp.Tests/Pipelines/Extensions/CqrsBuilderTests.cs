@@ -396,6 +396,20 @@ public sealed class CqrsBuilderTests
             .Should().Be(CqrsValidationPolicy.ThrowOnWarning);
     }
 
+    [Fact(DisplayName = "A builder that never calls ValidateOnStart leaves the policy unset, for the host environment to decide; ValidateOnStart(false) sets Off")]
+    public async Task Policy_is_unset_unless_a_builder_sets_it()
+    {
+        var unset = new ServiceCollection();
+        unset.AddCqrsGenerated(b => b.UseLogging());
+        await using (var provider = unset.BuildServiceProvider())
+            provider.GetRequiredService<IOptions<CqrsStartupValidationOptions>>().Value.Policy.Should().BeNull();
+
+        var off = new ServiceCollection();
+        off.AddCqrsGenerated(b => b.ValidateOnStart(false));
+        await using (var provider = off.BuildServiceProvider())
+            provider.GetRequiredService<IOptions<CqrsStartupValidationOptions>>().Value.Policy.Should().Be(CqrsValidationPolicy.Off);
+    }
+
     [Fact(DisplayName = "Options configured by two AddCqrsGenerated(builder) calls compose")]
     public async Task Options_from_two_builder_calls_compose()
     {
