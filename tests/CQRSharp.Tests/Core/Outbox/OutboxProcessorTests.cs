@@ -78,7 +78,7 @@ public sealed class OutboxProcessorTests
 
         var scopeFactory = new OutboxScopeFactory(_store.Object, _serializer.Object, _subscriptions, _handlers);
         var publisher = new NotificationPublisher(
-            scopeFactory.CreateScope().ServiceProvider, [], _subscriptions, new NotificationOptions(), new OutboxOptions(), metrics: null);
+            scopeFactory.CreateScope().ServiceProvider, [], _subscriptions, new NotificationOptions(), new OutboxOptions(), metrics: null, NullLogger.Instance);
         return new OutboxProcessor(NullLogger<OutboxProcessor>.Instance, scopeFactory, options, publisher, _time);
     }
 

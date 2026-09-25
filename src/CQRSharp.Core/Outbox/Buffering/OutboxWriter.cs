@@ -42,7 +42,8 @@ internal sealed class OutboxWriter
         var subscriptions = provider.GetService<INotificationSubscriptionRegistry>();
         if (store is null || serializer is null || subscriptions is null)
             throw new InvalidOperationException(
-                "Outbox mode is active, but IOutboxStore, INotificationSerializer or INotificationSubscriptionRegistry is not registered. " +
+                "CQRSharp configuration error CQRCONF001: outbox mode is active, but IOutboxStore, INotificationSerializer or " +
+                "INotificationSubscriptionRegistry is not registered. " +
                 "Select a store inside UseOutbox(...) (UseInMemoryStore, UseRedis, UseEntityFrameworkCore<TContext>) " +
                 "and ensure AddCqrsGenerated(...) ran during startup.");
 

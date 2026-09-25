@@ -65,7 +65,11 @@ public sealed class CallerSynchronizationContextTests
         using var listener = path == StreamPath.Traced ? Listen() : null;
         var context = new PostCountingSynchronizationContext();
 
-        var enumerator = dispatcher.Stream(new ResumptionStream(), TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        // An idempotent stream fails its dispatch without the idempotency behavior (CQRCONF005), so only that path sends one.
+        var stream = path == StreamPath.Idempotency
+            ? dispatcher.Stream(new IdempotentResumptionStream(), TestContext.Current.CancellationToken)
+            : dispatcher.Stream(new ResumptionStream(), TestContext.Current.CancellationToken);
+        var enumerator = stream.GetAsyncEnumerator(TestContext.Current.CancellationToken);
         ValueTask<bool> first, end;
         using (context.Install())
         {
@@ -169,18 +173,26 @@ public sealed class ResumptionCommandHandler(SlowlyDisposedDependency dependency
     }
 }
 
-/// <summary>A stream every built-in stream behavior applies to, once it is enabled.</summary>
-public sealed class ResumptionStream : StreamRequestBase<int>, IIdempotentRequest, IRetryableRequest, ITransactionalQuery
+/// <summary>A stream every built-in stream behavior but idempotency applies to, once it is enabled.</summary>
+public sealed class ResumptionStream : StreamRequestBase<int>, IRetryableRequest, ITransactionalQuery
 {
-    public string IdempotencyKey { get; } = Guid.NewGuid().ToString("N");
     public System.Data.IsolationLevel IsolationLevel => System.Data.IsolationLevel.Unspecified;
     public bool IsReadOnly => false;
 }
 
+/// <summary>The stream the idempotency behavior applies to: an idempotent one.</summary>
+public sealed class IdempotentResumptionStream : StreamRequestBase<int>, IIdempotentRequest
+{
+    public string IdempotencyKey { get; } = Guid.NewGuid().ToString("N");
+}
+
 /// <summary>Yields one item, then ends; its enumerator's disposal completes when the gate opens.</summary>
-public sealed class ResumptionStreamHandler(ResumptionGate gate) : IStreamRequestHandler<ResumptionStream, int>
+public sealed class ResumptionStreamHandler(ResumptionGate gate) :
+    IStreamRequestHandler<ResumptionStream, int>, IStreamRequestHandler<IdempotentResumptionStream, int>
 {
     public IAsyncEnumerable<int> Handle(ResumptionStream request, CancellationToken cancellationToken) => new SlowlyDisposedStream(gate);
+
+    public IAsyncEnumerable<int> Handle(IdempotentResumptionStream request, CancellationToken cancellationToken) => new SlowlyDisposedStream(gate);
 
     private sealed class SlowlyDisposedStream(ResumptionGate gate) : IAsyncEnumerable<int>, IAsyncEnumerator<int>
     {

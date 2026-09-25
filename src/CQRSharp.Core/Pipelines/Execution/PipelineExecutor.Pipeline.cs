@@ -29,7 +29,10 @@ internal sealed partial class PipelineExecutor
     {
         // The provider has no IPipelineBehavior<TRequest, TResult> registration at all: skip the enumerable resolution.
         if (!plan.MayHaveBehaviors)
+        {
+            plan.MarkerCheck?.Verify(ReadOnlySpan<object>.Empty);
             return ExecuteFinalActionAsync(plan, request, handler, services, cancellationToken);
+        }
 
         var behaviors = ResolveBehaviors<IPipelineBehavior<TRequest, TResult>>(plan, services, out var behaviorCount);
         if (behaviorCount == 0)
@@ -44,7 +47,8 @@ internal sealed partial class PipelineExecutor
 
     /// <summary>
     ///     Resolves a request's behaviors into an array this dispatch owns, with the ones its metadata exempts compacted
-    ///     away; <paramref name="count" /> is how many of its leading entries are in use.
+    ///     away; <paramref name="count" /> is how many of its leading entries are in use. Throws the request's
+    ///     configuration error when a marker of it needs a behavior that is not registered (<c>CQRCONF005</c>).
     /// </summary>
     private static TBehavior[] ResolveBehaviors<TBehavior>(RequestPlanBase plan, IServiceProvider services, out int count)
         where TBehavior : class
@@ -52,6 +56,10 @@ internal sealed partial class PipelineExecutor
         // The in-place exemption filter below and the priority sort after it need an array this dispatch owns, which is
         // what ResolveAll hands back.
         var behaviors = PipelineBehaviors.ResolveAll<TBehavior>(services, plan.UsesClosedBehaviors, plan.MergesDiscoveredBehaviors);
+
+        // Before the exemptions are compacted away: an exempted behavior is registered, so it honors the request's marker
+        // as far as CQRCONF005 / CQRCONF006 are concerned, exactly as the startup validator sees it.
+        plan.MarkerCheck?.Verify<TBehavior>(behaviors);
 
         count = behaviors.Length;
         var exemptions = plan.Metadata.PipelineExemptions;

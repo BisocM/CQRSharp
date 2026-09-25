@@ -24,6 +24,9 @@ internal sealed partial class PipelineExecutor
             var plan = _plans.GetStream<TRequest, TItem>();
             if (!plan.IsBareHandler || plan.MayHaveBehaviors) return null;
 
+            // No behavior is registered for it, so a marker of it that needs one is not honored.
+            plan.MarkerCheck?.Verify(ReadOnlySpan<object>.Empty);
+
             // A custom factory may hydrate its context asynchronously, which needs an await before the handler runs:
             // only the built-in context, which is built synchronously, can take the bare path.
             if (!plan.UsesDefaultContextFactory) return null;
@@ -176,7 +179,10 @@ internal sealed partial class PipelineExecutor
     {
         // The provider has no IStreamPipelineBehavior<TRequest, TItem> registration at all: skip the resolution.
         if (!plan.MayHaveBehaviors)
+        {
+            plan.MarkerCheck?.Verify(ReadOnlySpan<object>.Empty);
             return ExecuteFinalStreamAction(plan, request, handler, services, cancellationToken);
+        }
 
         var behaviors = ResolveBehaviors<IStreamPipelineBehavior<TRequest, TItem>>(plan, services, out var behaviorCount);
         return behaviorCount == 0

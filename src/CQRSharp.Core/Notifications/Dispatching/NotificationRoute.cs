@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using CQRSharp.Persistence;
 
 namespace CQRSharp.Core.Notifications;
 
@@ -29,6 +30,18 @@ public abstract class NotificationRoute
     /// </summary>
     internal abstract Type[] HandRegisteredHandlerTypes(NotificationPublisher publisher, IServiceProvider services);
 
+    /// <summary>
+    ///     The outbox naming check of this notification type (<c>CQRCONF003</c> / <c>CQRCONF010</c>) for a publish the
+    ///     serializer declined to name: the type's configuration error, or <see langword="null" />.
+    /// </summary>
+    internal abstract string? OutboxNamingFailure(NotificationPublisher publisher, INotificationSerializer serializer);
+
+    /// <summary>
+    ///     Runs the check of the handlers registered by hand for this notification type (<c>CQRCONF011</c> /
+    ///     <c>CQRCONF012</c>) for a publish that goes to the outbox under <paramref name="name" />.
+    /// </summary>
+    internal abstract void CheckDurableHandlers(NotificationPublisher publisher, IServiceProvider services, string name);
+
     /// <summary>Delivers the notification to one subscription, through the behaviors of the notification's type.</summary>
     internal abstract Task Deliver(
         NotificationPublisher publisher,
@@ -46,6 +59,12 @@ public abstract class NotificationRoute
 
         internal override Type[] HandRegisteredHandlerTypes(NotificationPublisher publisher, IServiceProvider services)
             => publisher.HandRegisteredHandlerTypes<TNotification>(services);
+
+        internal override string? OutboxNamingFailure(NotificationPublisher publisher, INotificationSerializer serializer)
+            => publisher.OutboxNamingFailure<TNotification>(serializer);
+
+        internal override void CheckDurableHandlers(NotificationPublisher publisher, IServiceProvider services, string name)
+            => publisher.CheckDurableHandlers<TNotification>(services, name);
 
         internal override Task Deliver(
             NotificationPublisher publisher,

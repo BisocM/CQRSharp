@@ -3,6 +3,7 @@ using CQRSharp.Core.Notifications;
 using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CQRSharp.Tests.Core;
 
@@ -105,7 +106,8 @@ public sealed class NotificationPlanTests
             provider.GetRequiredService<INotificationSubscriptionRegistry>(),
             new NotificationOptions(),
             new OutboxOptions(),
-            metrics: null);
+            metrics: null,
+            NullLogger.Instance);
         await using var scope = provider.CreateAsyncScope();
 
         await publisher.PublishInProcess(scope.ServiceProvider, new PlanProbe(), TestContext.Current.CancellationToken);

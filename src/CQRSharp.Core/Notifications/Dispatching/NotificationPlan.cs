@@ -30,4 +30,18 @@ internal sealed class NotificationPlan<TNotification> : ProviderPlan where TNoti
     ///     without dynamic code) rather than from the open-generic registrations.
     /// </summary>
     public required bool UsesClosedBehaviors { get; init; }
+
+    /// <summary>
+    ///     What a publish under an outbox mode checks when the serializer does not name the type (<c>CQRCONF003</c> /
+    ///     <c>CQRCONF010</c>); <see langword="null" /> when there is nothing to check: the outbox is off, or the type has no
+    ///     subscription or no route of its own.
+    /// </summary>
+    public required OutboxNamingCheck? OutboxNaming { get; init; }
+
+    /// <summary>
+    ///     What a publish that goes to the outbox checks about the handlers registered by hand for the type
+    ///     (<c>CQRCONF011</c> / <c>CQRCONF012</c>); <see langword="null" /> when the outbox is off, the type has no route of
+    ///     its own, or the provider proves no handler is registered by hand for it.
+    /// </summary>
+    public required DurableHandlersCheck<TNotification>? DurableHandlers { get; init; }
 }

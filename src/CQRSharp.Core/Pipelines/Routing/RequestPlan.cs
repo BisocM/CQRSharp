@@ -1,7 +1,9 @@
+using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Registries;
 using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Core.Pipelines;
 
@@ -45,6 +47,12 @@ internal abstract class RequestPlanBase : ProviderPlan
     public required IPostHandlerAttribute[] PostHandlers { get; init; }
 
     /// <summary>
+    ///     Whether the behaviors the request's markers depend on are registered (<c>CQRCONF005</c> / <c>CQRCONF006</c>),
+    ///     checked against the behaviors its first dispatch resolves; <see langword="null" /> for a request without markers.
+    /// </summary>
+    public required MarkerBehaviorCheck? MarkerCheck { get; init; }
+
+    /// <summary>
     ///     Nothing brackets the handler: no interceptors and no lifecycle subscribers. The final action is then just the
     ///     handler call, with no notifications to publish on either outcome and so no state machine to wrap it in.
     /// </summary>
@@ -73,9 +81,11 @@ internal sealed class RequestPlanCache(
     IRequestRegistry requestRegistry,
     IHandlerRegistry handlerRegistry,
     IContextFactoryRegistry contextFactoryRegistry,
-    NotificationPublisher notifications) : IDisposable
+    NotificationPublisher notifications,
+    ILoggerFactory loggerFactory) : IDisposable
 {
     private readonly ProviderPlanCache _plans = new();
+    private readonly ILogger _configurationLogger = loggerFactory.CreateLogger(CqrsConfigurationLog.Category);
     private readonly ProviderRegistrations _registrations = new(rootProvider);
     private bool? _usesDefaultContextFactory;
 
@@ -103,7 +113,8 @@ internal sealed class RequestPlanCache(
             UsesClosedBehaviors = behaviors.UsesClosedSet,
             MayHaveLifecycleSubscribers = MayHaveLifecycleSubscribers<TRequest, TResult>(),
             PreHandlers = Sorted(metadata.PreHandlers, PreHandlerComparer.Instance),
-            PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance)
+            PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance),
+            MarkerCheck = MarkerBehaviorCheck.For(typeof(TRequest), behaviors.MayHaveAny, _configurationLogger)
         };
     }
 
@@ -125,7 +136,8 @@ internal sealed class RequestPlanCache(
                                           notifications.MayReachAnyone<StreamCompletedNotification<TItem>>() ||
                                           notifications.MayReachAnyone<StreamFailedNotification<TItem>>(),
             PreHandlers = Sorted(metadata.PreHandlers, PreHandlerComparer.Instance),
-            PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance)
+            PostHandlers = Sorted(metadata.PostHandlers, PostHandlerComparer.Instance),
+            MarkerCheck = MarkerBehaviorCheck.For(typeof(TRequest), behaviors.MayHaveAny, _configurationLogger)
         };
     }
 

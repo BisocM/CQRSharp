@@ -1,6 +1,4 @@
-using CQRSharp.Core.Modules;
 using CQRSharp.Core.Notifications;
-using CQRSharp.Core.Pipelines;
 using CQRSharp.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -57,20 +55,10 @@ internal static class CqrsConfigurationInspector
                 "outbox through the builder (UseOutbox(o => o.UseInMemoryStore()) for development, or a durable store " +
                 "such as o.UseRedis(...) / o.UseEntityFrameworkCore<TContext>()), or leave it off (outbox mode Disabled)."));
 
-        if (outbox.Mode == OutboxMode.Transactional)
-        {
-            // CQRCONF007: Transactional mode stores a notification only while the scope's IUnitOfWork has an active
-            // transaction; with no IUnitOfWork registered there never is one, so the configured durability is silently
-            // absent.
-            if (!IsRegistered(services, isService, typeof(IUnitOfWork)))
-                issues.Add(new CqrsBindingIssue(
-                    CqrsBindingIssueSeverity.Error,
-                    "CQRCONF007",
-                    "Outbox mode is 'Transactional' but no IUnitOfWork is registered, so there is never an active " +
-                    "transaction and no notification ever reaches the outbox: every one is dispatched in-process. Register a " +
-                    "unit of work (the builder's UseUnitOfWork(...), or UseEntityFrameworkCoreUnitOfWork<TContext>() for EF " +
-                    "Core), or use the Enabled mode (UseOutbox's default), which stores every named notification without one."));
-        }
+        // CQRCONF007: Transactional mode stores a notification only while the scope's IUnitOfWork has an active transaction;
+        // with no IUnitOfWork registered there never is one, so the configured durability is silently absent.
+        if (outbox.Mode == OutboxMode.Transactional && !IsRegistered(services, isService, typeof(IUnitOfWork)))
+            issues.Add(CqrsConfigurationRules.TransactionalOutboxWithoutUnitOfWork);
 
         // CQRCONF009: an outbox message is addressed to a handler by its stable name, so two handler types sharing one
         // name (two assemblies with the same namespace and type name, or two [NotificationHandlerName]s with the same
@@ -94,49 +82,21 @@ internal static class CqrsConfigurationInspector
 
         // CQRCONF010: two modules give different notification types one stable name, so a stored message could not be
         // read back as the type it was stored as.
-        if (serializer is CompositeOutboxNotificationSerializer generated)
-            foreach (var conflict in generated.Conflicts)
-                issues.Add(new CqrsBindingIssue(
-                    CqrsBindingIssueSeverity.Error,
-                    "CQRCONF010",
-                    $"The notification name '{conflict.Name}' is given to more than one notification type " +
-                    $"({string.Join(", ", conflict.Types.Select(t => t.FullName))}), so an outbox message stored under it " +
-                    "cannot be read back as the type it was stored as. Give each type a unique [NotificationName]."));
+        if (serializer is not null)
+            issues.AddRange(CqrsConfigurationRules.NotificationNameConflicts(serializer));
 
         // CQRCONF003: a notification with handlers that the registered serializer gives no name cannot be stored, so it
         // is dispatched in-process although an outbox mode is enabled: a silent bypass of the outbox. The question goes to
         // the serializer the dispatcher asks, so the answer holds for a custom one too. Without any serializer CQRCONF001
-        // already names the cause.
+        // already names the cause. A type that lost its name to another module's is the CQRCONF010 above.
         var publisher = services.GetService<NotificationPublisher>();
         if (serializer is not null && subscriptions is not null && publisher is not null)
-        {
-            // The generated serializer names exactly the [NotificationName] types; a custom one names what it chooses.
-            var remedy = serializer is CompositeOutboxNotificationSerializer
-                ? "Add [NotificationName] to route it through the outbox."
-                : $"The registered serializer '{serializer.GetType().FullName}' replaces the generated one, so [NotificationName] " +
-                  "alone does not help: have its TryGetNotificationName name the type to route it through the outbox.";
-
             foreach (var notificationType in publisher.RoutedTypes.OrderBy(t => t.FullName, StringComparer.Ordinal))
             {
                 if (subscriptions.GetSubscriptions(notificationType).Count == 0) continue;
-                if (serializer.TryGetNotificationName(notificationType, out _)) continue;
-
-                // Under the generated serializer, two kinds of notification are dispatched in-process by what they are,
-                // not through an omission this could point at: a value type ([NotificationName] applies to classes only),
-                // and CQRSharp's own lifecycle notifications, which an application handles but cannot annotate. A custom
-                // serializer can name either, so it is still asked.
-                if (serializer is CompositeOutboxNotificationSerializer &&
-                    (notificationType.IsValueType || notificationType.Assembly == typeof(CommandCompletedNotification).Assembly))
-                    continue;
-
-                issues.Add(new CqrsBindingIssue(
-                    CqrsBindingIssueSeverity.Warning,
-                    "CQRCONF003",
-                    $"Notification '{notificationType.FullName}' has handlers but no stable name while outbox mode is " +
-                    $"'{outbox.Mode}': the registered notification serializer does not name it, so it cannot be stored in the " +
-                    $"outbox and will be dispatched in-process instead. {remedy}"));
+                if (CqrsConfigurationRules.UnnamedHandledNotification(notificationType, serializer, outbox.Mode) is { Code: "CQRCONF003" } unnamed)
+                    issues.Add(unnamed);
             }
-        }
 
         // CQRCONF011: the outbox stores one message per subscription, and a handler registered by hand has none, so a
         // durable notification that goes through the outbox never reaches the handlers registered by hand for it.
@@ -155,24 +115,12 @@ internal static class CqrsConfigurationInspector
                 }
                 catch (Exception ex)
                 {
-                    issues.Add(new CqrsBindingIssue(
-                        CqrsBindingIssueSeverity.Error,
-                        "CQRCONF012",
-                        $"The notification handlers registered by hand for '{notificationType.FullName}' could not be resolved: " +
-                        $"{ex.Message} Publishing it in-process fails the same way."));
+                    issues.Add(CqrsConfigurationRules.UnresolvableHandRegisteredHandlers(notificationType, ex));
                     continue;
                 }
 
-                if (byHand.Length == 0) continue;
-
-                issues.Add(new CqrsBindingIssue(
-                    CqrsBindingIssueSeverity.Warning,
-                    "CQRCONF011",
-                    $"Notification '{notificationType.FullName}' is durable (stored as '{name}'), but the handler(s) registered " +
-                    $"by hand for it ({string.Join(", ", byHand.Select(t => t.FullName).OrderBy(n => n, StringComparer.Ordinal))}) " +
-                    "have no outbox subscription, so a publish that goes through the outbox never reaches them; they run only " +
-                    "when it is dispatched in-process. Declare them in an assembly the source generator runs in, where they are " +
-                    "discovered and subscribed."));
+                if (byHand.Length > 0)
+                    issues.Add(CqrsConfigurationRules.HandRegisteredHandlersOfDurableNotification(notificationType, name, byHand));
             }
     }
 
@@ -180,32 +128,14 @@ internal static class CqrsConfigurationInspector
     // that honors it is not in the request's pipeline, so the marker has no effect.
     private static void InspectMarkers(CqrsRequestBinding binding, List<CqrsBindingIssue> issues)
     {
+        if (!CqrsConfigurationRules.HasBehaviorMarkers(binding.RequestType)) return;
+
         // When the behaviors could not be resolved (CQRDIAG004, reported with the binding) the pipeline is unknown, not
         // empty: concluding that a behavior is missing would name the wrong cause.
         if (binding.Issues.Any(i => i.Code == "CQRDIAG004")) return;
 
-        // An exempted behavior is registered and deliberately skipped for the request: an explicit opt-out, not a gap.
-        var wired = binding.Pipeline.Concat(binding.ExemptedPipeline);
-
-        // An error: the marker is the request's contract that a repeated delivery is not processed twice, and without the
-        // behavior every duplicate is processed.
-        if (typeof(IIdempotentRequest).IsAssignableFrom(binding.RequestType) &&
-            !wired.Any(b => typeof(ICqrsIdempotencyBehaviorMarker).IsAssignableFrom(b.BehaviorType)))
-            issues.Add(new CqrsBindingIssue(
-                CqrsBindingIssueSeverity.Error,
-                "CQRCONF005",
-                $"Request '{binding.RequestType.FullName}' implements IIdempotentRequest, but no idempotency behavior " +
-                "is registered, so the marker has no effect (duplicate requests are NOT rejected). Enable it with " +
-                "UseIdempotency(...)."));
-
-        // A warning: without the behavior a failure is not retried, but nothing runs twice.
-        if (typeof(IRetryableRequest).IsAssignableFrom(binding.RequestType) &&
-            !wired.Any(b => typeof(ICqrsResilienceBehaviorMarker).IsAssignableFrom(b.BehaviorType)))
-            issues.Add(new CqrsBindingIssue(
-                CqrsBindingIssueSeverity.Warning,
-                "CQRCONF006",
-                $"Request '{binding.RequestType.FullName}' implements IRetryableRequest, but no resilience behavior " +
-                "is registered, so the marker has no effect (failures are NOT retried). Enable it with UseResilience(...)."));
+        var wired = binding.Pipeline.Concat(binding.ExemptedPipeline).Select(b => b.BehaviorType).ToArray();
+        issues.AddRange(CqrsConfigurationRules.MissingMarkerBehaviors(binding.RequestType, wired));
     }
 
     private static bool IsRegistered(IServiceProvider services, IServiceProviderIsService? isService, Type serviceType)
