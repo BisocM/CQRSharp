@@ -143,6 +143,22 @@ public sealed partial class CqrsSourceGenerator
         DiagnosticSeverity.Warning,
         true);
 
+    private static readonly DiagnosticDescriptor ComposedNotificationNameClashDiagnostic = new(
+        "CQRGEN020",
+        "One notification name in more than one composed assembly",
+        "The notification name '{0}' is given to more than one notification type in the assemblies this one composes ({1}). While the outbox is on, a message stored under it could not be read back as the type it was stored as, so '{2}' keeps the name and publishing any other of them through the outbox fails with CQRCONF010. Give each a unique [NotificationName].",
+        Category,
+        DiagnosticSeverity.Warning,
+        true);
+
+    private static readonly DiagnosticDescriptor ComposedHandlerNameClashDiagnostic = new(
+        "CQRGEN021",
+        "One notification handler name in more than one composed assembly",
+        "The notification handler name '{0}' is used by more than one handler in the assemblies this one composes ({1}). Outbox messages are addressed to a handler by its name, so while the outbox is on a message for it is ambiguous (CQRCONF009). Give each handler a unique [NotificationHandlerName].",
+        Category,
+        DiagnosticSeverity.Warning,
+        true);
+
     private static readonly DiagnosticDescriptor RequestNotFingerprintableDiagnostic = new(
         "CQRGEN014",
         "Idempotent request cannot be fingerprinted automatically",
@@ -190,6 +206,7 @@ public sealed partial class CqrsSourceGenerator
             ReportCandidateIssues(context, candidates);
             ReportNotificationHandlerNameIssues(context, candidates);
             ReportContextFactoryIssues(context, candidates, known, bootstrapCallSites);
+            ReportComposedNameClashes(context, candidates, known, bootstrapCallSites);
             if (known.VisibleForeignBootstraps > 0)
                 ReportBootstrapVisibility(context, known, HasModuleContent(candidates),
                     bootstrapCallSites.Where(site => site.IsPlain).Select(site => site.Location).ToImmutableArray());
@@ -345,6 +362,61 @@ public sealed partial class CqrsSourceGenerator
                 context.ReportDiagnostic(Diagnostic.Create(
                     AmbiguousContextFactoryDiagnostic, site.Location.ToLocation(), ordered[0].ContextDisplayName, factories, ordered[ordered.Length - 1].FactoryTypeName));
         }
+    }
+
+    // CQRGEN020 / CQRGEN021: the stable names of the modules this assembly composes, its own and its references', must
+    // not clash across them (a clash within one assembly is CQRGEN002 / CQRGEN012 there). The runtime resolves a
+    // notification name to the module registered last, this assembly's own before any other, and reports both clashes
+    // as errors once the outbox is on; whether it will be on is not known here, so they are warnings, reported where
+    // this assembly composes the modules (its AddCqrsGenerated calls) and not at all in an assembly that never does.
+    private static void ReportComposedNameClashes(
+        SourceProductionContext context,
+        ImmutableArray<CandidateModel> candidates,
+        KnownSnapshot known,
+        ImmutableArray<BootstrapCallSiteModel> callSites)
+    {
+        if (callSites.Length == 0) return;
+
+        // This assembly's module registers last, which an ordinal sort puts after every registrar name.
+        const string ownRegistrar = "\uffff";
+        var ownAssembly = "this assembly";
+
+        var notifications = candidates
+            .Where(c => c.Notification is { StableName: not null, OutboxRoot: not null })
+            .Select(c => new ReferencedNameModel(c.Notification!.StableName!, c.Notification.TypeName, ownAssembly, ownRegistrar))
+            .Concat(known.ReferencedNotificationNames);
+        foreach (var clash in Clashes(notifications))
+        {
+            var keeper = clash.OrderBy(n => n.RegistrarName, StringComparer.Ordinal).Last();
+            foreach (var site in callSites)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ComposedNotificationNameClashDiagnostic, site.Location.ToLocation(), clash.Key, Describe(clash), Display(keeper.TypeName)));
+        }
+
+        var handlers = candidates
+            .Where(c => c.HandledNotifications.Count > 0 && c.NotificationHandlerName is not null)
+            .Select(c => new ReferencedNameModel(c.NotificationHandlerName!, c.TypeName, ownAssembly, ownRegistrar))
+            .Concat(known.ReferencedHandlerNames);
+        foreach (var clash in Clashes(handlers))
+            foreach (var site in callSites)
+                context.ReportDiagnostic(Diagnostic.Create(ComposedHandlerNameClashDiagnostic, site.Location.ToLocation(), clash.Key, Describe(clash)));
+
+        // A name given to more than one type (a type is its name and its assembly: two assemblies may declare the same
+        // namespace-qualified name) by more than one assembly.
+        static IEnumerable<IGrouping<string, ReferencedNameModel>> Clashes(IEnumerable<ReferencedNameModel> names)
+            => names
+                .GroupBy(n => n.Name, StringComparer.Ordinal)
+                .Where(g => g.Select(n => (n.TypeName, n.AssemblyName)).Distinct().Count() > 1 &&
+                            g.Select(n => n.AssemblyName).Distinct(StringComparer.Ordinal).Count() > 1)
+                .OrderBy(g => g.Key, StringComparer.Ordinal);
+
+        static string Describe(IEnumerable<ReferencedNameModel> clash)
+            => string.Join(", ", clash
+                .Select(n => $"'{Display(n.TypeName)}' in {(n.RegistrarName == ownRegistrar ? n.AssemblyName : "'" + n.AssemblyName + "'")}")
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(d => d, StringComparer.Ordinal));
+
+        static string Display(string typeName) => typeName.StartsWith("global::", StringComparison.Ordinal) ? typeName.Substring("global::".Length) : typeName;
     }
 
     // CQRGEN015: a referenced assembly's internal bootstrap is visible here. A warning at every plain call site when

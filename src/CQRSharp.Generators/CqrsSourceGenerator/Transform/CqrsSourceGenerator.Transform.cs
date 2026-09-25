@@ -26,13 +26,16 @@ public sealed partial class CqrsSourceGenerator
         var known = CqrsKnownSymbols.For(compilation);
         var moduleNamespace = CqrsKnownSymbols.ModuleNamespaceFor(compilation.AssemblyName);
         var none = new EquatableArray<string>(Array.Empty<string>());
+        var noNames = new EquatableArray<ReferencedNameModel>(Array.Empty<ReferencedNameModel>());
         if (!known.CoreReferenced)
             return new KnownSnapshot(false, none, false, moduleNamespace, none, 0, true,
                 new EquatableArray<ClosedBehaviorModel>(Array.Empty<ClosedBehaviorModel>()),
                 new EquatableArray<ClosedBehaviorGapModel>(Array.Empty<ClosedBehaviorGapModel>()),
-                new EquatableArray<ReferencedContextFactoryModel>(Array.Empty<ReferencedContextFactoryModel>()));
+                new EquatableArray<ReferencedContextFactoryModel>(Array.Empty<ReferencedContextFactoryModel>()),
+                noNames, noNames);
 
         var (referencedClosed, referencedGaps) = GetReferencedClosedBehaviors(compilation, known);
+        var (referencedNotificationNames, referencedHandlerNames) = GetReferencedModuleNames(compilation, known);
         return new KnownSnapshot(
             true,
             new EquatableArray<string>(known.GetMissingRequiredTypeNames().ToArray()),
@@ -43,7 +46,9 @@ public sealed partial class CqrsSourceGenerator
             ForeignBootstrapCoversGraph(compilation, known),
             new EquatableArray<ClosedBehaviorModel>(referencedClosed),
             new EquatableArray<ClosedBehaviorGapModel>(referencedGaps),
-            new EquatableArray<ReferencedContextFactoryModel>(GetAmbiguousReferencedContextFactories(compilation, known)));
+            new EquatableArray<ReferencedContextFactoryModel>(GetAmbiguousReferencedContextFactories(compilation, known)),
+            new EquatableArray<ReferencedNameModel>(referencedNotificationNames),
+            new EquatableArray<ReferencedNameModel>(referencedHandlerNames));
     }
 
     // The context types more than one referenced module registers a factory for ([CqrsRegisteredContextFactory] markers

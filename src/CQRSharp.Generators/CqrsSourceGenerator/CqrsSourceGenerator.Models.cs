@@ -32,7 +32,17 @@ public sealed partial class CqrsSourceGenerator
         bool ForeignBootstrapCoversGraph,
         EquatableArray<ClosedBehaviorModel> ReferencedClosedBehaviors,
         EquatableArray<ClosedBehaviorGapModel> ReferencedClosedBehaviorGaps,
-        EquatableArray<ReferencedContextFactoryModel> AmbiguousReferencedContextFactories);
+        EquatableArray<ReferencedContextFactoryModel> AmbiguousReferencedContextFactories,
+        EquatableArray<ReferencedNameModel> ReferencedNotificationNames,
+        EquatableArray<ReferencedNameModel> ReferencedHandlerNames);
+
+    /// <summary>
+    ///     A stable name a referenced assembly's module gives: a <c>[NotificationName]</c> its serializer stores a
+    ///     notification under, or the name its subscriptions address a notification handler by. CQRGEN020 / CQRGEN021
+    ///     compare them with this assembly's own, where this assembly composes the modules. <c>RegistrarName</c> orders the
+    ///     modules the way the bootstrap registers them.
+    /// </summary>
+    private sealed record ReferencedNameModel(string Name, string TypeName, string AssemblyName, string RegistrarName);
 
     /// <summary>
     ///     A context factory a referenced assembly's module registers for a context type that another referenced module
