@@ -57,7 +57,9 @@ var result = await cqrs.Send(new CreateUser { Name = "" });   // runs validation
 
 `AddCqrsGenerated(b => ...)` registers the validation and exception-handling behaviors; the other behaviors are added by
 their verbs. `ValidateOnStart()` makes starting the host run the **startup validator**, so a misconfigured test setup
-fails fast with a `CQRCONF` message (see [Diagnostics](diagnostics.md#startup-validation-cqrconf)).
+fails fast with a `CQRCONF` message (see [Diagnostics](diagnostics.md#startup-validation-cqrconf)). Without it the
+validator runs only in the Development environment: a plain `HostBuilder` is Production unless `UseEnvironment` says
+otherwise, while `WebApplicationFactory` hosts the application in Development, so validation runs there by default.
 
 ## Controlling time
 

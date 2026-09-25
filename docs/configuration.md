@@ -37,7 +37,7 @@ since the behaviors live in `CQRSharp.Pipelines`.
 
 Call `AddCqrsGenerated`, not `AddCqrs`. `AddCqrs` (hidden from IntelliSense) registers the dispatcher without the generated
 routing, so the first `Send`, `Stream` or `Publish` fails. The **CQRA014** analyzer makes a direct `AddCqrs()` call a build
-error and offers a fix; where the analyzers do not run, the [startup validator](#startup-validation), when it is on,
+error and offers a fix; where the analyzers do not run, the [startup validator](#startup-validation), when it runs,
 reports the missing registrations as **CQRCONF004**. How the entry points compose several assemblies is
 described in [The source generator](source-generator.md#multi-assembly-applications).
 
@@ -208,7 +208,7 @@ CQRSharp is built for the .NET **Generic Host**:
 
 - **Queued dispatch, the outbox and startup validation need a started host.** The queue's consumer, the outbox processor
   and the startup validator are hosted services, which run only after `host.StartAsync()` or `RunAsync()`. Under the
-  defaults (`RunMode.Inline`, outbox off, validation off) nothing depends on them. Without a started host a queued `Send`
+  defaults (`RunMode.Inline`, outbox off, validation off outside Development) nothing depends on them. Without a started host a queued `Send`
   waits `ConsumerStartTimeout` for the consumer and then throws `InvalidOperationException` instead of hanging, the
   outbox stores messages that nothing delivers, and nothing is validated.
 - **Resolve `ICqrsDispatcher` from a scope, not the root provider.** The dispatcher and its pipeline are *scoped*, so a
@@ -231,25 +231,35 @@ CQRSharp is built for the .NET **Generic Host**:
 ## Startup validation
 
 The startup validator inspects the configuration and every request's binding once, before any hosted service starts, so
-a seeder or a web server never runs against a configuration it would reject. It is off by default
-(`CqrsStartupValidationOptions.Policy` is `Off`); turn it on with `ValidateOnStart`:
+a seeder or a web server never runs against a configuration it would reject. With no policy set
+(`CqrsStartupValidationOptions.Policy` is `null`), the host environment decides, following what the host itself does
+with `ValidateOnBuild` and `ValidateScopes`: it runs as `ThrowOnError` when `IHostEnvironment` is **Development**, and is
+off in every other environment and without a host. A policy you set applies everywhere:
 
 ```csharp
-.ValidateOnStart()                                          // ThrowOnError: abort host start on an error
+.ValidateOnStart()                                          // ThrowOnError in every environment
 .ValidateOnStart(CqrsValidationPolicy.ThrowOnWarning)       // abort on errors and warnings
 .ValidateOnStart(CqrsValidationPolicy.WarnOnly)             // log everything, never abort
-.ValidateOnStart(false)                                     // Off
+.ValidateOnStart(false)                                     // Off, in Development too
 ```
 
 | `CqrsValidationPolicy` | Effect |
 | --- | --- |
-| `Off` *(default)* | The validator does not run. `ValidateOnStart(false)` selects it. |
+| `Off` | The validator does not run. What applies outside Development unless a policy is set; `ValidateOnStart(false)` selects it everywhere. |
 | `WarnOnly` | Every issue is logged; host start always proceeds. `ValidateOnStart(CqrsValidationPolicy.WarnOnly)`. |
-| `ThrowOnError` | Every issue is logged; host start is aborted when an error is present. `ValidateOnStart()` selects it. |
+| `ThrowOnError` | Every issue is logged; host start is aborted when an error is present. What applies in Development unless a policy is set; `ValidateOnStart()` selects it everywhere. |
 | `ThrowOnWarning` | Every issue is logged; host start is aborted when an error or a warning is present. `ValidateOnStart(CqrsValidationPolicy.ThrowOnWarning)`. |
 
 A builder that never calls `ValidateOnStart` leaves the policy as it is, so it can also come from another
-`AddCqrsGenerated` call or from `services.Configure<CqrsStartupValidationOptions>(...)`.
+`AddCqrsGenerated` call, from `services.Configure<CqrsStartupValidationOptions>(...)` or from configuration binding;
+nobody setting it leaves it to the environment.
+
+Why not on everywhere: the validator resolves every pipeline behavior of every request, the cold cost each request type
+otherwise pays at its first dispatch, all before the host serves anything (about 15 ms for the Native AOT sample's 18
+requests, 100 to 230 ms for 300 requests). Production does not go unchecked, though: the rules whose violation would
+misbehave silently are also checked where they first apply, in every environment. An idempotent request without
+`UseIdempotency` fails its dispatch, a durable publish under a transactional outbox with no unit of work fails, and the
+rest are logged once; [First-use checks](diagnostics.md#first-use-checks) lists what happens for each code.
 
 The validator reports issues with stable `CQRCONF` codes: outbox wiring (a missing store or serializer, a handled
 notification that bypasses the outbox, a notification or handler name used twice, handlers the outbox cannot reach or

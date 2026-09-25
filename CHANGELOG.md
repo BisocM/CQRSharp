@@ -78,10 +78,23 @@ Registration:
    `CQRSharp.Pipelines`, has only the parameterless form, and it registers no pipeline behavior.
 8. `AddOutboxProcessor` is removed: the processor is always registered and idles while the outbox is disabled. Tune
    it with `UseOutbox(o => o.ConfigureProcessor(…))` or `services.Configure<OutboxProcessorOptions>(…)`.
-9. Startup validation is off unless you ask for it, on every entry point: `CqrsStartupValidationOptions.Policy`
-   defaults to `Off` (4.2.1's direct `AddCqrsGenerated(...)` overload defaulted to `ThrowOnError`). Call
-   `ValidateOnStart()` to fail fast. `CQRCONF005` (an `IIdempotentRequest` without `UseIdempotency`) and `CQRCONF007`
-   (`Transactional` outbox without a unit of work) are errors now.
+9. Startup validation follows the host environment unless you set a policy: `CqrsStartupValidationOptions.Policy` is
+   a `CqrsValidationPolicy?` that defaults to `null`, which runs the validator as `ThrowOnError` when the
+   `IHostEnvironment` is Development and not at all in any other environment or without a host (4.2.1's direct
+   `AddCqrsGenerated(...)` overload defaulted to `ThrowOnError` everywhere). `ValidateOnStart()` turns it on everywhere,
+   `ValidateOnStart(false)` off everywhere, Development included. `CQRCONF005` (an `IIdempotentRequest` without
+   `UseIdempotency`) and `CQRCONF007` (`Transactional` outbox without a unit of work) are errors now, and they are
+   also checked at first use in every environment: an idempotent request without the idempotency behavior fails every
+   dispatch, and a durable publish under a transactional outbox with no `IUnitOfWork` fails.
+
+   **Wiring mistakes fail at first use.** Whether or not the startup validator runs, the first dispatch or publish of
+   a type checks the `CQRCONF` rule that applies there, once per service provider and type, and keeps the verdict in the
+   type's plan: `CQRCONF005` fails every dispatch of the request, `CQRCONF007` and `CQRCONF010` fail every publish that
+   would be durable, `CQRCONF006`, `CQRCONF003` and `CQRCONF011` log a warning once (events 1204, 1205), and `CQRCONF012`
+   logs an error once (1206). A test or application that dispatched an `IIdempotentRequest` without `UseIdempotency`,
+   or published a `[NotificationName]` notification under `Transactional()` without a unit of work, now gets an
+   `InvalidOperationException` naming the code; wire the behavior or the unit of work. The outbox writer's failure for
+   a missing store now carries `CQRCONF001`.
 10. The bindings health check is removed (`AddCqrsBindings`, `CqrsBindingsHealthCheck`,
     `CqrsBindingIssueSeverity.Info`). Use `ValidateOnStart()` (or `ValidateOnStart(CqrsValidationPolicy.WarnOnly)` to
     only log) as the configuration gate; `AddHealthChecks().AddCqrsOutbox()` checks the outbox.
@@ -396,9 +409,13 @@ Background queue, behaviors and observability:
   `BacklogSampleInterval` / `UnknownRecipientGracePeriod`, `UnitOfWorkOptions.RollbackOnFailedResult`,
   `BackgroundTaskQueueOptions.DrainOnShutdown`, `RequestContextBase(DateTime createdAt)`,
   `CqrsPipelinePriorities.Validation` / `ExceptionHandling`.
-- Diagnostics: the analyzer `CQRA015` (`ITransactionalCommand` on a request that is not a command), `CQRGEN011` to
-  `CQRGEN019` (partition key, handler names, fingerprints, `AddCqrsGenerated` under `InternalsVisibleTo`, request
-  attributes and response types generated code cannot use, duplicate context factories), `CQRCONF009` to `CQRCONF012`
+- Diagnostics: the analyzers `CQRA015` (`ITransactionalCommand` on a request that is not a command), `CQRA018` /
+  `CQRA019` (an `IIdempotentRequest` / `IRetryableRequest` in an application whose whole configuration is in view and
+  never calls `UseIdempotency` / `UseResilience`, with a code fix that adds the verb) and `CQRA020` (a handled
+  notification without `[NotificationName]` under a visible `UseOutbox`, with a code fix that names it), `CQRGEN011` to
+  `CQRGEN021` (partition key, handler names, fingerprints, `AddCqrsGenerated` under `InternalsVisibleTo`, request
+  attributes and response types generated code cannot use, duplicate context factories, and notification or handler
+  names that the modules one assembly composes give to more than one type), `CQRCONF009` to `CQRCONF012`
   (handler-name and notification-name clashes, hand-registered handlers of a durable notification, and ones that
   cannot be constructed), and the binding warnings `CQRDIAG005` / `CQRDIAG006` (validators or exception hooks whose
   behavior is not in the request's pipeline, across assemblies). See [docs/diagnostics.md](docs/diagnostics.md).

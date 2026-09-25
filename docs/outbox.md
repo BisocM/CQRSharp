@@ -78,8 +78,9 @@ it and `OutboxOptions.Mode` selects the mode.
 
 `Enabled` together with a [unit of work](unit-of-work.md) is already atomic for a store that joins the transaction, so
 choose `Transactional` only when notifications published outside transactional work should stay in-process.
-`Transactional` without any registered `IUnitOfWork` never sees a transaction, so nothing reaches the outbox; the
-startup validator reports that as **CQRCONF007** (see [Diagnostics](diagnostics.md#startup-validation-cqrconf)).
+`Transactional` without any registered `IUnitOfWork` never sees a transaction, so nothing could reach the outbox: a
+publish of a notification the serializer names fails with **CQRCONF007**, as does the startup validator (see
+[Diagnostics](diagnostics.md#first-use-checks)).
 
 ## Which notifications are durable
 
@@ -95,12 +96,14 @@ public sealed record OrderPlaced(Guid OrderId, decimal Total) : INotification;
 
 - The name identifies the stored payload, possibly for another process or a later version of the application, so keep
   it stable across refactors and unique across notification types. Two types with one name are **CQRGEN002** in one
-  assembly and **CQRCONF010** across assemblies.
+  assembly and, across assemblies, **CQRGEN020** at build where one assembly composes them and **CQRCONF010** at run
+  time, where a publish of the type that lost the name fails instead of silently staying in-process.
 - `[NotificationName]` applies to classes and records. A `struct` notification always runs in-process.
-- A handled notification without a name runs in-process even while an outbox mode is active; the startup validator
-  reports it as **CQRCONF003**, so the bypass is not silent.
+- A handled notification without a name runs in-process even while an outbox mode is active; its first such publish
+  logs **CQRCONF003** (so does the startup validator), and **CQRA020** suggests the attribute at build when the whole
+  configuration is in view, so the bypass is not silent.
 - Only the handlers the source generator discovered are outbox subscriptions. Handlers registered by hand in DI run for
-  in-process publishes only; for a durable notification the validator reports them as **CQRCONF011**.
+  in-process publishes only; for a durable notification its first publish to the outbox logs **CQRCONF011**.
 
 ### Supported shapes
 

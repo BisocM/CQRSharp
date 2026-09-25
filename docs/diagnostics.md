@@ -1,12 +1,14 @@
 # Diagnostics &amp; validation
 
-CQRSharp catches mistakes at three moments: **as you type** (Roslyn analyzers), **at build** (generator diagnostics),
-and **at host start** (the startup validator). A runtime **introspection API** shows how every request is wired, and an
-**outbox health check** reports the outbox's backlog.
+CQRSharp catches mistakes at four moments: **as you type** (Roslyn analyzers), **at build** (generator diagnostics),
+**at host start** (the startup validator, on by default in the Development environment) and **at first use** (the
+first dispatch of a request, the first publish of a notification, in every environment). A runtime **introspection
+API** shows how every request is wired, and an **outbox health check** reports the outbox's backlog.
 
 - [Compile-time analyzers (CQRA)](#compile-time-analyzers-cqra)
 - [Generator diagnostics (CQRGEN)](#generator-diagnostics-cqrgen)
 - [Startup validation (CQRCONF)](#startup-validation-cqrconf)
+- [First-use checks](#first-use-checks)
 - [The introspection API](#the-introspection-api)
 - [Binding issues (CQRDIAG)](#binding-issues-cqrdiag)
 - [Health checks](#health-checks)
@@ -32,11 +34,41 @@ so every project that references any CQRSharp package gets them.
 | `CQRA014` | Error | `AddCqrs()` is called directly: it registers the dispatcher but not the generated routing, so the first `Send`/`Stream`/`Publish` throws. **Code fix:** calls `AddCqrsGenerated(...)` instead; withheld when the rewritten call would bind a different overload. |
 | `CQRA015` | Warning | A query, stream or plain request implements `ITransactionalCommand`, which opts a command into a unit-of-work transaction but does not make a request a command: it commits, but keeps its query or stream lifecycle notifications, span and metrics. Make it a command (`ICommand` / `ICommand<TResult>`), or mark a query or stream that writes with `ITransactionalQuery` and `IsReadOnly = false`. |
 
+| `CQRA018` | Error | The application handles a request that implements `IIdempotentRequest`, and its CQRSharp configuration never calls `UseIdempotency(...)`, so every dispatch of it fails at runtime with `CQRCONF005`. Reported at the `AddCqrsGenerated` call, only for a configuration [in view](#configuration-in-view). **Code fix:** adds `UseIdempotency()` to the configuration. |
+| `CQRA019` | Warning | The application handles a request that implements `IRetryableRequest`, and its CQRSharp configuration never calls `UseResilience(...)`, so its failures are not retried (`CQRCONF006` at runtime). Reported at the `AddCqrsGenerated` call, only for a configuration [in view](#configuration-in-view). **Code fix:** adds `UseResilience(o => o.MaxRetries = 3)`. |
+| `CQRA020` | Info | A configuration [in view](#configuration-in-view) turns the outbox on (`UseOutbox`) under the generated serializer, and a notification class declared in the project has handlers but no `[NotificationName]`, so it is never stored in the outbox (`CQRCONF003` at runtime). It may be meant to stay in-process, hence a suggestion. Not reported where code in view names `INotificationSerializer` (a type implementing it, `AddNotificationSerializer<T>()`) or `OutboxOptions`. **Code fix:** adds `[NotificationName("...")]` with a name in the lower-case dotted form (`OrderPlacedNotification` becomes `order.placed`, or `shop.orders.order.placed` when that is taken); a fixed name, since renaming the type later must not change it. |
+
 `CQRA003`, `CQRA006` and `CQRA011` work across projects: the generator emits assembly-level markers for every handled
 request, handled notification and registered context factory, and a project sees the markers of the projects it
 references. So `CQRA011` cannot see a factory declared in a project that references the request's project (a factory in
 `Infrastructure` for a request in `Application`); suppress it there. `CQRA012` fires only in a project that registers
 CQRSharp, and recognizes the registration and `UseValidation(false)` by the methods they bind to.
+
+### Configuration in view
+
+`CQRA018`, `CQRA019` and `CQRA020` report a builder verb as missing, which is only true when nothing else can supply
+it, so they report nothing unless the application's whole CQRSharp configuration is in view:
+
+- The project is an application (an executable). A library is never reported: the application that references it may
+  configure CQRSharp further.
+- The project calls one CQRSharp registration, once: `AddCqrsGenerated()`, or `AddCqrsGenerated(b => ...)` with a lambda
+  written in place (not a variable or a method group) that is a chain of builder verbs on its parameter, as one
+  expression or as statements. No condition, loop, local function, helper method or builder extension of the project's
+  own (CQRSharp's `UseFluentValidation` and `UseEntityFrameworkCoreUnitOfWork` are known); no verb argument that reaches
+  the service collection or the builder or calls the project's own code while it configures (a factory the container
+  calls later, `sp => ...`, is fine).
+- No referenced assembly other than CQRSharp's packages can configure CQRSharp: none references `CQRSharp.Core` or
+  `CQRSharp.Pipelines` (a module with handlers, a library that wires behaviors), none references
+  `CQRSharp.Abstractions` together with the dependency-injection abstractions (it could register a serializer), and no
+  assembly-scanning registration library (Scrutor) is referenced. A contracts project that references
+  `CQRSharp.Abstractions` alone is fine.
+- No code in the project names a built-in behavior a verb registers (`IdempotencyBehavior<,>`, `ResilienceBehavior<,>`
+  and their stream forms), or `typeof(IPipelineBehavior<,>)` / `typeof(IStreamPipelineBehavior<,>)` other than in a plain
+  container registration of the application's own behavior (`services.AddTransient(typeof(IPipelineBehavior<,>),
+  typeof(MyBehavior<,>))`), since a scan could register the built-in ones.
+
+Registrations made by reflection over type names are beyond any analyzer; if an application registers CQRSharp's
+behaviors that way, suppress the diagnostic.
 
 ## Generator diagnostics (CQRGEN)
 
@@ -62,14 +94,21 @@ reference `CQRSharp.Core` gets no generated code and no generator diagnostic.
 | `CQRGEN017` | Error | A handler is declared over a response type that is not the one its request is dispatched with, so the dispatcher never calls it: an `IRequestExceptionHandler<TRequest, TResponse, TException>` whose `TResponse` is not exactly `CommandResult`, `CommandResult<T>`, the query result or `IAsyncEnumerable<T>`, or a request handler declared over a wider result through covariance. |
 | `CQRGEN018` | Error | Two `IRequestContextFactory` classes in the assembly serve the same context type. A context type has one factory; keep one. |
 | `CQRGEN019` | Warning | Two or more referenced assemblies each register a context factory for one context type, and this assembly, which composes them, declares none, so module order decides which one runs. Reported at each `AddCqrsGenerated` call. Declare an `IRequestContextFactory<T>` in this assembly (it replaces theirs) or keep only one. A factory registered by hand also resolves it; suppress the warning then. |
+| `CQRGEN020` | Warning | The assemblies this one composes (itself and every referenced module) give one `[NotificationName]` to more than one notification type across assemblies. While the outbox is on, this assembly's type keeps the name (or, between two referenced modules, the one registered last) and a publish of any other through the outbox fails with `CQRCONF010`. Reported at each `AddCqrsGenerated` call; a warning, since whether the outbox will be on is not known at build. Give each a unique `[NotificationName]`. |
+| `CQRGEN021` | Warning | The assemblies this one composes use one notification handler name for more than one handler across assemblies (the same namespace and type name, or the same `[NotificationHandlerName]`), so while the outbox is on a message addressed to it is ambiguous (`CQRCONF009`). Reported at each `AddCqrsGenerated` call. Give each a unique `[NotificationHandlerName]`. |
 | `CQRGEN999` | Error | An unhandled exception in the generator. Please report it. |
 
 ## Startup validation (CQRCONF)
 
 The startup validator inspects the configuration and every request binding **once, before any hosted service starts**,
-whatever the registration order, so a seeder or a web server never runs against a configuration it rejects. It is off
-by default; turn it on with `ValidateOnStart()` on the builder (see
-[Configuration](configuration.md#startup-validation)).
+whatever the registration order, so a seeder or a web server never runs against a configuration it rejects. Unless a
+policy is set it runs in the **Development** environment only, as `ThrowOnError`, the way the host validates its
+container there; everywhere else it is off unless `ValidateOnStart()` turns it on (see
+[Configuration](configuration.md#startup-validation)). It resolves every pipeline behavior of every request, which is
+the cold cost each request type otherwise pays at its first dispatch, paid for all of them before the host serves
+anything: some 15 ms for the 18 requests of the Native AOT sample, and 100 to 230 ms for an application of 300 requests
+(JIT and Native AOT). The rules that matter most do not wait for it: they are also checked at
+[first use](#first-use-checks), in every environment.
 
 | ID | Severity | Condition |
 | --- | --- | --- |
@@ -93,14 +132,41 @@ pass (1202). What happens next follows the policy:
 
 | Policy | Selected with | Effect |
 | --- | --- | --- |
-| `Off` | the default, or `ValidateOnStart(false)` | Validation is skipped. |
+| `Off` | no policy set outside Development, or `ValidateOnStart(false)` | Validation is skipped. |
 | `WarnOnly` | `ValidateOnStart(CqrsValidationPolicy.WarnOnly)` | Every issue is logged; host start always proceeds. |
-| `ThrowOnError` | `ValidateOnStart()` | Host start is aborted with an `InvalidOperationException` listing the errors. |
+| `ThrowOnError` | no policy set in Development, or `ValidateOnStart()` | Host start is aborted with an `InvalidOperationException` listing the errors. |
 | `ThrowOnWarning` | `ValidateOnStart(CqrsValidationPolicy.ThrowOnWarning)` | Host start is aborted when there is any error or warning. |
 
-The policy is `CqrsStartupValidationOptions.Policy` (namespace `CQRSharp`), so it can also be set with
-`services.Configure<CqrsStartupValidationOptions>(...)` or bound from configuration. An undefined value fails host
-start.
+The policy is `CqrsStartupValidationOptions.Policy` (namespace `CQRSharp`), a `CqrsValidationPolicy?`, so it can also
+be set with `services.Configure<CqrsStartupValidationOptions>(...)` or bound from configuration. Left `null` (the
+default), the host environment decides: `ThrowOnError` when the `IHostEnvironment` is Development, `Off` in any other
+environment and when there is no host environment at all. A policy that is set applies in every environment. An
+undefined value fails host start.
+
+## First-use checks
+
+Where a rule has a natural first point of use, the runtime checks it there too, in every environment and whether or
+not the startup validator runs, so a misconfiguration never degrades silently in production. Each check runs once per
+service provider and type, as part of the plan the dispatcher or publisher builds for that type anyway: a correctly
+wired request or notification pays nothing more than its cached plan (a request without markers has no check at all).
+The rule and its message are the startup validator's own, so a code means the same wherever it is reported. An error
+is kept with the plan and fails **every** dispatch or publish of that type with an `InvalidOperationException` whose
+message starts with `CQRSharp configuration error <code>:`; a warning is logged once, under the category
+`CQRSharp.Core.Diagnostics.CqrsConfiguration` (event 1204 for a request, 1205 for a notification; 1206 for an error that
+does not fail the publish).
+
+| ID | At first use | Why |
+| --- | --- | --- |
+| `CQRCONF001` | The first publish that goes to the outbox fails. | Nothing could store it. (It already failed there; the message now carries the code.) |
+| `CQRCONF003` | The first publish under an outbox mode of a handled notification the serializer does not name logs a warning; the notification is delivered in-process, as before. | It may be meant to stay in-process. |
+| `CQRCONF004` | No separate check: without the generated registrations the first `Send`, `Stream` or `Publish` already fails for want of a route, and `CQRA014` makes the direct `AddCqrs()` call a build error. | |
+| `CQRCONF005` | The dispatch of an `IIdempotentRequest` fails, every time, unless the idempotency behavior is registered for it (exempting a registered one is an opt-out, not a gap), before its handler runs. | Running it would process duplicates. Checked against the behaviors the dispatch resolves anyway, so it costs no extra resolution. |
+| `CQRCONF006` | The first dispatch of an `IRetryableRequest` without the resilience behavior logs a warning; the request runs. | It only forgoes retries: failing it would turn a missing resilience layer into an outage. |
+| `CQRCONF007` | Under `Transactional` mode with no `IUnitOfWork`, a publish of a notification the serializer names fails, every time; any other is delivered in-process as before. | It was meant to be durable, and never can be. |
+| `CQRCONF009` | No runtime check: a handler name clash between modules is reported at build as `CQRGEN021` in the assembly that composes them, and the subscription tables only come from generated modules, which the generator composes. The startup validator still reports it. | |
+| `CQRCONF010` | A publish that would go to the outbox of a handled notification that lost its `[NotificationName]` to another module's type fails, every time. Also reported at build as `CQRGEN020`. | Its declared durability cannot be honored. |
+| `CQRCONF011` | The first publish that goes to the outbox of a durable notification with handlers registered by hand logs a warning; delivery is unchanged. | The handlers still run when it is dispatched in-process. |
+| `CQRCONF012` | The same first publish logs an error when those handlers cannot be constructed; the publish, which constructs none of them, is not failed. | An in-process publish of the type fails with the same exception. |
 
 ## The introspection API
 
@@ -189,7 +255,7 @@ These ids were reported by earlier releases and are retired; a `#pragma` or `NoW
 | `CQRA001` | Handler interfaces take no context type argument, so a handler cannot mismatch its request's context. |
 | `CQRA007` | Rate limiting is opt-in per request, so a request without `IRateLimitedContext` is not a mistake. |
 | `CQRA009` | It fired on every value-returning command, the correct ones included; the guidance lives on `ICommand<TResult>`. |
-| `CQRA013` | Retries and idempotency are opt-in per request; `CQRCONF005` / `CQRCONF006` report a marker whose behavior is not wired. |
+| `CQRA013` | Retries and idempotency are opt-in per request; `CQRCONF005` / `CQRCONF006` (and, at build, `CQRA018` / `CQRA019`) report a marker whose behavior is not wired. |
 | `CQRA017` | `ICommandInterceptor` is removed; an attribute implements `IPreHandlerAttribute` and `IPostHandlerAttribute`. |
 | `CQRGEN008` | A project without `CQRSharp.Core` gets no generated code, and needs no diagnostic to say so. |
 | `CQRCONF002` | A unit of work always reports whether a transaction is active (`IUnitOfWork.HasActiveTransaction`), so the transactional outbox can always detect one. |

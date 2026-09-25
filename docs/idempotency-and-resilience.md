@@ -34,9 +34,11 @@ hook for a custom store, and `ReplayResultsWith(...)` (below). A chosen store re
 registered, whatever the order; a bare `UseIdempotency()` uses the in-memory store only when no idempotency store is
 registered at all.
 
-If a request implements `IIdempotentRequest` but `UseIdempotency(...)` is never called, the marker does nothing and
-duplicates are processed. The startup validator reports this as **CQRCONF005**, an error, so `ValidateOnStart()` stops
-the host (see [Diagnostics](diagnostics.md#startup-validation-cqrconf)).
+If a request implements `IIdempotentRequest` but `UseIdempotency(...)` is never called, nothing would stop a duplicate
+from being processed, so the request is not processed at all: its dispatch fails with an `InvalidOperationException`
+naming **CQRCONF005**, every time, in every environment. The startup validator reports the same error at host start (in
+Development by default), and **CQRA018** reports it at build when the application's whole configuration is in view,
+with a fix that adds the verb (see [Diagnostics](diagnostics.md#first-use-checks)).
 
 When a request implementing `IIdempotentRequest` is dispatched, the behavior **claims** its key before the handler runs.
 The store answers one of four things:
@@ -218,8 +220,9 @@ Any other exception is retried, including a `TimeoutException` or an `OperationC
 A **streaming request** is retried only while it has yielded no item: once an item has reached the consumer, a failure
 propagates, so no item is delivered twice.
 
-If a request implements `IRetryableRequest` but `UseResilience(...)` is never called, the marker does nothing; the
-startup validator reports **CQRCONF006**, a warning.
+If a request implements `IRetryableRequest` but `UseResilience(...)` is never called, the marker does nothing: the
+request runs once, and its first dispatch logs **CQRCONF006**, a warning (as does the startup validator; **CQRA019**
+reports it at build when the whole configuration is in view).
 
 ## Timeouts
 

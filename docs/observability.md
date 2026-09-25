@@ -212,6 +212,15 @@ time is measured with the injected `TimeProvider`. It sorts every failure:
 | 1202 | Information | Validation passed with no issues. |
 | 1203 | Information | The summary: error and warning counts, and the policy. |
 
+**First-use configuration checks** (category `CQRSharp.Core.Diagnostics.CqrsConfiguration`); see
+[Diagnostics](diagnostics.md#first-use-checks). Each is logged once per service provider and type.
+
+| Id | Level | Event |
+| --- | --- | --- |
+| 1204 | Warning | A request's first dispatch met a configuration warning (`CQRCONF006`): `{Code}`, `{RequestName}`, `{Message}`. |
+| 1205 | Warning | A notification's first publish under the outbox met a configuration warning (`CQRCONF003`, `CQRCONF011`): `{Code}`, `{NotificationName}`, `{Message}`. |
+| 1206 | Error | A notification's first publish to the outbox met a configuration error that does not fail it (`CQRCONF012`): `{Code}`, `{NotificationName}`, `{Message}`. |
+
 **Logging behavior** (`CQRSharp.Pipelines.LoggingBehavior` / `StreamLoggingBehavior`).
 
 | Id | Level | Event |

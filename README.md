@@ -62,9 +62,10 @@ app with `dotnet new cqrsharp`, or read
 
 Pass a builder to `AddCqrsGenerated` to add behaviors and stores. The order of the verbs does not matter: the builder
 applies each behavior at its fixed place in the pipeline. In this form validation and exception handling are on (they do
-nothing for a request without validators or exception hooks); every other behavior runs only when its verb is called. The
-startup validator turns wiring mistakes, such as an `IIdempotentRequest` whose behavior was never enabled, into a failure
-at host start instead of at the first request:
+nothing for a request without validators or exception hooks); every other behavior runs only when its verb is called.
+Wiring mistakes do not fail silently: an `IIdempotentRequest` whose behavior was never enabled fails its dispatch, and the
+startup validator, on by default in the Development environment and everywhere with `ValidateOnStart()`, reports every
+such mistake at host start instead:
 
 ```csharp
 services.AddCqrsGenerated(b => b

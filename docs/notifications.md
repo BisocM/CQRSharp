@@ -203,8 +203,8 @@ as your data.
 While the outbox is on, the registered `INotificationSerializer` decides which notifications go through it: those it can
 name. With the generated serializer, that is the classes and records marked `[NotificationName]` whose properties it can
 serialize (it reports **CQRGEN005** for one it cannot); struct notifications cannot carry the attribute and are always
-delivered in process. Every other notification is delivered in process, and the startup validator reports a handled
-notification that bypasses the outbox as **CQRCONF003**.
+delivered in process. Every other notification is delivered in process, and a handled one that bypasses the outbox is
+reported as **CQRCONF003**, logged at its first publish under the outbox and by the startup validator.
 
 ```csharp
 [NotificationName("orders.placed")]   // a stable name, independent of the type's name
@@ -214,7 +214,7 @@ public sealed record OrderPlaced(Guid OrderId, decimal Total) : INotification;
 Through the outbox every generated handler is its own subscription, addressed by a stable handler name (the handler type's
 namespace-qualified name, or `[NotificationHandlerName("...")]`): one stored message per handler, each with its own
 attempts and dead letter. Handlers registered by hand get no subscription, so a notification that goes through the outbox
-does not reach them (the startup validator warns with **CQRCONF011**). Add `PartitionBy = nameof(OrderId)` to the
+does not reach them (**CQRCONF011** warns, at the first publish that goes to the outbox and in the startup validator). Add `PartitionBy = nameof(OrderId)` to the
 attribute, or implement `IPartitionedNotification`, to deliver a key's notifications to each handler in order.
 
 [The outbox](outbox.md) covers the modes, the stores, custom serializers, ordering, the inbox and dead letters.
