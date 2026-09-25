@@ -5,14 +5,13 @@
 [![CodeQL](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](https://github.com/BisocM/CQRSharp/tree/Release/LICENSE)
 
-A CQRS framework for .NET 8 / 9 / 10 that is wired at **compile time**. A Roslyn source generator emits the dispatch
-tables, handler registrations and notification serializers as plain C#, so there is no runtime reflection, the framework
-is trimming- and **Native-AOT-safe**, and a request without a handler is a build warning instead of a production
-exception.
+Commands, queries and events for .NET 8, 9 and 10, plus the plumbing you would otherwise write around them.
 
-Beyond dispatch it ships the parts a CQRS codebase usually builds around a mediator: validation, retries, timeouts, rate
-limiting, idempotency, a unit of work, and a **transactional outbox** with Redis and EF Core stores, all configured through
-one fluent builder.
+- **Wired at compile time.** A source generator finds your handlers, so there is no reflection or assembly scanning, it
+  runs under Native AOT, and a request without a handler shows up in your IDE, not in production.
+- **Faster than MediatR** inside a scope, for requests, streams and notifications ([benchmarks](https://github.com/BisocM/CQRSharp/blob/Release/benchmarks/README.md#latest-results)).
+- **Batteries included, pay for what you use.** Validation, retries, timeouts, rate limiting, idempotency, a unit of work
+  and a transactional outbox (Redis or EF Core) are one builder call each, and cost nothing where you do not use them.
 
 MIT licensed. [Documentation](https://github.com/BisocM/CQRSharp/blob/Release/docs/README.md) · [Changelog](https://github.com/BisocM/CQRSharp/blob/Release/CHANGELOG.md) · [Project page](https://bisocm.org/projects/cqrsharp)
 
