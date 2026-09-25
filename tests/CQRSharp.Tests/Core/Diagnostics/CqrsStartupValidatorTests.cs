@@ -247,6 +247,9 @@ public sealed class CqrsStartupValidatorTests
     {
         using var host = new HostBuilder()
             .UseEnvironment(Environments.Development)
+            // From .NET 9 the host validates the container on build in Development; this assembly's module registers
+            // handlers whose dependencies only their own tests register.
+            .UseDefaultServiceProvider(o => o.ValidateOnBuild = false)
             .ConfigureServices(services =>
             {
                 services.AddCqrsGenerated(Wired);
@@ -264,6 +267,9 @@ public sealed class CqrsStartupValidatorTests
     {
         using var host = new HostBuilder()
             .UseEnvironment(Environments.Development)
+            // From .NET 9 the host validates the container on build in Development; this assembly's module registers
+            // handlers whose dependencies only their own tests register.
+            .UseDefaultServiceProvider(o => o.ValidateOnBuild = false)
             .ConfigureServices(services =>
             {
                 services.AddCqrsGenerated(b => Wired(b.ValidateOnStart(false)));
