@@ -64,10 +64,11 @@ internal static class CompilationHarness
         IEnumerable<string> sources,
         IEnumerable<MetadataReference>? extraReferences = null,
         string assemblyName = "GeneratorProbe",
-        IEnumerable<MetadataReference>? references = null)
+        IEnumerable<MetadataReference>? references = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
     {
         var compilation = CreateCompilation(
-            sources, assemblyName, (references ?? ProbeReferences.Create()).Concat(extraReferences ?? []));
+            sources, assemblyName, (references ?? ProbeReferences.Create()).Concat(extraReferences ?? []), outputKind);
 
         var driver = CSharpGeneratorDriver
             .Create(new Gen().AsSourceGenerator())
@@ -101,12 +102,16 @@ internal static class CompilationHarness
     ///     Compiles <paramref name="sources" /> without checking them: for input that only compiles once the generated code
     ///     is added (a plain <c>AddCqrsGenerated()</c> call), which its test checks after running the generator.
     /// </summary>
-    public static CSharpCompilation CreateCompilation(IEnumerable<string> sources, string assemblyName, IEnumerable<MetadataReference>? references = null)
+    public static CSharpCompilation CreateCompilation(
+        IEnumerable<string> sources,
+        string assemblyName,
+        IEnumerable<MetadataReference>? references = null,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary)
         => CSharpCompilation.Create(
             assemblyName,
             sources.Select((source, i) => CSharpSyntaxTree.ParseText(source, path: $"Probe{i}.cs")),
             references ?? ProbeReferences.Create(),
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+            new CSharpCompilationOptions(outputKind, nullableContextOptions: NullableContextOptions.Enable));
 
     /// <summary>The errors of <paramref name="compilation" />, one line each.</summary>
     public static string[] Errors(Compilation compilation)

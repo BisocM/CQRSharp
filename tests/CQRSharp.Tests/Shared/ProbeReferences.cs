@@ -29,6 +29,13 @@ internal static class ProbeReferences
             .ToArray();
 
     /// <summary>
+    ///     The references of an application made of one project: every assembly the test host can resolve but the test
+    ///     assemblies themselves, which are CQRSharp modules an application would have to compose.
+    /// </summary>
+    public static MetadataReference[] SingleProjectApplication()
+        => Create(name => name.StartsWith("CQRSharp.Tests", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     ///     The references of a project that uses CQRSharp.Abstractions and nothing else of CQRSharp: a contracts or handler
     ///     library that does not reference the runtime.
     /// </summary>

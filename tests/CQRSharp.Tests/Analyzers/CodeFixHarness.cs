@@ -21,15 +21,20 @@ internal static class CodeFixHarness
     /// <summary>
     ///     Applies <paramref name="provider" />'s fix for the one <paramref name="diagnosticId" /> diagnostic
     ///     <paramref name="analyzer" /> reports in <paramref name="source" />. With <paramref name="withGeneratedCode" />,
-    ///     the CQRSharp generators' output joins the project, as in a build.
+    ///     the CQRSharp generators' output joins the project, as in a build. The project is a library unless
+    ///     <paramref name="outputKind" /> says otherwise, and references <see cref="ProbeReferences.Create" /> unless
+    ///     <paramref name="references" /> are given.
     /// </summary>
     public static async Task<CodeFixResult> ApplyAsync(
         string source,
         DiagnosticAnalyzer analyzer,
         CodeFixProvider provider,
         string diagnosticId,
-        bool withGeneratedCode = false)
+        bool withGeneratedCode = false,
+        OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
+        MetadataReference[]? references = null)
     {
+        references ??= ProbeReferences.Create();
         using var workspace = new AdhocWorkspace();
         var projectId = ProjectId.CreateNewId("CodeFixUnderTest");
         var documentId = DocumentId.CreateNewId(projectId, SnippetName);
@@ -37,12 +42,12 @@ internal static class CodeFixHarness
         var solution = workspace.CurrentSolution
             .AddProject(projectId, "CodeFixUnderTest", "CodeFixUnderTest", LanguageNames.CSharp)
             .WithProjectCompilationOptions(projectId,
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable))
-            .AddMetadataReferences(projectId, ProbeReferences.Create())
+                new CSharpCompilationOptions(outputKind, nullableContextOptions: NullableContextOptions.Enable))
+            .AddMetadataReferences(projectId, references)
             .AddDocument(documentId, SnippetName, SourceText.From(source));
 
         if (withGeneratedCode)
-            foreach (var (hintName, text) in CompilationHarness.RunGenerators([source], assemblyName: "CodeFixUnderTest").Sources)
+            foreach (var (hintName, text) in CompilationHarness.RunGenerators([source], assemblyName: "CodeFixUnderTest", references: references, outputKind: outputKind).Sources)
                 solution = solution.AddDocument(DocumentId.CreateNewId(projectId, hintName), hintName, SourceText.From(text));
 
         var document = solution.GetDocument(documentId)!;

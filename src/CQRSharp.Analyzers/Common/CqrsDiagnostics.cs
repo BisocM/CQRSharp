@@ -38,6 +38,16 @@ internal static class CqrsDiagnostics
         true,
         "AddCqrs is the low-level core registration used by the fluent builder and the generated bootstrap; calling it directly from your code wires the dispatcher without the generated routing. AddCqrsGenerated() registers both.");
 
+    public static readonly DiagnosticDescriptor IdempotentRequestWithoutIdempotency = new(
+        "CQRA018",
+        "IIdempotentRequest without UseIdempotency",
+        "{0} implement IIdempotentRequest, but this CQRSharp configuration never calls UseIdempotency(...), so no idempotency behavior is registered and duplicates would be processed; dispatching them fails at runtime with CQRCONF005. Call UseIdempotency(...) on the builder.",
+        Category,
+        DiagnosticSeverity.Error,
+        true,
+        "IIdempotentRequest is a request's contract that a repeated delivery is not processed twice, which only the idempotency behavior that UseIdempotency(...) registers keeps. Reported only when the application's whole CQRSharp configuration is in view: one AddCqrsGenerated call made of builder verbs, in an application no referenced assembly can configure further.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
     // Warnings and suggestions: handlers may be registered another way (manual DI, a project this one cannot see), and a
     // notification with no subscriber is legal, so these cannot be certain the code is broken.
 
@@ -107,5 +117,25 @@ internal static class CqrsDiagnostics
         DiagnosticSeverity.Warning,
         true,
         "AddCqrsGenerated() and every AddCqrsGenerated(b => ...) call add the validation behavior unless the configuration calls UseValidation(false); the core AddCqrs() adds no pipeline behavior at all. When every CQRSharp registration in this project leaves the validation behavior out, a validator is silently inert and invalid input reaches the handler.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor RetryableRequestWithoutResilience = new(
+        "CQRA019",
+        "IRetryableRequest without UseResilience",
+        "{0} implement IRetryableRequest, but this CQRSharp configuration never calls UseResilience(...), so no resilience behavior is registered and failures are not retried; the first dispatch logs CQRCONF006 at runtime. Call UseResilience(...) on the builder.",
+        Category,
+        DiagnosticSeverity.Warning,
+        true,
+        "IRetryableRequest opts a request into retries, which only the resilience behavior that UseResilience(...) registers performs; without it the request still runs once. Reported only when the application's whole CQRSharp configuration is in view: one AddCqrsGenerated call made of builder verbs, in an application no referenced assembly can configure further.",
+        customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+
+    public static readonly DiagnosticDescriptor UnnamedHandledNotification = new(
+        "CQRA020",
+        "Handled notification is not durable under the outbox",
+        "'{0}' has handlers but no [NotificationName], so while the outbox is on (UseOutbox) it is never stored in the outbox and every publish of it is delivered in-process. Add [NotificationName(\"...\")] to make it durable, or leave it as it is if it is meant to stay in-process.",
+        Category,
+        DiagnosticSeverity.Info,
+        true,
+        "The generated notification serializer names exactly the [NotificationName] notifications, and only a notification it names can be stored in the outbox; any other is dispatched in-process, which the startup validator and the first publish report as CQRCONF003. Reported only when the application's whole CQRSharp configuration is in view and nothing in view replaces the generated serializer or sets the outbox options outside the builder.",
         customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
 }

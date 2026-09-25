@@ -54,11 +54,11 @@ public sealed class ValidatorWithoutValidationAnalyzer : DiagnosticAnalyzer
         {
             var invocation = (IInvocationOperation)op.Operation;
             var method = invocation.TargetMethod;
-            if (!IsRegistration(method.ReducedFrom ?? method, coreExtensions)) return;
+            if (!CqrsRegistrationCalls.IsRegistration(method.ReducedFrom ?? method, coreExtensions)) return;
 
             // The builder overload adds it unless its configuration turns it off; the parameterless generated entry point
             // is the builder with nothing configured, so it adds it too. The core AddCqrs() adds no behavior.
-            var addsValidation = BuilderConfiguration(invocation, builderInterface) is { } configure
+            var addsValidation = CqrsRegistrationCalls.BuilderConfiguration(invocation, builderInterface) is { } configure
                 ? !TurnsValidationOff(configure, builderInterface)
                 : (method.ReducedFrom ?? method).Name == "AddCqrsGenerated";
             lock (gate)
@@ -94,17 +94,6 @@ public sealed class ValidatorWithoutValidationAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    // The Action<ICqrsBuilder> a registration is called with; null for a registration without one.
-    private static IOperation? BuilderConfiguration(IInvocationOperation invocation, INamedTypeSymbol builderInterface)
-    {
-        foreach (var argument in invocation.Arguments)
-            if (argument.Parameter?.Type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } parameterType &&
-                SymbolEqualityComparer.Default.Equals(parameterType.TypeArguments[0], builderInterface))
-                return argument.Value;
-
-        return null;
-    }
-
     // Whether the configuration provably turns validation off: a lambda in which every UseValidation call always runs,
     // as a statement of the lambda's body or a link of the fluent chain one is made of, and passes a constant false.
     // A call that may not run (under a condition, in a loop, a nested lambda or a local function) proves nothing, and
@@ -123,7 +112,7 @@ public sealed class ValidatorWithoutValidationAnalyzer : DiagnosticAnalyzer
                 IReturnOperation { ReturnedValue: { } returned } => returned,
                 _ => null
             };
-            for (var link = root; link is not null; link = Receiver(link))
+            for (var link = root; link is not null; link = CqrsRegistrationCalls.Receiver(link))
                 if (IsUseValidation(link, builderInterface))
                     unconditional.Add(link);
         }
@@ -147,29 +136,4 @@ public sealed class ValidatorWithoutValidationAnalyzer : DiagnosticAnalyzer
     private static bool IsUseValidation(IOperation operation, INamedTypeSymbol builderInterface)
         => operation is IInvocationOperation { TargetMethod.Name: "UseValidation" } call &&
            SymbolEqualityComparer.Default.Equals(call.TargetMethod.ContainingType, builderInterface);
-
-    // The builder a fluent call is made on: the instance of a call, or the first argument of an extension method's
-    // (UseFluentValidation and the store verbs are extensions of the builder).
-    private static IOperation? Receiver(IOperation operation)
-    {
-        while (operation is IConversionOperation conversion) operation = conversion.Operand;
-        if (operation is not IInvocationOperation call) return null;
-
-        var receiver = call.Instance ??
-                       (call.TargetMethod.IsExtensionMethod && call.Arguments.Length > 0 ? call.Arguments[0].Value : null);
-        while (receiver is IConversionOperation inner) receiver = inner.Operand;
-        return receiver;
-    }
-
-    private static bool IsRegistration(IMethodSymbol definition, INamedTypeSymbol coreExtensions)
-    {
-        var containing = definition.ContainingType;
-        if (SymbolEqualityComparer.Default.Equals(containing, coreExtensions)) return definition.Name == "AddCqrs";
-
-        // The generated entry points, emitted into the consuming assembly itself (namespace CQRSharp, or its module namespace).
-        return definition.Name == "AddCqrsGenerated" &&
-               containing is { Name: CqrsKnownSymbols.BootstrapTypeName } &&
-               containing.ContainingNamespace.ToDisplayString() is var ns &&
-               (ns == "CQRSharp" || ns.StartsWith("CQRSharp.Generated.", System.StringComparison.Ordinal));
-    }
 }

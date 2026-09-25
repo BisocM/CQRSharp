@@ -31,6 +31,9 @@ CQRA017 | CQRSharp.Usage | Info | A pre+post handler attribute pair can be a sin
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
 CQRA015 | CQRSharp.Usage | Warning | ITransactionalCommand is implemented by a request that is not a command.
+CQRA018 | CQRSharp.Usage | Error | An IIdempotentRequest is handled, but the configuration in view never calls UseIdempotency.
+CQRA019 | CQRSharp.Usage | Warning | An IRetryableRequest is handled, but the configuration in view never calls UseResilience.
+CQRA020 | CQRSharp.Usage | Info | A handled notification without [NotificationName] is not durable while the outbox is on.
 
 ### Removed Rules
 
