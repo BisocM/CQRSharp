@@ -1,0 +1,38 @@
+#nullable enable
+const CQRSharp.AspNetCore.CommandResultHttpExtensions.ErrorCodeExtensionName = "errorCode" -> string!
+const CQRSharp.AspNetCore.CommandResultHttpExtensions.ErrorKindExtensionName = "errorKind" -> string!
+const CQRSharp.AspNetCore.IdempotencyKeyHttpExtensions.DefaultMaxLength = 255 -> int
+const CQRSharp.AspNetCore.IdempotencyKeyHttpExtensions.HeaderName = "Idempotency-Key" -> string!
+CQRSharp.AspNetCore.CommandResultHttpExtensions
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.BackgroundTaskRejectedStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.BackgroundTaskRejectedStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.CqrsProblemDetailsOptions() -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.DuplicateInProgressRetryAfter.get -> System.TimeSpan?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.DuplicateInProgressRetryAfter.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.DuplicateRequestStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.DuplicateRequestStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.IdempotencyKeyMismatchStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.IdempotencyKeyMismatchStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.InvalidIdempotencyKeyStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.InvalidIdempotencyKeyStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.RateLimitStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.RateLimitStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.TimeoutStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.TimeoutStatusCode.set -> void
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.ValidationStatusCode.get -> int?
+CQRSharp.AspNetCore.CqrsProblemDetailsOptions.ValidationStatusCode.set -> void
+CQRSharp.AspNetCore.IdempotencyKeyHttpExtensions
+CQRSharp.AspNetCore.InvalidIdempotencyKeyException
+CQRSharp.AspNetCore.InvalidIdempotencyKeyException.InvalidIdempotencyKeyException(string! message) -> void
+Microsoft.Extensions.DependencyInjection.CqrsProblemDetailsServiceCollectionExtensions
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.GetStatusCode(this CQRSharp.CommandErrorKind errorKind) -> int
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.ToCreatedHttpResult(this CQRSharp.CommandResult! result, string! location, int? failureStatusCode = null) -> Microsoft.AspNetCore.Http.IResult!
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.ToCreatedHttpResult<TResult>(this CQRSharp.CommandResult<TResult>! result, string! location, int? failureStatusCode = null) -> Microsoft.AspNetCore.Http.IResult!
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.ToCreatedHttpResult<TResult>(this CQRSharp.CommandResult<TResult>! result, System.Func<TResult, string!>! locationFactory, int? failureStatusCode = null) -> Microsoft.AspNetCore.Http.IResult!
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.ToHttpResult(this CQRSharp.CommandResult! result, int? failureStatusCode = null) -> Microsoft.AspNetCore.Http.IResult!
+static CQRSharp.AspNetCore.CommandResultHttpExtensions.ToHttpResult<TResult>(this CQRSharp.CommandResult<TResult>! result, int? failureStatusCode = null) -> Microsoft.AspNetCore.Http.IResult!
+static CQRSharp.AspNetCore.IdempotencyKeyHttpExtensions.GetIdempotencyKey(this Microsoft.AspNetCore.Http.HttpContext! httpContext, int maxLength = 255) -> string!
+static CQRSharp.AspNetCore.IdempotencyKeyHttpExtensions.TryGetIdempotencyKey(this Microsoft.AspNetCore.Http.HttpContext! httpContext, out string? idempotencyKey, int maxLength = 255) -> bool
+static Microsoft.Extensions.DependencyInjection.CqrsProblemDetailsServiceCollectionExtensions.AddCqrsProblemDetails(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.CqrsProblemDetailsServiceCollectionExtensions.AddCqrsProblemDetails(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.AspNetCore.CqrsProblemDetailsOptions!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

@@ -1,0 +1,117 @@
+name: CI
+
+# Validates a change BEFORE it reaches the Release branch. Runs the same gate the release pipeline runs (validate.yml:
+# zero warnings, all three target frameworks, the Redis, PostgreSQL and SQL Server backed tests, Native AOT, pack +
+# package validation, template smoke test) and additionally builds and tests on Windows and macOS. Nothing is published.
+#
+# Every change reaches Release through a pull request, so the pull request is the one trigger: a `push` trigger as well
+# would run the whole gate a second time for every push to a branch that has an open pull request. Run the workflow by
+# hand (workflow_dispatch) to validate a branch that has no pull request yet. Release itself is validated by
+# nuget_publish.yml, which runs this same gate on every push to it.
+on:
+  pull_request:
+  workflow_dispatch:
+
+# One run per pull request, so a new push cancels the run it supersedes: keyed by the pull request's number, never its
+# head branch's bare name, which two forks' pull requests can share. A manual run is keyed by its ref.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CONFIGURATION: Release
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  validate:
+    name: Validate
+    uses: ./.github/workflows/validate.yml
+
+  cross-platform:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, macos-latest ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The .NET 10 SDK builds every target framework (global.json requires it); the 8 and 9 entries bring the
+      # runtimes the net8.0 and net9.0 tests run on.
+      - name: Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Build (zero-warning gate)
+        run: dotnet build CQRSharp.sln -c ${{ env.CONFIGURATION }} -p:GeneratePackageOnBuild=false -warnaserror
+
+      # Service containers are Linux-only, so there is no Redis, PostgreSQL or SQL Server here: those contract tests skip
+      # (they run in the validate job). Everything else - including the EF Core stores on SQLite - runs on every OS.
+      - name: Test (net8.0, net9.0, net10.0)
+        run: >-
+          dotnet test --project tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c ${{ env.CONFIGURATION }} --no-build
+          --results-directory artifacts/test-results --report-trx
+          --hangdump --hangdump-timeout 5m --hangdump-type Mini
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: artifacts/test-results
+
+      # Each sample exits non-zero when a scenario fails. One step each: the default shell differs by OS.
+      - name: Run the CQRSharp.Sample self-test
+        run: dotnet run --project samples/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
+
+      - name: Run the CQRSharp.Sample.AspNetCore self-test
+        run: dotnet run --project samples/CQRSharp.Sample.AspNetCore/CQRSharp.Sample.AspNetCore.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build -- --self-test
+
+  # The advisory LLM review of what a release will publish (README, package metadata, release notes against the commits).
+  # It runs on a pull request into Release that changes <Version> - the release pull request, where the maintainer can
+  # still act on a concern before merging publishes an immutable version. Ordinary pull requests keep the version, so
+  # they skip it. Fork and Dependabot pull requests get no secrets; the script then reports that it skipped.
+  release-review:
+    name: Release review (advisory)
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'Release' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the release-notes check reads every commit the pull request brings into Release
+
+      - name: Does this pull request change the version?
+        id: version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eo pipefail
+          version_of() { sed -n '/<Version>/{s:.*<Version>\(.*\)</Version>.*:\1:p;q}'; }
+          base="$( (git show "${BASE_SHA}:Directory.Build.props" 2>/dev/null || true) | version_of)"
+          head="$(version_of < Directory.Build.props)"
+          echo "Release branch: ${base:-<none>}; this pull request: ${head}"
+          if [ "${base}" != "${head}" ]; then echo "changed=true" >> "${GITHUB_OUTPUT}"; fi
+
+      - name: LLM release review (bisocm, advisory)
+        if: ${{ steps.version.outputs.changed == 'true' }}
+        continue-on-error: true
+        env:
+          BISOCM_API_KEY: ${{ secrets.BISOCM_API_KEY }}
+          # The commits this pull request brings into Release are exactly what the release will ship.
+          LLM_REVIEW_BASE: ${{ github.event.pull_request.base.sha }}
+        run: python3 .github/scripts/llm_review.py

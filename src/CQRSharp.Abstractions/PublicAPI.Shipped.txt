@@ -1,0 +1,277 @@
+#nullable enable
+CQRSharp.CommandBase
+CQRSharp.CommandBase.CommandBase() -> void
+CQRSharp.CommandBase<TContext>
+CQRSharp.CommandBase<TContext>.CommandBase() -> void
+CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Conflict = 4 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Failure = 1 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Forbidden = 6 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.None = 0 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.NotFound = 3 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Unauthorized = 5 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Unavailable = 7 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandErrorKind.Validation = 2 -> CQRSharp.CommandErrorKind
+CQRSharp.CommandResult
+CQRSharp.CommandResult.CommandResult(bool isSuccess, CQRSharp.CommandErrorKind errorKind, string? errorMessage, int? errorCode, System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>? validationFailures) -> void
+CQRSharp.CommandResult.ErrorCode.get -> int?
+CQRSharp.CommandResult.ErrorKind.get -> CQRSharp.CommandErrorKind
+CQRSharp.CommandResult.ErrorMessage.get -> string?
+CQRSharp.CommandResult.IsSuccess.get -> bool
+CQRSharp.CommandResult.ValidationFailures.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>!
+CQRSharp.CommandResult<TResult>
+CQRSharp.CommandResult<TResult>.CommandResult(bool isSuccess, TResult? value, CQRSharp.CommandErrorKind errorKind, string? errorMessage, int? errorCode, System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>? validationFailures) -> void
+CQRSharp.CommandResult<TResult>.Value.get -> TResult?
+CQRSharp.Core.SourceGeneration.CqrsGeneratedModuleAttribute
+CQRSharp.Core.SourceGeneration.CqrsGeneratedModuleAttribute.CqrsGeneratedModuleAttribute(System.Type! registrarType) -> void
+CQRSharp.Core.SourceGeneration.CqrsGeneratedModuleAttribute.RegistrarType.get -> System.Type!
+CQRSharp.Core.SourceGeneration.CqrsHandledNotificationAttribute
+CQRSharp.Core.SourceGeneration.CqrsHandledNotificationAttribute.CqrsHandledNotificationAttribute(System.Type! notificationType) -> void
+CQRSharp.Core.SourceGeneration.CqrsHandledNotificationAttribute.NotificationType.get -> System.Type!
+CQRSharp.Core.SourceGeneration.CqrsHandledRequestAttribute
+CQRSharp.Core.SourceGeneration.CqrsHandledRequestAttribute.CqrsHandledRequestAttribute(System.Type! requestType) -> void
+CQRSharp.Core.SourceGeneration.CqrsHandledRequestAttribute.RequestType.get -> System.Type!
+CQRSharp.Core.SourceGeneration.CqrsRegisteredContextFactoryAttribute
+CQRSharp.Core.SourceGeneration.CqrsRegisteredContextFactoryAttribute.ContextType.get -> System.Type!
+CQRSharp.Core.SourceGeneration.CqrsRegisteredContextFactoryAttribute.CqrsRegisteredContextFactoryAttribute(System.Type! contextType) -> void
+CQRSharp.DuplicateRequestException
+CQRSharp.DuplicateRequestException.DuplicateRequestException(string! idempotencyKey) -> void
+CQRSharp.DuplicateRequestException.DuplicateRequestException(string! idempotencyKey, bool isInProgress) -> void
+CQRSharp.DuplicateRequestException.IdempotencyKey.get -> string!
+CQRSharp.DuplicateRequestException.IsInProgress.get -> bool
+CQRSharp.ICommand
+CQRSharp.ICommand<TResult>
+CQRSharp.ICommandHandler<TCommand>
+CQRSharp.ICommandHandler<TCommand>.Handle(TCommand command, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.CommandResult!>!
+CQRSharp.ICommandMarker
+CQRSharp.IdempotencyKeyMismatchException
+CQRSharp.IdempotencyKeyMismatchException.IdempotencyKey.get -> string!
+CQRSharp.IdempotencyKeyMismatchException.IdempotencyKeyMismatchException(string! idempotencyKey) -> void
+CQRSharp.IFingerprintedRequest
+CQRSharp.IFingerprintedRequest.Fingerprint.get -> string?
+CQRSharp.IIdempotentRequest
+CQRSharp.IIdempotentRequest.IdempotencyKey.get -> string!
+CQRSharp.INotification
+CQRSharp.INotificationHandler<TNotification>
+CQRSharp.INotificationHandler<TNotification>.Handle(TNotification notification, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.IPartitionedNotification
+CQRSharp.IPartitionedNotification.PartitionKey.get -> string?
+CQRSharp.IPostHandlerAttribute
+CQRSharp.IPostHandlerAttribute.OnAfterHandle(CQRSharp.IRequest! request, CQRSharp.RequestOutcome outcome, System.IServiceProvider! serviceProvider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.IPostHandlerAttribute.PostHandlerExecutionPriority.get -> int
+CQRSharp.IPreHandlerAttribute
+CQRSharp.IPreHandlerAttribute.OnBeforeHandle(CQRSharp.IRequest! request, System.IServiceProvider! serviceProvider, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.IPreHandlerAttribute.PreHandlerExecutionPriority.get -> int
+CQRSharp.IQuery<TResult>
+CQRSharp.IQueryHandler<TQuery, TResult>
+CQRSharp.IQueryHandler<TQuery, TResult>.Handle(TQuery query, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.IRequest
+CQRSharp.IRequest.Context.get -> CQRSharp.IRequestContext?
+CQRSharp.IRequest.Context.set -> void
+CQRSharp.IRequest<TResponse>
+CQRSharp.IRequestContext
+CQRSharp.IRequestContext.CreatedAt.get -> System.DateTime
+CQRSharp.IRequestExceptionAction<TRequest, TException>
+CQRSharp.IRequestExceptionAction<TRequest, TException>.Execute(TRequest request, TException! exception, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.IRequestExceptionHandler<TRequest, TResponse, TException>
+CQRSharp.IRequestExceptionHandler<TRequest, TResponse, TException>.Handle(TRequest request, TException! exception, CQRSharp.RequestExceptionHandlerState<TResponse>! state, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.IRequestValidator<TRequest>
+CQRSharp.IRequestValidator<TRequest>.ValidateAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.ValidationFailure[]!>!
+CQRSharp.IResultCommandHandler<TCommand, TResult>
+CQRSharp.IResultCommandHandler<TCommand, TResult>.Handle(TCommand command, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.CommandResult<TResult>!>!
+CQRSharp.IRetryableRequest
+CQRSharp.IStreamRequest
+CQRSharp.IStreamRequest<TItem>
+CQRSharp.IStreamRequestHandler<TRequest, TItem>
+CQRSharp.IStreamRequestHandler<TRequest, TItem>.Handle(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.ITransactionalCommand
+CQRSharp.ITransactionalCommand.IsolationLevel.get -> System.Data.IsolationLevel
+CQRSharp.ITransactionalQuery
+CQRSharp.ITransactionalQuery.IsolationLevel.get -> System.Data.IsolationLevel
+CQRSharp.ITransactionalQuery.IsReadOnly.get -> bool
+CQRSharp.NotificationHandlerNameAttribute
+CQRSharp.NotificationHandlerNameAttribute.Name.get -> string!
+CQRSharp.NotificationHandlerNameAttribute.NotificationHandlerNameAttribute(string! name) -> void
+CQRSharp.NotificationNameAttribute
+CQRSharp.NotificationNameAttribute.Name.get -> string!
+CQRSharp.NotificationNameAttribute.NotificationNameAttribute(string! name) -> void
+CQRSharp.NotificationNameAttribute.PartitionBy.get -> string?
+CQRSharp.NotificationNameAttribute.PartitionBy.set -> void
+CQRSharp.Persistence.ClaimedOutboxMessage
+CQRSharp.Persistence.ClaimedOutboxMessage.Claim.get -> CQRSharp.Persistence.OutboxClaim
+CQRSharp.Persistence.ClaimedOutboxMessage.ClaimedOutboxMessage(CQRSharp.Persistence.OutboxMessage! message, CQRSharp.Persistence.OutboxClaim claim) -> void
+CQRSharp.Persistence.ClaimedOutboxMessage.Message.get -> CQRSharp.Persistence.OutboxMessage!
+CQRSharp.Persistence.IdempotencyClaim
+CQRSharp.Persistence.IdempotencyClaim.IsClaimed.get -> bool
+CQRSharp.Persistence.IdempotencyClaim.Status.get -> CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IdempotencyClaim.StoredResult.get -> byte[]?
+CQRSharp.Persistence.IdempotencyClaim.Token.get -> string?
+CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IdempotencyClaimStatus.Claimed = 0 -> CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IdempotencyClaimStatus.Completed = 2 -> CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IdempotencyClaimStatus.InProgress = 1 -> CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IdempotencyClaimStatus.PayloadMismatch = 3 -> CQRSharp.Persistence.IdempotencyClaimStatus
+CQRSharp.Persistence.IIdempotencyResultSerializer
+CQRSharp.Persistence.IIdempotencyResultSerializer.TryDeserialize<TResult>(byte[]! payload, out TResult result) -> bool
+CQRSharp.Persistence.IIdempotencyResultSerializer.TrySerialize<TResult>(TResult result, out byte[]! payload) -> bool
+CQRSharp.Persistence.IIdempotencyStore
+CQRSharp.Persistence.IIdempotencyStore.CompleteAsync(string! key, string! claimToken, byte[]? result, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IIdempotencyStore.ReleaseAsync(string! key, string! claimToken, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IIdempotencyStore.TryClaimAsync(string! key, string? fingerprint, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Persistence.IdempotencyClaim!>!
+CQRSharp.Persistence.IInboxStore
+CQRSharp.Persistence.IInboxStore.IsDeliveredAsync(System.Guid messageId, string! handlerName, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.IInboxStore.JoinsUnitOfWork.get -> bool
+CQRSharp.Persistence.IInboxStore.RecordDeliveryAsync(System.Guid messageId, string! handlerName, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.INotificationSerializer
+CQRSharp.Persistence.INotificationSerializer.Deserialize(string! notificationName, byte[]! payload) -> CQRSharp.INotification?
+CQRSharp.Persistence.INotificationSerializer.Serialize(CQRSharp.INotification! notification) -> byte[]!
+CQRSharp.Persistence.INotificationSerializer.TryGetNotificationName(System.Type! notificationType, out string? notificationName) -> bool
+CQRSharp.Persistence.IOutboxStore
+CQRSharp.Persistence.IOutboxStore.ClaimPendingAsync(int batchSize, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<CQRSharp.Persistence.ClaimedOutboxMessage!>!>!
+CQRSharp.Persistence.IOutboxStore.DeferAsync(CQRSharp.Persistence.OutboxClaim claim, System.DateTime notBefore, string? reason, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.IOutboxStore.GetBacklogAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Persistence.OutboxBacklog>!
+CQRSharp.Persistence.IOutboxStore.GetDeadLettersAsync(int limit, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<CQRSharp.Persistence.OutboxMessage!>!>!
+CQRSharp.Persistence.IOutboxStore.IncrementAttemptAsync(CQRSharp.Persistence.OutboxClaim claim, string? error, System.DateTime? nextRetryAt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+CQRSharp.Persistence.IOutboxStore.JoinsUnitOfWork.get -> bool
+CQRSharp.Persistence.IOutboxStore.MarkAsFailedAsync(CQRSharp.Persistence.OutboxClaim claim, string? error, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.IOutboxStore.MarkAsProcessedAsync(CQRSharp.Persistence.OutboxClaim claim, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.IOutboxStore.PurgeDeadLettersAsync(System.DateTime failedBefore, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<int>!
+CQRSharp.Persistence.IOutboxStore.ReleaseAsync(System.Collections.Generic.IReadOnlyCollection<CQRSharp.Persistence.OutboxClaim>! claims, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IOutboxStore.RenewAsync(CQRSharp.Persistence.OutboxClaim claim, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Persistence.OutboxClaim?>!
+CQRSharp.Persistence.IOutboxStore.RequeueAsync(System.Guid messageId, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<bool>!
+CQRSharp.Persistence.IOutboxStore.StoreAsync(System.Collections.Generic.IEnumerable<CQRSharp.Persistence.OutboxMessage!>! messages, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IUnitOfWork
+CQRSharp.Persistence.IUnitOfWork.BeginTransactionAsync(System.Data.IsolationLevel isolationLevel, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IUnitOfWork.CommitAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.IUnitOfWork.HasActiveTransaction.get -> bool
+CQRSharp.Persistence.IUnitOfWork.RollbackAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Persistence.OutboxBacklog
+CQRSharp.Persistence.OutboxBacklog.DeadLetterCount.get -> long
+CQRSharp.Persistence.OutboxBacklog.DeadLetterCount.init -> void
+CQRSharp.Persistence.OutboxBacklog.LagAt(System.DateTime utcNow) -> System.TimeSpan
+CQRSharp.Persistence.OutboxBacklog.OldestPendingCreatedAt.get -> System.DateTime?
+CQRSharp.Persistence.OutboxBacklog.OldestPendingCreatedAt.init -> void
+CQRSharp.Persistence.OutboxBacklog.OutboxBacklog() -> void
+CQRSharp.Persistence.OutboxBacklog.OutboxBacklog(long PendingCount, long DeadLetterCount, System.DateTime? OldestPendingCreatedAt) -> void
+CQRSharp.Persistence.OutboxBacklog.PendingCount.get -> long
+CQRSharp.Persistence.OutboxBacklog.PendingCount.init -> void
+CQRSharp.Persistence.OutboxClaim
+CQRSharp.Persistence.OutboxClaim.LeasedUntil.get -> System.DateTime
+CQRSharp.Persistence.OutboxClaim.LeasedUntil.init -> void
+CQRSharp.Persistence.OutboxClaim.MessageId.get -> System.Guid
+CQRSharp.Persistence.OutboxClaim.MessageId.init -> void
+CQRSharp.Persistence.OutboxClaim.OutboxClaim() -> void
+CQRSharp.Persistence.OutboxClaim.OutboxClaim(System.Guid MessageId, string! Token, System.DateTime LeasedUntil) -> void
+CQRSharp.Persistence.OutboxClaim.Token.get -> string!
+CQRSharp.Persistence.OutboxClaim.Token.init -> void
+CQRSharp.Persistence.OutboxMessage
+CQRSharp.Persistence.OutboxMessage.AttemptCount.get -> int
+CQRSharp.Persistence.OutboxMessage.AttemptCount.init -> void
+CQRSharp.Persistence.OutboxMessage.CreatedAt.get -> System.DateTime
+CQRSharp.Persistence.OutboxMessage.CreatedAt.init -> void
+CQRSharp.Persistence.OutboxMessage.FailedAt.get -> System.DateTime?
+CQRSharp.Persistence.OutboxMessage.FailedAt.init -> void
+CQRSharp.Persistence.OutboxMessage.HandlerName.get -> string!
+CQRSharp.Persistence.OutboxMessage.HandlerName.init -> void
+CQRSharp.Persistence.OutboxMessage.Id.get -> System.Guid
+CQRSharp.Persistence.OutboxMessage.Id.init -> void
+CQRSharp.Persistence.OutboxMessage.LastError.get -> string?
+CQRSharp.Persistence.OutboxMessage.LastError.init -> void
+CQRSharp.Persistence.OutboxMessage.NextRetryAt.get -> System.DateTime?
+CQRSharp.Persistence.OutboxMessage.NextRetryAt.init -> void
+CQRSharp.Persistence.OutboxMessage.NotificationId.get -> System.Guid?
+CQRSharp.Persistence.OutboxMessage.NotificationId.init -> void
+CQRSharp.Persistence.OutboxMessage.NotificationType.get -> string!
+CQRSharp.Persistence.OutboxMessage.NotificationType.init -> void
+CQRSharp.Persistence.OutboxMessage.OutboxMessage(System.Guid Id, string! NotificationType, string! HandlerName, byte[]! Payload, System.DateTime CreatedAt, CQRSharp.Persistence.OutboxMessageStatus Status, System.DateTime? ProcessedAt, string? LastError, int AttemptCount = 0, System.DateTime? NextRetryAt = null, string? TraceParent = null, string? PartitionKey = null, System.Guid? NotificationId = null, System.DateTime? FailedAt = null) -> void
+CQRSharp.Persistence.OutboxMessage.PartitionKey.get -> string?
+CQRSharp.Persistence.OutboxMessage.PartitionKey.init -> void
+CQRSharp.Persistence.OutboxMessage.Payload.get -> byte[]!
+CQRSharp.Persistence.OutboxMessage.Payload.init -> void
+CQRSharp.Persistence.OutboxMessage.ProcessedAt.get -> System.DateTime?
+CQRSharp.Persistence.OutboxMessage.ProcessedAt.init -> void
+CQRSharp.Persistence.OutboxMessage.Status.get -> CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.Persistence.OutboxMessage.Status.init -> void
+CQRSharp.Persistence.OutboxMessage.TraceParent.get -> string?
+CQRSharp.Persistence.OutboxMessage.TraceParent.init -> void
+CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.Persistence.OutboxMessageStatus.Failed = 2 -> CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.Persistence.OutboxMessageStatus.InProgress = 3 -> CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.Persistence.OutboxMessageStatus.Pending = 0 -> CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.Persistence.OutboxMessageStatus.Processed = 1 -> CQRSharp.Persistence.OutboxMessageStatus
+CQRSharp.PipelineExemptionAttribute
+CQRSharp.PipelineExemptionAttribute.ExemptedPipeline.get -> System.Type!
+CQRSharp.PipelineExemptionAttribute.PipelineExemptionAttribute(System.Type! exemptedPipeline) -> void
+CQRSharp.QueryBase<TResult, TContext>
+CQRSharp.QueryBase<TResult, TContext>.QueryBase() -> void
+CQRSharp.QueryBase<TResult>
+CQRSharp.QueryBase<TResult>.QueryBase() -> void
+CQRSharp.RequestBase<TContext>
+CQRSharp.RequestBase<TContext>.Context.get -> TContext?
+CQRSharp.RequestBase<TContext>.RequestBase() -> void
+CQRSharp.RequestContextBase
+CQRSharp.RequestContextBase.CreatedAt.get -> System.DateTime
+CQRSharp.RequestContextBase.RequestContextBase() -> void
+CQRSharp.RequestContextBase.RequestContextBase(System.DateTime createdAt) -> void
+CQRSharp.RequestExceptionHandlerState<TResponse>
+CQRSharp.RequestExceptionHandlerState<TResponse>.Handled.get -> bool
+CQRSharp.RequestExceptionHandlerState<TResponse>.RequestExceptionHandlerState() -> void
+CQRSharp.RequestExceptionHandlerState<TResponse>.Response.get -> TResponse?
+CQRSharp.RequestExceptionHandlerState<TResponse>.SetHandled(TResponse response) -> void
+CQRSharp.RequestOutcome
+CQRSharp.RequestOutcome.Exception.get -> System.Exception?
+CQRSharp.RequestOutcome.RequestOutcome() -> void
+CQRSharp.RequestOutcome.Result.get -> object?
+CQRSharp.RequestOutcome.Threw.get -> bool
+CQRSharp.RequestValidationException
+CQRSharp.RequestValidationException.Failures.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>!
+CQRSharp.RequestValidationException.RequestType.get -> System.Type!
+CQRSharp.RequestValidationException.RequestValidationException(System.Type! requestType, System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>! failures) -> void
+CQRSharp.ResultCommandBase<TResult, TContext>
+CQRSharp.ResultCommandBase<TResult, TContext>.ResultCommandBase() -> void
+CQRSharp.ResultCommandBase<TResult>
+CQRSharp.ResultCommandBase<TResult>.ResultCommandBase() -> void
+CQRSharp.StreamRequestBase<TItem, TContext>
+CQRSharp.StreamRequestBase<TItem, TContext>.StreamRequestBase() -> void
+CQRSharp.StreamRequestBase<TItem>
+CQRSharp.StreamRequestBase<TItem>.StreamRequestBase() -> void
+CQRSharp.ValidationFailure
+CQRSharp.ValidationFailure.Code.get -> string!
+CQRSharp.ValidationFailure.Code.init -> void
+CQRSharp.ValidationFailure.MemberName.get -> string?
+CQRSharp.ValidationFailure.MemberName.init -> void
+CQRSharp.ValidationFailure.Message.get -> string!
+CQRSharp.ValidationFailure.Message.init -> void
+CQRSharp.ValidationFailure.ValidationFailure() -> void
+CQRSharp.ValidationFailure.ValidationFailure(string! Code, string! Message, string? MemberName = null) -> void
+override CQRSharp.CommandResult.GetHashCode() -> int
+override CQRSharp.CommandResult.ToString() -> string!
+override CQRSharp.CommandResult<TResult>.ToString() -> string!
+static CQRSharp.CommandResult.Conflict(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.Forbidden(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.FromError(CQRSharp.CommandErrorKind errorKind, string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.FromError(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.FromSuccess() -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.Invalid(params CQRSharp.ValidationFailure[]! failures) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.Invalid(System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>! failures, string? errorMessage = null, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.NotFound(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.Unauthorized(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult.Unavailable(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult!
+static CQRSharp.CommandResult<TResult>.Conflict(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.Forbidden(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.FromError(CQRSharp.CommandErrorKind errorKind, string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.FromError(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.FromSuccess(TResult value) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.Invalid(params CQRSharp.ValidationFailure[]! failures) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.Invalid(System.Collections.Generic.IReadOnlyList<CQRSharp.ValidationFailure>! failures, string? errorMessage = null, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.NotFound(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.Unauthorized(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.CommandResult<TResult>.Unavailable(string! errorMessage, int? errorCode = null) -> CQRSharp.CommandResult<TResult>!
+static CQRSharp.Persistence.IdempotencyClaim.ClaimedWith(string! token) -> CQRSharp.Persistence.IdempotencyClaim!
+static CQRSharp.Persistence.IdempotencyClaim.Completed(byte[]? storedResult) -> CQRSharp.Persistence.IdempotencyClaim!
+static CQRSharp.Persistence.IdempotencyClaim.InProgress.get -> CQRSharp.Persistence.IdempotencyClaim!
+static CQRSharp.Persistence.IdempotencyClaim.PayloadMismatch.get -> CQRSharp.Persistence.IdempotencyClaim!
+static CQRSharp.Persistence.OutboxBacklog.Empty.get -> CQRSharp.Persistence.OutboxBacklog
+static CQRSharp.RequestOutcome.FromException(System.Exception! exception) -> CQRSharp.RequestOutcome
+static CQRSharp.RequestOutcome.FromResult(object? result) -> CQRSharp.RequestOutcome
+virtual CQRSharp.CommandResult.Equals(CQRSharp.CommandResult? other) -> bool

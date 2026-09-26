@@ -1,356 +1,394 @@
 # Pipeline behaviors
 
-Every request flows through a **behavior pipeline** before reaching its handler — a chain of
-middleware, each wrapping the next, with the handler at the center. CQRSharp ships a set of opt-in
-built-in behaviors (logging, validation, exception handling, rate limiting, resilience, timeout, unit
-of work, idempotency) and lets you write your own.
+Every request passes through a **behavior pipeline** on its way to its handler: a chain of behaviors, each wrapping the
+next, with the handler at the center. CQRSharp ships built-in behaviors (exception handling, rate limiting, logging,
+validation, resilience, idempotency, unit of work, timeout) and runs your own.
 
 - [The pipeline model](#the-pipeline-model)
 - [Behavior interfaces](#behavior-interfaces)
 - [Execution order](#execution-order)
-- [Built-in behaviors](#built-in-behaviors)
+- [Rate limiting](#rate-limiting)
 - [Validation](#validation)
 - [Exception handling](#exception-handling)
 - [Custom behaviors](#custom-behaviors)
 - [Pipeline exemptions](#pipeline-exemptions)
-- [Interceptors (pre/post-handler attributes)](#interceptors-prepost-handler-attributes)
+- [Interceptors (pre- and post-handler attributes)](#interceptors-pre--and-post-handler-attributes)
 
 ## The pipeline model
 
-A behavior receives the request and a `next` delegate. It does work before and/or after calling
-`next(...)`, which runs the rest of the pipeline (the inner behaviors, then the handler). This is the
-classic "Russian doll" model:
+A behavior receives the request and a `next` delegate. It does its work before and after calling `next(...)`, which runs
+the rest of the pipeline. With every built-in behavior enabled, a request runs through:
 
 ```
-ExceptionHandling( RateLimiting( Logging( Validation( Resilience( Idempotency( UnitOfWork( Timeout(
-    handler
-)))))))) )
+ExceptionHandling(
+  RateLimiting(
+    Logging(
+      Validation(
+        Resilience(
+          Idempotency(
+            UnitOfWork(
+              Timeout(
+                your behaviors(
+                  lifecycle notifications, pre-handlers, handler, post-handlers
+)))))))))
 ```
 
-Each layer can short-circuit (return without calling `next`), transform the result, catch exceptions,
-or retry.
+A behavior can short-circuit (return without calling `next`), transform the result, catch exceptions, or call `next`
+again to retry. The [lifecycle notifications](notifications.md#lifecycle-notifications) and the
+[interceptors](#interceptors-pre--and-post-handler-attributes) run at the center, around the handler.
 
 ## Behavior interfaces
 
-There are two behavior contracts — one for `Send` (commands/queries), one for `Stream`:
+There are two request behavior contracts, one for `Send` (commands and queries) and one for `Stream`, both in
+`CQRSharp.Pipelines`:
 
 ```csharp
-public interface IPipelineBehavior<TRequest, TResult>
+public delegate Task<TResult> RequestHandlerDelegate<TResult>(CancellationToken cancellationToken = default);
+
+public interface IPipelineBehavior<in TRequest, TResult> where TRequest : IRequest
 {
-    Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken ct);
+    Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken);
 }
 
-public interface IStreamPipelineBehavior<TRequest, TItem>
+public delegate IAsyncEnumerable<TItem> StreamHandlerDelegate<TItem>(CancellationToken cancellationToken = default);
+
+public interface IStreamPipelineBehavior<in TRequest, TItem> where TRequest : IRequest
 {
-    IAsyncEnumerable<TItem> Handle(TRequest request, StreamHandlerDelegate<TItem> next, CancellationToken ct);
+    IAsyncEnumerable<TItem> Handle(TRequest request, StreamHandlerDelegate<TItem> next, CancellationToken cancellationToken);
 }
 ```
 
-`next` is a named delegate (`RequestHandlerDelegate<TResult>` / `StreamHandlerDelegate<TItem>`) whose cancellation token is
-defaulted, so you can simply `await next()` to flow the ambient token, or `await next(ct)` to pass your own.
+`next`'s token is optional: `await next()` passes on the token the behavior received, and `await next(token)` passes
+another one. Notifications have their own behavior contract,
+[`INotificationPipelineBehavior<TNotification>`](notifications.md#notification-pipeline-behaviors).
 
-Most built-ins ship both a request and a stream variant so the same cross-cutting concern applies to
-streaming requests.
+Every built-in behavior has a request variant and a stream variant, so each concern applies to streaming requests too.
 
 ## Execution order
 
-Order is **deterministic** and controlled by priority. A behavior may implement
-`IPrioritizedPipelineBehavior`:
+The order is fixed by priority. A behavior sets its own by implementing `IPrioritizedPipelineBehavior`:
 
 ```csharp
 public interface IPrioritizedPipelineBehavior
 {
-    const int DefaultPriority = int.MaxValue / 2;   // used by behaviors that don't implement this
-    int PipelineExecutionPriority { get; }          // LOWER runs earlier (further from the handler)
+    public const int DefaultPriority = int.MaxValue / 2;   // for behaviors that do not implement this interface
+    int PipelineExecutionPriority { get; }                 // lower runs earlier, further from the handler
 }
 ```
 
-The built-ins pin themselves to well-known priorities (`CqrsPipelinePriorities`), producing this order
-from outermost to the handler:
+The built-ins use the constants in `CqrsPipelinePriorities`, which give this order, from the outermost behavior to the
+handler, for requests and streams alike:
 
-| Order | Behavior | Priority | Why here |
-| --- | --- | --- | --- |
-| 1 (outermost) | Exception handling | `int.MinValue` | Wraps everything so it can observe any failure. |
-| 2 | Rate limiting | `int.MinValue + 1` | Reject a throttled request before any other work. |
-| 3 | Logging | `-100` | Measures the full pipeline, including retries. |
-| 4 | Validation | `-50` | Reject invalid input before transactions or the handler. |
-| 5 | Resilience (retries) | `50` | Wraps the unit of work, so each retry gets a fresh transaction. |
-| 6 | Idempotency | `75` | Inside resilience (a released claim can retry), before the UoW (a duplicate short-circuits before a transaction opens). |
-| 7 | Unit of work | `100` | Opens the transaction around the handler. |
-| 8 (innermost) | Timeout | `300` | Bounds the handler itself, not the outer behaviors. |
-| 9 | *your custom behaviors* | `int.MaxValue / 2` | Non-prioritized behaviors run just before the handler, ordered among themselves by type name. |
+| Order | Behavior | Priority | Acts on | Why here |
+| --- | --- | --- | --- | --- |
+| 1 | Exception handling | `int.MinValue` | requests with [exception hooks](#exception-handling) | Wraps everything, so its hooks see every failure. |
+| 2 | Rate limiting | `int.MinValue + 1` | requests whose context implements `IRateLimitedContext` | Rejects a throttled request before any other behavior does work. |
+| 3 | Logging | `-100` | every request | Its elapsed time covers validation, retries, the unit of work and the handler. A throttled request is not logged by it. |
+| 4 | Validation | `-50` | requests with [validators](#validation) | Rejects invalid input before any work. |
+| 5 | Resilience | `50` | `IRetryableRequest` | Each retry starts after the failed attempt was rolled back and its idempotency claim released. |
+| 6 | Idempotency | `75` | `IIdempotentRequest` | A duplicate is answered before a transaction opens. |
+| 7 | Unit of work | `100` | `ITransactionalCommand`, `ITransactionalQuery` | Runs the timeout and the handler in a transaction. |
+| 8 | Timeout | `300` | every request | The innermost built-in: bounds the handler and your default-priority behaviors, not the built-ins around it. |
+| 9 | Your behaviors | `DefaultPriority` | what they choose | Behaviors without a priority run inside every built-in. |
 
-When two behaviors share a priority, ties break by full type name (stable, deterministic). To place a
-custom behavior at a specific point, implement `IPrioritizedPipelineBehavior` and reference the
-`CqrsPipelinePriorities` constants.
+Behaviors with the same priority are ordered by full type name. To place a custom behavior elsewhere, implement
+`IPrioritizedPipelineBehavior` and use a `CqrsPipelinePriorities` constant (for example
+`CqrsPipelinePriorities.Logging + 1`, just inside logging).
 
-## Built-in behaviors
+Each built-in is registered by its builder verb; the verbs, their signatures and their options are listed in
+[Configuration](configuration.md#the-fluent-builder). Both forms of `AddCqrsGenerated`, the parameterless one included,
+register exception handling and validation unless turned off with `UseExceptionHandling(false)` or
+`UseValidation(false)`; every other behavior is registered only when its verb is called. Resilience, timeouts
+and idempotency are described in [Idempotency and resilience](idempotency-and-resilience.md), the unit of work in
+[Unit of work](unit-of-work.md), and the logging behavior's messages in [Observability](observability.md).
 
-The built-ins are enabled through the [fluent builder](configuration.md):
+## Rate limiting
 
-| Builder verb | Behavior | Details |
-| --- | --- | --- |
-| `UseLogging()` | Logs request start, completion (with elapsed time), and failure. | — |
-| `UseValidation(bool = true)` | Runs every `IRequestValidator<TRequest>`; throws on failures. | [below](#validation) |
-| `UseExceptionHandling(bool = true)` | Request-level exception hooks that can observe or convert exceptions. | [below](#exception-handling) |
-| `UseRateLimiting(o => …)` | Token-bucket throttling keyed on the request context. | [below](#rate-limiting) |
-| `UseResilience(o => …)` | Automatic retries for `IRetryableRequest`. | [Idempotency & resilience](idempotency-and-resilience.md) |
-| `UseTimeout(o => …)` | Per-request timeout that bounds the handler. | [Idempotency & resilience](idempotency-and-resilience.md#timeouts) |
-| `UseUnitOfWork<TUoW>(…)` | Wraps transactional requests in a UoW transaction. | [Unit of work](unit-of-work.md) |
-| `UseIdempotency(…)` | At-most-once processing for `IIdempotentRequest`. | [Idempotency & resilience](idempotency-and-resilience.md) |
+`UseRateLimiting(o => ...)` adds a token-bucket limiter. It limits only requests whose **context** implements
+`IRateLimitedContext`; a request with any other context passes through untouched.
 
-> **Validation and exception handling are pack-coupled — they are not off by default.** Both are part
-> of the pipeline pack, and the pack is **active whenever you call any pack verb** on the builder:
-> `UseValidation`, `UseLogging`, `UseExceptionHandling`, `UseRateLimiting`, `UseResilience`,
-> `UseTimeout`, `UseUnitOfWork`, or `UsePipelinePack`. So calling, say, only `UseLogging()` still turns
-> **validation and exception handling on** (every registered validator and exception hook runs). They
-> are off only when **no** pack verb is used at all. To keep the rest of the pack but switch one of these
-> two off, use the explicit opt-out overloads `UseValidation(false)` / `UseExceptionHandling(false)`.
-> The other built-ins above each apply only to requests that opt in (a registered validator, a
-> `[NotificationName]`, an `IRetryableRequest` marker, and so on) and are wired only by their own verb.
+```csharp
+public interface IRateLimitedContext : IRequestContext
+{
+    string UserId { get; }   // the key the request is limited under
+}
+```
 
-### Rate limiting
+The context factory must supply `UserId` from a trusted source: normally the authenticated user's id, and for an anonymous
+caller another stable key such as the client address (a caller who can choose the key can sidestep the limit). A context
+that implements the interface with an empty `UserId` makes the request fail with `InvalidOperationException`. See
+[Custom contexts](requests-and-handlers.md#custom-contexts).
 
-`UseRateLimiting` enables a continuously-refilling token-bucket limiter. It throttles only requests
-whose **context** implements `IRateLimitedContext` (the context supplies the user/request identifiers
-the limiter keys on). A request whose context does not implement it passes through unthrottled — the
-**CQRA007** analyzer warns when rate limiting is configured but a request's context doesn't opt in.
+Each bucket holds up to `MaxTokens` tokens and refills continuously at `ReplenishRatePerSecond`; each request takes one. A
+request that finds the bucket empty fails with `RateLimitExceededException`, whose `RetryAfter` is the time until the
+bucket holds a token again, rounded up to whole milliseconds.
 
 ```csharp
 .UseRateLimiting(o =>
 {
-    o.MaxTokens              = 100;     // bucket capacity
-    o.ReplenishRatePerSecond = 10;      // tokens added per second
-    o.MaxEntries             = 10_000;  // distinct keys tracked
+    o.MaxTokens = 100;                          // burst size (default 3)
+    o.ReplenishRatePerSecond = 10;              // refill rate (default 1)
+    o.Scope = RateLimitScope.PerRequestType;    // one bucket per caller and request type (default: Global, one per caller)
+    o.MaxEntries = 10_000;                      // buckets kept (default 10,000)
 })
 ```
 
-Invalid options fail fast at host start via options validation (an `OptionsValidationException`).
+- `MaxEntries` is the number of buckets the limiter keeps (callers, or caller and request-type pairs). Nothing is dropped
+  until that many exist. At the limit, buckets that have refilled completely are dropped first, which loses nothing; only
+  when more than nine tenths are still in use are the least recently used ones dropped as well, down to nine tenths. A
+  dropped caller starts again with a full bucket, so size `MaxEntries` comfortably above the callers active within one
+  refill period (`MaxTokens / ReplenishRatePerSecond` seconds).
+- `MaxIdleTime` (default 10 minutes; zero turns it off) is how long a bucket must go unused before the idle sweep may drop
+  it; the sweep drops only buckets that have also refilled completely. `CleanupInterval` (default 5 minutes) is how often
+  a timer runs the sweep; zero runs it from requests instead, at most every `MaxIdleTime / 2` and at least a second apart.
+- Invalid options fail host start with `OptionsValidationException`.
 
 ## Validation
 
-`UseValidation()` runs every registered validator for a request before the handler. Implement
+The validation behavior runs every validator registered for a request before the handler. Implement
 `IRequestValidator<TRequest>`:
 
 ```csharp
 public interface IRequestValidator<in TRequest> where TRequest : IRequest
 {
-    Task<ValidationFailure[]> ValidateAsync(TRequest request, CancellationToken ct);
+    Task<ValidationFailure[]> ValidateAsync(TRequest request, CancellationToken cancellationToken);
 }
 ```
 
 ```csharp
 public sealed class CreateUserValidator : IRequestValidator<CreateUser>
 {
-    public Task<ValidationFailure[]> ValidateAsync(CreateUser r, CancellationToken ct)
-        => Task.FromResult(string.IsNullOrWhiteSpace(r.Name)
-            ? new[] { new ValidationFailure("NAME_REQUIRED", "Name is required.", nameof(r.Name)) }
+    public Task<ValidationFailure[]> ValidateAsync(CreateUser request, CancellationToken cancellationToken)
+        => Task.FromResult(string.IsNullOrWhiteSpace(request.Name)
+            ? [new ValidationFailure("NAME_REQUIRED", "Name is required.", nameof(request.Name))]
             : Array.Empty<ValidationFailure>());
 }
 ```
 
-Register validators in DI (`services.AddTransient<IRequestValidator<CreateUser>, CreateUserValidator>()`).
-A request may have several validators; their failures are **aggregated**. If any validator returns a
-failure, the behavior throws `RequestValidationException` **before** the handler runs:
-
-```csharp
-public sealed class RequestValidationException : Exception
-{
-    public Type RequestType { get; }
-    public IReadOnlyList<ValidationFailure> Failures { get; }
-}
-```
-
-Catch it at your API boundary and translate `Failures` into a 400 response. A validator that returns
-`Array.Empty<ValidationFailure>()` passes.
+- **The generator registers validators.** Every public or internal, non-generic validator class it finds is registered,
+  so there is nothing to call. Register one yourself only when the generator cannot see it (a private nested class, an
+  open generic, or a class in an assembly the generator does not run in). A validator you register yourself that the
+  generator also found runs once, as your registration.
+- **Every validator runs**, one after another, and their failures are collected. When any failure is reported, the
+  behavior throws `RequestValidationException` before the handler runs, carrying `RequestType` and every `Failures`
+  entry. A validator that returns an empty array passes.
+- **Validation is on by default**, in both forms of `AddCqrsGenerated`. It does nothing for a request without
+  validators; turn it off with `UseValidation(false)`. The **CQRA012** analyzer warns about a validator in a project
+  whose every registration turns validation off, and the startup validator reports **CQRDIAG005** for a request with
+  validators (in any assembly) when the validation behavior is not registered.
+- **FluentValidation validators** run inside the same behavior with `UseFluentValidation()` ([FluentValidation](fluentvalidation.md)).
+- **Over HTTP**, `CQRSharp.AspNetCore` maps `RequestValidationException` to a 400 ProblemDetails response with the
+  failures grouped by member ([ASP.NET Core](aspnetcore.md#exception-mapping)).
 
 ## Exception handling
 
-`UseExceptionHandling()` enables request-level exception hooks: typed handlers that can **observe** an
-exception (side effects) or **convert** it into a successful response. Two contracts:
+The exception-handling behavior runs request-level exception hooks: typed classes that **observe** an exception (side
+effects) or **handle** it by supplying the response. There are two contracts:
 
 ```csharp
-// Can convert the exception into a response.
-public interface IRequestExceptionHandler<in TRequest, TResponse, in TException>
-    where TRequest : IRequest<TResponse> where TException : Exception
-{
-    Task Handle(TRequest request, TException exception,
-                RequestExceptionHandlerState<TResponse> state, CancellationToken ct);
-}
-
-// Side effects only — never suppresses the exception.
+// Side effects only; never suppresses the exception.
 public interface IRequestExceptionAction<in TRequest, in TException>
     where TRequest : IRequest where TException : Exception
 {
-    Task Execute(TRequest request, TException exception, CancellationToken ct);
+    Task Execute(TRequest request, TException exception, CancellationToken cancellationToken);
+}
+
+// Can handle the exception by supplying the response.
+public interface IRequestExceptionHandler<in TRequest, TResponse, in TException>
+    where TRequest : IRequest<TResponse> where TException : Exception
+{
+    Task Handle(TRequest request, TException exception, RequestExceptionHandlerState<TResponse> state,
+        CancellationToken cancellationToken);
 }
 ```
 
 ```csharp
-public sealed class HandleDuplicate
-    : IRequestExceptionHandler<CreateUser, CommandResult, DuplicateRequestException>
+public sealed class HandleDuplicate : IRequestExceptionHandler<CreateUser, CommandResult, DuplicateRequestException>
 {
-    public Task Handle(CreateUser r, DuplicateRequestException ex,
-        RequestExceptionHandlerState<CommandResult> state, CancellationToken ct)
+    public Task Handle(CreateUser request, DuplicateRequestException exception,
+        RequestExceptionHandlerState<CommandResult> state, CancellationToken cancellationToken)
     {
-        state.SetHandled(CommandResult.FromError("Already processed", 409));   // swallow + respond
+        state.SetHandled(CommandResult.Conflict("Already processed."));   // the caller receives this result
         return Task.CompletedTask;
     }
 }
 ```
 
-Register the hooks in DI. If a handler calls `state.SetHandled(response)`, the exception is suppressed
-and that response is returned to the caller; otherwise the exception propagates after all actions run.
-Hook resolution is matched by request and exception type by the source generator — no reflection at
-runtime.
+- **The generator registers hooks**, like validators: every public or internal, non-generic hook class it finds. The
+  behavior finds a request's hooks through the (request, exception type) pairs the generator recorded, so a hook class
+  must be visible to it. A hook of your own registration of the same class replaces the discovered one.
+- **`TResponse` must be the response the request is dispatched with**: `CommandResult` for a command,
+  `CommandResult<TResult>` for a value-returning command, the query's result type, or `IAsyncEnumerable<TItem>` for a
+  stream. A handler declared over another type never runs; the generator reports it as **CQRGEN017**.
+- **Order.** When a request fails, every action whose exception type matches runs first (an action for `Exception` sees
+  everything). Then the handlers run, from the most derived matching exception type up; the first to call
+  `state.SetHandled(response)` ends it, the exception is suppressed, and that response is returned. Otherwise the
+  exception propagates. Hooks for one request may be declared in several assemblies; each runs once.
+- **The caller's cancellation is not handled:** an `OperationCanceledException` thrown once the caller's own token is
+  cancelled passes through without running any hook. A cancellation the caller did not ask for (an `HttpClient`
+  timeout, a handler's own linked token) is a failure like any other, and the hooks see it.
+- Exception handling is on by default, in both forms of `AddCqrsGenerated`; turn it off with
+  `UseExceptionHandling(false)`. The startup validator reports **CQRDIAG006** for a request with exception hooks when
+  the exception-handling behavior is not registered.
 
 ## Custom behaviors
 
-Write an open-generic behavior and register it through `builder.Services`. Implement
-`IPrioritizedPipelineBehavior` to place it in the pipeline:
+Write a behavior class and implement `IPrioritizedPipelineBehavior` if it needs a place other than the default:
 
 ```csharp
-public sealed class AuditBehavior<TRequest, TResult>
+public sealed class AuditBehavior<TRequest, TResult>(ILogger<AuditBehavior<TRequest, TResult>> logger)
     : IPipelineBehavior<TRequest, TResult>, IPrioritizedPipelineBehavior
+    where TRequest : IRequest
 {
-    public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging + 1;  // just inside logging
+    public int PipelineExecutionPriority => CqrsPipelinePriorities.Logging + 1;   // just inside logging
 
-    public async Task<TResult> Handle(TRequest request,
-        RequestHandlerDelegate<TResult> next, CancellationToken ct)
+    public async Task<TResult> Handle(TRequest request, RequestHandlerDelegate<TResult> next, CancellationToken cancellationToken)
     {
-        // ... before ...
-        var result = await next();   // or next(ct) to pass your own token
-        // ... after ...
+        logger.LogInformation("Auditing {Request}", typeof(TRequest).Name);
+        var result = await next();
+        logger.LogInformation("Audited {Request}", typeof(TRequest).Name);
         return result;
     }
 }
 
-services.AddCqrsGenerated(b => b
-    .UseLogging()
-    .Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditBehavior<,>)));
+services.AddCqrsGenerated(b => b.Services
+    .AddTransient(typeof(IPipelineBehavior<,>), typeof(AuditBehavior<,>)));
 ```
 
-Behaviors are resolved fresh per dispatch and run on the dispatching scope. For a streaming concern,
-implement `IStreamPipelineBehavior<TRequest, TItem>` and register it the same way.
+- **Open-generic behaviors are registered by you**, as above, through `builder.Services` or directly on the service
+  collection, before or after `AddCqrsGenerated`. They are resolved for each dispatch from the dispatching scope, with the
+  lifetime you registered.
+- **Closed behaviors are registered by the generator.** A public or internal, non-generic class that implements
+  `IPipelineBehavior<SomeRequest, SomeResult>` (or the stream contract) is registered like a validator, and runs for that
+  request without a registration call. Closed notification behaviors are discovered the same way
+  ([Notification pipeline behaviors](notifications.md#notification-pipeline-behaviors)).
+- For a streaming concern, implement `IStreamPipelineBehavior<TRequest, TItem>` and register it the same way.
+
+> **Native AOT and value-type results.** Without dynamic code, the container cannot close an open-generic behavior over a
+> request whose result or streamed item is a value type (`IQuery<int>`, `IStreamRequest<Guid>`). The generator emits
+> closed factories for the behaviors it can name, and a behavior it cannot close fails the dispatch rather than being
+> skipped. [Native AOT](native-aot.md#value-type-results-and-notifications) has the rules.
 
 ## Pipeline exemptions
 
-A request can opt **out** of a specific behavior with `[PipelineExemption]`. Use the **open-generic**
-form — it exempts the behavior for every request it is closed over and is the idiomatic shorthand:
+A request can opt **out** of a behavior with `[PipelineExemption]`. Name the behavior's open generic form to exempt it
+whatever it is closed over:
 
 ```csharp
-[PipelineExemption(typeof(LoggingBehavior<,>))]   // this command skips logging
+[PipelineExemption(typeof(LoggingBehavior<,>))]   // this command is not logged
 public sealed class Heartbeat : CommandBase;
 ```
 
-- The **CQRA005** analyzer (error) flags an exemption whose target is **not** a pipeline behavior — it
-  would silently have no effect.
-- The **CQRA008** analyzer (info, with a code fix) suggests converting a verbose closed-generic
-  exemption — `typeof(LoggingBehavior<Heartbeat, CommandResult>)` — to the open-generic form above.
+- An exemption applies to the request it is declared on, and to requests that derive from it (the attribute is
+  inherited). The attribute can be repeated to exempt several behaviors. The closed form,
+  `typeof(LoggingBehavior<Heartbeat, CommandResult>)`, works too.
+- The **CQRA005** analyzer (error) reports an exemption that has no effect: the type is not a pipeline behavior, is
+  abstract or an interface, never runs for the request (closed over another request or result, or a stream behavior on a
+  command), or the attribute is on something that is not a request.
+- The **CQRA008** analyzer (info, with a code fix) suggests the open-generic form for a closed exemption.
+- `ICqrsDiagnostics.DescribeRequest` lists a request's exemptions and the behaviors they removed
+  ([Diagnostics](diagnostics.md)).
 
-Exemptions are surfaced on `RequestMetadata.PipelineExemptions` and in the
-[diagnostics introspection API](diagnostics.md).
+## Interceptors (pre- and post-handler attributes)
 
-## Interceptors (pre/post-handler attributes)
-
-Besides behaviors, you can attach **attribute-based interceptors** that run immediately around the
-handler (inside the whole behavior pipeline). An interceptor implements `IPreHandlerAttribute` (runs
-before the handler) and/or `IPostHandlerAttribute` (runs after) on an attribute you apply to a request:
+An interceptor is an attribute on a request type that runs code just before or just after the handler, inside the whole
+behavior pipeline. It implements `IPreHandlerAttribute`, `IPostHandlerAttribute`, or both:
 
 ```csharp
 public interface IPreHandlerAttribute
 {
     int PreHandlerExecutionPriority { get; }   // lower runs first
-    Task OnBeforeHandle(IRequest request, IServiceProvider services, CancellationToken ct);
+    Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken);
 }
 
 public interface IPostHandlerAttribute
 {
     int PostHandlerExecutionPriority { get; }  // lower runs first
-    Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider services, CancellationToken ct);
+    Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken);
 }
 ```
-
-Pre-handlers run just before the handler (ordered by `PreHandlerExecutionPriority`); post-handlers run
-just after (ordered by `PostHandlerExecutionPriority`), on both the success and exception paths. They
-receive the `IServiceProvider` so they can resolve dependencies, and a post-handler also receives the
-request's `RequestOutcome` — the value the handler returned, or the exception it threw. The generator records them on `RequestMetadata.PreHandlers` / `PostHandlers`.
-
-### ICommandInterceptor — the one-stop pre+post interface
-
-When an attribute needs to run on **both** sides of the handler, implement
-`CQRSharp.Abstractions.Attributes.Pipelines.ICommandInterceptor` rather than listing both interfaces
-separately. It is the idiomatic combined interceptor — it simply unions the two contracts:
-
-```csharp
-public interface ICommandInterceptor : IPreHandlerAttribute, IPostHandlerAttribute;
-```
-
-So an `ICommandInterceptor` exposes all four members — `OnBeforeHandle` + `PreHandlerExecutionPriority`
-and `OnAfterHandle` + `PostHandlerExecutionPriority`:
 
 ```csharp
 [AttributeUsage(AttributeTargets.Class)]
-public sealed class AuditAttribute(int priority) : Attribute, ICommandInterceptor
+public sealed class AuditAttribute(int priority) : Attribute, IPreHandlerAttribute, IPostHandlerAttribute
 {
-    public int PreHandlerExecutionPriority  => priority;
+    public int PreHandlerExecutionPriority => priority;
     public int PostHandlerExecutionPriority => priority;
 
-    public Task OnBeforeHandle(IRequest request, IServiceProvider services, CancellationToken ct)
-    {
-        // ... runs before the handler ...
-        return Task.CompletedTask;
-    }
+    public Task OnBeforeHandle(IRequest request, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        => Task.CompletedTask;   // runs before the handler
 
-    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider services, CancellationToken ct)
-    {
-        // ... runs after the handler, with its outcome (the returned value or the thrown exception) ...
-        return Task.CompletedTask;
-    }
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        => Task.CompletedTask;   // runs after the handler, with the value it returned or the exception the request failed with
 }
 
 [Audit(priority: 0)]
-public sealed class CreateUser : CommandBase { /* ... */ }
+public sealed class CreateUser : CommandBase
+{
+    public required string Name { get; init; }
+}
 ```
 
-The Sample's `CustomInterceptorAttribute` is exactly this shape — an `ICommandInterceptor` that logs and
-records a self-test marker on both `OnBeforeHandle` and `OnAfterHandle`. When a type implements
-`IPreHandlerAttribute` and `IPostHandlerAttribute` directly, the **CQRA017** analyzer (info) suggests
-collapsing it to a single `ICommandInterceptor`.
+- **Order.** Pre-handlers run in `PreHandlerExecutionPriority` order and post-handlers in `PostHandlerExecutionPriority`
+  order, lower first; equal priorities are ordered by full type name. Both receive the dispatching scope's
+  `IServiceProvider` to resolve what they need. The sample's `CustomInterceptorAttribute` implements both interfaces.
+- **Inheritance.** An interceptor on a base request class applies to derived requests, following the attribute's
+  `AttributeUsage.Inherited` (true by default); with `AllowMultiple = false` the most derived one wins. Attributes on
+  interfaces never apply.
+- **Visibility.** Generated code rebuilds the attributes, so their types, and any type or enum their arguments name, must
+  be public or internal to an assembly generated code can reach. The generator reports **CQRGEN016** (an error) for one it
+  cannot rebuild, instead of dispatching the request without it.
+- **A throwing pre-handler fails the request.** It gets the same failure path as a throwing handler: the post-handlers
+  run with the exception, and *Failed* is published.
 
-### Auditing on the outcome — the result or the exception
+### Auditing on the outcome
 
-`OnAfterHandle` receives the request's `RequestOutcome` and runs on **both** the success and the exception
-paths, so a post-handler can classify on what the handler actually produced — not merely that it ran. The
-motivating case is auditing an operation whose outcome is a *returned value* rather than success-vs-throw: a
-login command that returns a `CommandResult<LoginResult>` carrying a `BadCredentials` verdict is a perfectly
-successful dispatch (no exception) that must still be audited as a failure.
+`OnAfterHandle` runs on the success and the failure paths and receives the request's `RequestOutcome`: the value the
+handler returned (`Result`, boxed; cast it to the request's result type) or the exception the request failed with
+(`Exception`). `Threw` reports whether the dispatch failed, which is different from a business verdict inside a returned
+value. A login command that returns a `CommandResult<LoginResult>` with a "bad credentials" verdict is a successful
+dispatch that must still be audited as a failed login:
 
 ```csharp
 public sealed class AuditLoginAttribute : Attribute, IPostHandlerAttribute
 {
     public int PostHandlerExecutionPriority => 0;
 
-    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider sp, CancellationToken ct)
+    public Task OnAfterHandle(IRequest request, RequestOutcome outcome, IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
-        var audit = sp.GetRequiredService<IAuditSink>();
+        var audit = serviceProvider.GetRequiredService<IAuditSink>();
 
-        if (outcome.Threw)                                        // the handler faulted
-            audit.Record("user.login", success: false, error: outcome.Exception!.Message);
-        else if (outcome.Result is CommandResult<LoginResult> r)  // classify on the returned verdict
-            audit.Record(r.Value.Verdict == LoginVerdict.Ok ? "user.login" : "user.login.failed",
-                         success: r.Value.Verdict == LoginVerdict.Ok);
+        if (outcome.Threw)
+        {
+            audit.Record("user.login.failed", success: false, error: outcome.Exception!.Message);
+        }
+        else if (outcome.Result is CommandResult<LoginResult> result)
+        {
+            // Null-safe: a failed CommandResult has no Value, and is recorded as a failed login.
+            var ok = result is { Value.Verdict: LoginVerdict.Ok };
+            audit.Record(ok ? "user.login" : "user.login.failed", success: ok);
+        }
 
         return Task.CompletedTask;
     }
 }
 ```
 
-`RequestOutcome.Result` is the dispatch result (a `CommandResult<T>`, a `CommandResult`, or a query value),
-boxed as `object` — cast it to the request's result type. `Threw` reports the *dispatch* outcome (did it
-fault), deliberately distinct from any business verdict the value carries. On the exception path the
-post-handler is isolated, so a fault in your auditing never masks the original exception.
+How post-handlers behave:
 
-Interceptors are best for small, declarative, per-request concerns that read naturally as an attribute on
-the request type; reach for a **behavior** when the concern is cross-cutting across many requests or needs
-to wrap (not just bracket) the handler.
+- **Every post-handler runs**, like nested `finally` blocks: one that throws never stops the others.
+- **On a request that succeeded, the first post-handler that throws fails it.** The caller receives that exception,
+  *Failed* is published with it, and the post-handlers after it see it as the outcome's `Exception`.
+- **On a request that already failed**, a post-handler that throws is logged (event 1001, Warning) and never replaces
+  the request's own exception.
+- **Tokens.** On the success path `OnAfterHandle` receives the request's token; on the failure path it receives
+  `CancellationToken.None`, because the request's token may be the one that was cancelled.
+- **The failure path covers every stage after the request started.** A pre-handler that rejects the request (an
+  authorization interceptor, say) reaches the post-handlers with `Threw` set, so a post-handler can run for a request
+  whose own lower-priority pre-handler never ran. Treat `OnAfterHandle` like a `finally`.
+- **Streams** follow the same contract: a stream that fails while it is enumerated reaches `OnAfterHandle` with the
+  exception, and one enumerated to its end reaches it with a `null` `Result`. A consumer that stops enumerating early,
+  without an error, runs no post-handler.
+
+Interceptors suit small, declarative concerns that read naturally as an attribute on the request type. Use a behavior
+when the concern applies across many requests, or has to wrap the rest of the pipeline rather than bracket the handler.

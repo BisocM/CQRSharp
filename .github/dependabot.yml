@@ -1,0 +1,88 @@
+# Dependabot: weekly NuGet and GitHub Actions updates, opened against Release (the default branch) so CI validates
+# each one. The `ignore` rules protect pins that are deliberate — read the comment before removing one.
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    # "/" covers CQRSharp.sln. The benchmarks project is deliberately not in the solution, so it is listed explicitly.
+    directories:
+      - "/"
+      - "/benchmarks/CQRSharp.Benchmarks"
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: Release
+    open-pull-requests-limit: 5
+    groups:
+      # Listed first: a dependency joins the first group it matches, and the testing helpers below would otherwise
+      # fall into the Microsoft.Extensions / EF Core groups.
+      test-dependencies:
+        patterns:
+          - "xunit*"
+          - "Xunit.*"
+          - "Microsoft.NET.Test.Sdk"
+          - "Microsoft.Testing.*"
+          - "FluentAssertions"
+          - "Moq"
+          - "Microsoft.Extensions.TimeProvider.Testing"
+          - "Microsoft.AspNetCore.TestHost"
+          - "Microsoft.EntityFrameworkCore.Sqlite"
+          - "SQLitePCLRaw.*"
+          - "Testcontainers.*"
+          - "Microsoft.Data.SqlClient"
+      roslyn:
+        patterns:
+          - "Microsoft.CodeAnalysis.*"
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.Bcl.*"
+      # The Npgsql provider requires the EF Core patch it was built against, so the two always move in one pull request.
+      entity-framework-core:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore.PostgreSQL"
+      # Not built by CI: run the benchmarks locally before merging one of these.
+      benchmarks:
+        patterns:
+          - "BenchmarkDotNet*"
+    ignore:
+      # The generator and the analyzers must load in older compilers and IDEs, so Roslyn stays on 4.8.x. Patch updates
+      # within 4.8 are fine; a minor or major bump raises the minimum Visual Studio / SDK for every consumer.
+      - dependency-name: "Microsoft.CodeAnalysis.*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      # Pinned to 12.5.0, the last Apache-2.0 release; 13.0 and later are commercially licensed. Benchmarks only.
+      - dependency-name: "MediatR"
+      # A library's package references are the floor its consumers inherit, and net8.0 is a supported target: moving
+      # to a new major is a release decision, not a routine update.
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "Microsoft.Bcl.*"
+        update-types:
+          - "version-update:semver-major"
+      # Pinned once per target framework in Directory.Packages.props, each to that framework's major (EF Core, its
+      # providers, and TestHost, which must match the shared framework); a major update would cross frameworks.
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "Microsoft.AspNetCore.TestHost"
+        update-types:
+          - "version-update:semver-major"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: Release
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"

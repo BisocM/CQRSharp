@@ -1,0 +1,61 @@
+<Project>
+
+    <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+    <!--
+        Everything under src/ that ships a public API (so: not the meta-package, and not the generator or analyzers,
+        whose only contract is the diagnostics and the code they emit).
+    -->
+    <PropertyGroup>
+        <HasPublicApi>true</HasPublicApi>
+        <HasPublicApi Condition="'$(MSBuildProjectName)' == 'CQRSharp' or '$(MSBuildProjectName)' == 'CQRSharp.Generators' or '$(MSBuildProjectName)' == 'CQRSharp.Analyzers'">false</HasPublicApi>
+    </PropertyGroup>
+
+    <!--
+        A CQRSharp package's dependency on another CQRSharp package passes the Analyzers asset on (NuGet's default for a
+        reference keeps analyzers private). The CQRSharp analyzers ship once, in CQRSharp.Abstractions, and every package
+        depends on it, so this is how they reach a project that references any CQRSharp package. Build and content files
+        stay private, as by default. A reference that sets PrivateAssets itself (the build-order references to the
+        generator and analyzer projects) keeps its own value. validate_packages.py fails a pack that excludes them.
+    -->
+    <ItemDefinitionGroup>
+        <ProjectReference>
+            <PrivateAssets>contentfiles;build</PrivateAssets>
+        </ProjectReference>
+    </ItemDefinitionGroup>
+
+    <!--
+        APIs the library code must not call (BannedSymbols.txt says why, and what to use instead): a banned call is RS0030,
+        a warning, so it fails the zero-warning build. Not the Roslyn components, which run inside the compiler, nor the
+        xUnit contract suites, which are test code.
+    -->
+    <ItemGroup Condition="'$(MSBuildProjectName)' != 'CQRSharp.Generators' and '$(MSBuildProjectName)' != 'CQRSharp.Analyzers' and '$(MSBuildProjectName)' != 'CQRSharp.Testing.Xunit.V3'">
+        <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all"/>
+        <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt"/>
+    </ItemGroup>
+
+    <!--
+        Package validation: on pack, checks that every target framework exposes a compatible surface. Once 5.0.0 is on
+        NuGet, set PackageValidationBaselineVersion to 5.0.0 here and a breaking change within 5.x fails the pack.
+    -->
+    <PropertyGroup Condition="'$(HasPublicApi)' == 'true'">
+        <EnablePackageValidation>true</EnablePackageValidation>
+        <!-- XML docs ship in every package; an undocumented public member (CS1591) fails the zero-warning gate. -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- RS0026/RS0027 police overloads with optional parameters; the CancellationToken-defaulted overloads here are deliberate. -->
+        <NoWarn>$(NoWarn);RS0026;RS0027</NoWarn>
+    </PropertyGroup>
+
+    <!--
+        Public API tracking: every public member is listed in the project's PublicAPI.*.txt. Adding one without
+        recording it (RS0016), or removing a recorded one (RS0017), is a build error - so an API change is always a
+        deliberate, reviewable diff. New members go in PublicAPI.Unshipped.txt (the IDE fix does it); a release moves
+        them to PublicAPI.Shipped.txt.
+    -->
+    <ItemGroup Condition="'$(HasPublicApi)' == 'true'">
+        <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all"/>
+        <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Shipped.txt"/>
+        <AdditionalFiles Include="$(MSBuildProjectDirectory)/PublicAPI.Unshipped.txt"/>
+    </ItemGroup>
+
+</Project>

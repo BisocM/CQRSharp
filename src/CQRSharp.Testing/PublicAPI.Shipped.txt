@@ -1,0 +1,34 @@
+#nullable enable
+CQRSharp.Testing.DispatchedMessage
+CQRSharp.Testing.DispatchedMessage.DispatchedMessage() -> void
+CQRSharp.Testing.DispatchedMessage.DispatchedMessage(CQRSharp.Testing.DispatchKind Kind, object! Message) -> void
+CQRSharp.Testing.DispatchedMessage.Kind.get -> CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.DispatchedMessage.Kind.init -> void
+CQRSharp.Testing.DispatchedMessage.Message.get -> object!
+CQRSharp.Testing.DispatchedMessage.Message.init -> void
+CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.DispatchKind.Publish = 2 -> CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.DispatchKind.Send = 0 -> CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.DispatchKind.Stream = 1 -> CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.RecordingCqrsDispatcher
+CQRSharp.Testing.RecordingCqrsDispatcher.ClearRecorded() -> void
+CQRSharp.Testing.RecordingCqrsDispatcher.Dispatched.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Testing.DispatchedMessage>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Publish<TNotification>(TNotification notification, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.Testing.RecordingCqrsDispatcher.Published<TNotification>() -> System.Collections.Generic.IReadOnlyList<TNotification>!
+CQRSharp.Testing.RecordingCqrsDispatcher.PublishedNotifications.get -> System.Collections.Generic.IReadOnlyList<object!>!
+CQRSharp.Testing.RecordingCqrsDispatcher.RecordingCqrsDispatcher() -> void
+CQRSharp.Testing.RecordingCqrsDispatcher.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Send<TResponse>(CQRSharp.IRequest<TResponse>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResponse>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Sent<TRequest>() -> System.Collections.Generic.IReadOnlyList<TRequest>!
+CQRSharp.Testing.RecordingCqrsDispatcher.SentRequests.get -> System.Collections.Generic.IReadOnlyList<object!>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Setup<TRequest, TResponse>(System.Func<TRequest, TResponse>! respond) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.Setup<TRequest, TResponse>(TResponse response) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.SetupAsync<TRequest, TResponse>(System.Func<TRequest, System.Threading.CancellationToken, System.Threading.Tasks.Task<TResponse>!>! respond) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.SetupStream<TRequest, TItem>(System.Func<TRequest, System.Collections.Generic.IEnumerable<TItem>!>! items) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.SetupStream<TRequest, TItem>(System.Func<TRequest, System.Threading.CancellationToken, System.Collections.Generic.IAsyncEnumerable<TItem>!>! stream) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.StartedStreams.get -> System.Collections.Generic.IReadOnlyList<object!>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Stream(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<object?>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Stream<TItem>(CQRSharp.IStreamRequest<TItem>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Streamed<TRequest>() -> System.Collections.Generic.IReadOnlyList<TRequest>!
+CQRSharp.Testing.RecordingCqrsDispatcher.Throws<TMessage>(System.Exception! exception) -> CQRSharp.Testing.RecordingCqrsDispatcher!
+CQRSharp.Testing.RecordingCqrsDispatcher.Throws<TMessage>(System.Func<TMessage, System.Exception!>! exceptionFactory) -> CQRSharp.Testing.RecordingCqrsDispatcher!

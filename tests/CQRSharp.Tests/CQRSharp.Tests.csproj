@@ -5,47 +5,55 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <LangVersion>default</LangVersion>
-        <TargetFrameworks>net8.0</TargetFrameworks>
-        <!-- The analyzer/generator diagnostics are exercised by unit tests; suppress them on this project's own code.
-             CQRGEN006 fires on the intentionally-private test handler fixtures (which are registered manually). -->
-        <NoWarn>$(NoWarn);CQRA001;CQRA003;CQRA004;CQRA005;CQRA006;CQRA007;CQRGEN006</NoWarn>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '9.0.100'))">
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(NETCoreSdkVersion)', '10.0.100'))">
-        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <!-- xUnit v3 test projects are Microsoft.Testing.Platform executables. Declared here, not only by the xUnit
+             package, because dotnet test discovers test projects from the multi-targeting (outer) evaluation, which does
+             not see the per-framework package props. -->
+        <OutputType>Exe</OutputType>
+        <IsTestProject>true</IsTestProject>
+        <IsTestingPlatformApplication>true</IsTestingPlatformApplication>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <!-- CQRGEN006 (a handler the generator cannot register) fires on the deliberately private nested handler and
+             validator fixtures, which the tests register by hand. -->
+        <NoWarn>$(NoWarn);CQRGEN006</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="coverlet.collector" Version="6.0.4">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="FluentAssertions" Version="8.1.1"/>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0"/>
+        <PackageReference Include="FluentAssertions"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
         <!-- Workspaces APIs (Document/Project/AdhocWorkspace/CodeAction) for exercising code-fix providers in-test. -->
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces"/>
         <!-- FakeTimeProvider drives the clock seam deterministically in timing tests (no real Task.Delay). -->
-        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.3.0"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10"/>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0"/>
-        <PackageReference Include="StackExchange.Redis" Version="2.8.16"/>
-        <!-- EF Core Sqlite pulls the SQLitePCLRaw e_sqlite3 native lib in transitively for the EF outbox-store tests;
-             pin the newest available bundle. The remaining advisory is a SQLite-native CVE with no patched release yet,
-             unreachable here (in-memory test databases, no untrusted SQL), and it ships in no package — only the EF
-             tests reference Sqlite. It is suppressed surgically by id below so the audit stays fully active otherwise. -->
-        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.10"/>
-        <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q"/>
-        <PackageReference Include="Moq" Version="4.20.72"/>
-        <PackageReference Include="xunit" Version="2.9.3"/>
-        <PackageReference Include="xunit.runner.console" Version="2.9.3">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2">
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite"/>
+        <!-- The EF Core stores' entity types in contexts that use lazy-loading and change-tracking proxies. -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Proxies"/>
+        <!-- The EF Core stores against the providers they run on in production. The databases come from Testcontainers
+             (Docker) or from CQRSHARP_TEST_POSTGRES / CQRSHARP_TEST_SQLSERVER connection strings; without either the
+             provider tests skip. -->
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer"/>
+        <PackageReference Include="Microsoft.Data.SqlClient"/>
+        <PackageReference Include="Testcontainers.PostgreSql"/>
+        <PackageReference Include="Testcontainers.MsSql"/>
+        <!-- In-memory TestServer for the CQRSharp.AspNetCore integration tests (versioned per framework centrally). -->
+        <PackageReference Include="Microsoft.AspNetCore.TestHost"/>
+        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+        <!-- The Redis stores against a real server: CQRSHARP_TEST_REDIS (CI's service container) or a Testcontainers
+             Redis (Docker); without either the Redis tests skip. -->
+        <PackageReference Include="StackExchange.Redis"/>
+        <PackageReference Include="Testcontainers.Redis"/>
+        <!-- EF Core Sqlite brings the SQLitePCLRaw e_sqlite3 native library in transitively, at a version with a
+             vulnerable SQLite (GHSA-2m69-gcr7-jv3q); the direct reference lifts it to a patched bundle. -->
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
+        <PackageReference Include="Moq"/>
+        <PackageReference Include="xunit.v3"/>
+        <!-- Microsoft.Testing.Platform extensions for CI: a hang dump with a timeout (a stuck test fails the run instead
+             of hanging it), TRX results, and Cobertura coverage. -->
+        <PackageReference Include="Microsoft.Testing.Extensions.HangDump"/>
+        <PackageReference Include="Microsoft.Testing.Extensions.TrxReport"/>
+        <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage"/>
+        <PackageReference Include="xunit.runner.visualstudio">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
@@ -54,28 +62,42 @@
     <ItemGroup>
         <Using Include="Xunit"/>
     </ItemGroup>
+    <!--
+        Microsoft.CodeAnalysis.Common brings the analyzer-authoring rules (RS1xxx) in transitively. They check a project that
+        ships an analyzer, which this one does not, and RS1022 alone took most of this project's compile time (about 19 of
+        26 minutes of analyzer time, measured with -p:ReportAnalyzer=true). ExcludeAssets cannot drop them: the package
+        also flows through Microsoft.CodeAnalysis.Common, so they are removed from the compiler's analyzers instead.
+    -->
+    <Target Name="RemoveAnalyzerAuthoringRules" AfterTargets="ResolveLockFileAnalyzers">
+        <ItemGroup>
+            <Analyzer Remove="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'Microsoft.CodeAnalysis.Analyzers'"/>
+        </ItemGroup>
+    </Target>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Domain\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
         <!-- Referenced both as an analyzer (so it runs on this project) and for compile (so the incremental-caching
              test can drive the generator directly via CSharpGeneratorDriver). -->
-        <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Generators\CQRSharp.Generators.csproj"
+        <ProjectReference Include="..\..\src\CQRSharp.Generators\CQRSharp.Generators.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="true"/>
-        <ProjectReference Include="..\..\src\Application\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
-        <ProjectReference Include="..\..\src\Infrastructure\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
-        <ProjectReference Include="..\CQRSharp.Testing.Outbox\CQRSharp.Testing.Outbox.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Testing\CQRSharp.Testing.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Testing.Xunit.V3\CQRSharp.Testing.Xunit.V3.csproj"/>
         <!-- A second handler-bearing assembly, referenced to exercise CQRSharp's multi-assembly support: its module is
-             wired by this assembly's AddCqrsGenerated (see MultiAssemblyTests). -->
+             wired by this assembly's AddCqrsGenerated (see MultiAssemblyCompositionTests). -->
         <ProjectReference Include="..\CQRSharp.Tests.ExternalModule\CQRSharp.Tests.ExternalModule.csproj"/>
-        <ProjectReference Include="..\..\src\Integrations\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
-        <ProjectReference Include="..\..\src\Integrations\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.FluentValidation\CQRSharp.FluentValidation.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.AspNetCore\CQRSharp.AspNetCore.csproj"/>
     </ItemGroup>
 
-    <!-- The shared well-known-type resolver, source-linked so the guard test exercises the exact code the generator
-         and analyzers run (the .editorconfig beside the file keeps its neutral namespace intact). -->
+    <!-- The shared framework-type table, source-linked so its guard test exercises the exact code the generator and
+         analyzers run (the .editorconfig beside the file keeps its neutral namespace intact). -->
     <ItemGroup>
-        <Compile Include="..\..\src\Infrastructure\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
+        <Compile Include="..\..\src\Shared\CqrsKnownSymbols.cs" Link="Shared\CqrsKnownSymbols.cs"/>
     </ItemGroup>
 
 </Project>

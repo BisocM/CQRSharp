@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Convenience global usings for the CQRSharp authoring surface: CQRSharp (requests, handlers, results, notifications,
+    the dispatcher, AddCqrsGenerated) and CQRSharp.Pipelines (the builder, behavior contracts and options).
+    CQRSharp.Persistence (store and unit-of-work contracts) is deliberately not global: only infrastructure code needs
+    it. Active only when the consuming project has ImplicitUsings enabled (the default for .NET 8+ projects). Opt out -
+    without turning off all implicit usings - by setting:
+        <PropertyGroup><CQRSharpImplicitUsings>false</CQRSharpImplicitUsings></PropertyGroup>
+  -->
+  <ItemGroup Condition="('$(ImplicitUsings)' == 'enable' Or '$(ImplicitUsings)' == 'true') And '$(CQRSharpImplicitUsings)' != 'false'">
+    <Using Include="CQRSharp" />
+    <Using Include="CQRSharp.Pipelines" />
+  </ItemGroup>
+
+</Project>

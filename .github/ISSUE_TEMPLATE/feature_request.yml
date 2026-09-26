@@ -1,0 +1,76 @@
+name: Feature request
+description: Propose a new capability, or a change to an existing one.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CQRSharp is maintained by one person, so proposals that are specific about the problem get the best answers.
+        For anything sizeable, agreeing the design here first saves you writing a pull request that cannot be merged.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what makes it hard or impossible today? A concrete scenario beats a general wish.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would like to write. A sketch of the API — the builder verb, marker interface, attribute or diagnostic — is ideal.
+      render: csharp
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: What you do today, and other designs you considered.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Dispatch / requests and handlers
+        - Notifications
+        - Pipeline behaviors (validation, resilience, rate limiting, unit of work, ...)
+        - Outbox
+        - Idempotency
+        - Source generator
+        - Analyzers / code fixes
+        - Redis integration
+        - EF Core integration
+        - ASP.NET Core integration
+        - FluentValidation integration
+        - Observability / diagnostics
+        - Documentation, samples or template
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Two things every feature has to live with.
+      options:
+        - label: This can work without runtime reflection (the core packages are Native-AOT-compatible), or it belongs in a separate, non-AOT integration package.
+          required: false
+        - label: I am willing to open a pull request for this.
+          required: false
+
+  - type: textarea
+    id: breaking
+    attributes:
+      label: Compatibility
+      description: Would this change or break existing behavior or public API? If so, how would users migrate?
+    validations:
+      required: false

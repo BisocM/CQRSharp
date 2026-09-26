@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        The end-to-end self-test and the Native AOT canary for the runtime: every scenario in
+        Infrastructure/SelfTest runs on startup and the process exits non-zero when one fails. CI runs it as a framework
+        build and publishes and runs it as a Native AOT binary for net8.0 and net10.0 (.github/workflows/validate.yml);
+        CQRSharp.Sample.AspNetCore is the canary for the HTTP edge.
+    -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <RootNamespace>CQRSharp.Sample</RootNamespace>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <PublishAot>true</PublishAot>
+        <!-- The generated module lands in obj/, where it can be read next to the code it was generated from. -->
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The generic host and its console logging; CQRSharp itself depends only on the hosting abstractions. -->
+        <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+        <!-- A second handler-bearing assembly, so the Native AOT publish covers the multi-assembly codegen path: its module
+             is wired by this app's single AddCqrsGenerated (see SelfTestRunner.RunExternalModuleTestAsync). -->
+        <ProjectReference Include="..\CQRSharp.Sample.ExternalModule\CQRSharp.Sample.ExternalModule.csproj"/>
+        <!-- The self-test registers the Redis stores in a container of its own and builds and validates it without
+             connecting (SelfTestRunner.RunRedisRegistrationTestAsync), so their registration and option validation are
+             part of the Native AOT publish and run in it. -->
+        <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+    </ItemGroup>
+
+</Project>

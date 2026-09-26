@@ -1,6 +1,6 @@
-using CQRSharp.Abstractions.Models.Outbox;
 using CQRSharp.EntityFrameworkCore;
-using CQRSharp.EntityFrameworkCore.Persistence;
+using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +37,7 @@ public sealed class EfCoreOutboxClaimConcurrencyTests
             var now = time.GetUtcNow().UtcDateTime;
             for (var i = 0; i < 50; i++)
                 seedContext.Set<OutboxEntity>().Add(OutboxEntityMapper.FromMessage(NewPending(now.AddSeconds(i))));
-            await seedContext.SaveChangesAsync();
+            await seedContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         // Two independent stores over two independent connections to the SAME database.
@@ -51,11 +51,13 @@ public sealed class EfCoreOutboxClaimConcurrencyTests
 
         // Both try to claim the entire backlog at once.
         var batches = await Task.WhenAll(
-            Task.Run(async () => (await storeA.GetPendingAsync(50, CancellationToken.None)).ToList()),
-            Task.Run(async () => (await storeB.GetPendingAsync(50, CancellationToken.None)).ToList()));
+            Task.Run(async () => (await storeA.ClaimPendingAsync(50, CancellationToken.None)).ToList()),
+            Task.Run(async () => (await storeB.ClaimPendingAsync(50, CancellationToken.None)).ToList()));
 
-        var claimed = batches.SelectMany(b => b).ToList();
+        var claimed = batches.SelectMany(b => b.Select(c => c.Message)).ToList();
 
+        claimed.Should().HaveCount(50,
+            "every due message is claimed by exactly one store: the loser of the race yields the batch, it does not make both give up");
         claimed.Select(m => m.Id).Should().OnlyHaveUniqueItems(
             "the optimistic-token claim must never hand the same message to two stores");
         claimed.Should().OnlyContain(m => m.Status == OutboxMessageStatus.InProgress,
@@ -83,14 +85,14 @@ public sealed class EfCoreOutboxClaimConcurrencyTests
         await storeA.StoreAsync([message], CancellationToken.None);
 
         // Store A claims it, then "crashes" (never marks it processed).
-        (await storeA.GetPendingAsync(10, CancellationToken.None)).Should().ContainSingle();
+        (await storeA.ClaimPendingAsync(10, CancellationToken.None)).Should().ContainSingle();
 
         // Before the lease expires, store B sees nothing claimable.
-        (await storeB.GetPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
+        (await storeB.ClaimPendingAsync(10, CancellationToken.None)).Should().BeEmpty();
 
         // Past the visibility timeout the lease is abandoned and store B reclaims it.
         time.Advance(VisibilityTimeout + TimeSpan.FromSeconds(1));
-        var reclaimed = (await storeB.GetPendingAsync(10, CancellationToken.None)).ToList();
+        var reclaimed = (await storeB.ClaimPendingAsync(10, CancellationToken.None)).Select(c => c.Message).ToList();
         reclaimed.Should().ContainSingle().Which.Id.Should().Be(message.Id);
         reclaimed[0].Status.Should().Be(OutboxMessageStatus.InProgress);
     }
@@ -122,6 +124,7 @@ public sealed class EfCoreOutboxClaimConcurrencyTests
     private static OutboxMessage NewPending(DateTime createdAt) => new(
         Guid.NewGuid(),
         "TestNotification",
+        "Tests.TestHandler",
         [1, 2, 3],
         createdAt,
         OutboxMessageStatus.Pending,

@@ -10,8 +10,11 @@
     <ItemGroup>
         <!-- The CQRSharp meta-package brings the runtime, the source generator, the analyzers, and the global usings
              that make the CQRSharp.* types below import-free. -->
-        <PackageReference Include="CQRSharp" Version="4.1.0"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2"/>
+        <PackageReference Include="CQRSharp" Version="5.0.0"/>
+        <!-- The major of the target framework: a later major would bring a later System.Text.Json package onto an
+             earlier framework, and the 9.x one's enum converter reports trim warning IL2090 in a Native AOT publish that
+             serializes an enum. The template fills in the version for the framework it scaffolds. -->
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="HOSTING_VERSION"/>
     </ItemGroup>
 
 </Project>

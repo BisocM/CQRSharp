@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <!--
+            Deliberately no IsAotCompatible here: FluentValidation builds its rules from
+            expression trees that it compiles at runtime, so it cannot be Native AOT'd or fully trimmed. The
+            registration verbs are instead annotated with [RequiresDynamicCode]/[RequiresUnreferencedCode] so
+            callers building AOT/trimmed apps get a clear analyzer warning at the call site.
+        -->
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>CQRSharp.FluentValidation</PackageId>
+        <PackageTags>CQRS;CQRSharp;FluentValidation;Validation;Pipeline</PackageTags>
+        <Title>FluentValidation integration for CQRSharp, running your AbstractValidator classes in the validation behavior.</Title>
+        <Description>A FluentValidation adapter for CQRSharp. One line of setup makes every registered FluentValidation IValidator&lt;TRequest&gt; run inside CQRSharp's validation pipeline behavior, alongside any native IRequestValidator&lt;TRequest&gt;; Error-severity failures are reported through RequestValidationException. FluentValidation compiles expression trees at runtime, so this package is not Native-AOT or full-trim compatible.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0. First release: UseFluentValidation() runs FluentValidation validators in the CQRSharp validation behavior.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <!-- Referenced for ICqrsBuilder, which the UseFluentValidation() fluent verb extends; the adapter itself
+             targets only the Abstractions contracts. -->
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FluentValidation"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+</Project>

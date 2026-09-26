@@ -1,0 +1,144 @@
+#nullable enable
+const CQRSharp.Pipelines.CqrsPipelinePriorities.ExceptionHandling = -2147483648 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.Idempotency = 75 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.Logging = -100 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.RateLimiting = -2147483647 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.Resilience = 50 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.Timeout = 300 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.UnitOfWork = 100 -> int
+const CQRSharp.Pipelines.CqrsPipelinePriorities.Validation = -50 -> int
+CQRSharp.Pipelines.CqrsBuilderBootstrap
+CQRSharp.Pipelines.CqrsPipelinePriorities
+CQRSharp.Pipelines.ExceptionHandlingBehavior<TRequest, TResult>
+CQRSharp.Pipelines.ExceptionHandlingBehavior<TRequest, TResult>.ExceptionHandlingBehavior(System.IServiceProvider! services, CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry! registry, Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.ExceptionHandlingBehavior<TRequest, TResult>!>! logger) -> void
+CQRSharp.Pipelines.ExceptionHandlingBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.ExceptionHandlingBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.ICqrsBuilder
+CQRSharp.Pipelines.ICqrsBuilder.ConfigureDispatcher(System.Action<CQRSharp.DispatcherOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.ConfigureNotifications(System.Action<CQRSharp.NotificationOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.ConfigureQueue(System.Action<CQRSharp.BackgroundTaskQueueOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+CQRSharp.Pipelines.ICqrsBuilder.UseExceptionHandling(bool enabled = true) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseIdempotency(System.Action<CQRSharp.Pipelines.IdempotencyStoreBuilder!>? configure = null) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseLogging() -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseOutbox(System.Action<CQRSharp.Pipelines.OutboxStoreBuilder!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseRateLimiting(System.Action<CQRSharp.Pipelines.RateLimitingOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseResilience(System.Action<CQRSharp.Pipelines.ResilienceOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseTimeout(System.Action<CQRSharp.Pipelines.TimeoutOptions!>! configure) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseTimeProvider(System.Func<System.IServiceProvider!, System.TimeProvider!>! factory) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseTimeProvider(System.TimeProvider! timeProvider) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseUnitOfWork<TUnitOfWork>(System.Func<System.IServiceProvider!, TUnitOfWork!>! factory, System.Action<CQRSharp.Pipelines.UnitOfWorkOptions!>? configure = null) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.UseValidation(bool enabled = true) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.ValidateOnStart(bool enabled = true) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.ICqrsBuilder.ValidateOnStart(CQRSharp.CqrsValidationPolicy policy) -> CQRSharp.Pipelines.ICqrsBuilder!
+CQRSharp.Pipelines.IdempotencyBehavior<TRequest, TResult>
+CQRSharp.Pipelines.IdempotencyBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.IdempotencyBehavior<TRequest, TResult>.IdempotencyBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.IdempotencyBehavior<TRequest, TResult>!>! logger, CQRSharp.Persistence.IIdempotencyStore! store, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.UnitOfWorkOptions!>! unitOfWorkOptions, CQRSharp.Persistence.IIdempotencyResultSerializer? resultSerializer = null, CQRSharp.Core.Idempotency.IRequestFingerprinter? fingerprinter = null) -> void
+CQRSharp.Pipelines.IdempotencyBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.IRateLimitedContext
+CQRSharp.Pipelines.IRateLimitedContext.UserId.get -> string!
+CQRSharp.Pipelines.LoggingBehavior<TRequest, TResult>
+CQRSharp.Pipelines.LoggingBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.LoggingBehavior<TRequest, TResult>.LoggingBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.LoggingBehavior<TRequest, TResult>!>! logger, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.LoggingBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.RateLimitingBehavior<TRequest, TResult>
+CQRSharp.Pipelines.RateLimitingBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.RateLimitingBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.RateLimitingBehavior<TRequest, TResult>.RateLimitingBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.RateLimitingBehavior<TRequest, TResult>!>! logger, CQRSharp.Pipelines.RequestRateLimiter! rateLimiter) -> void
+CQRSharp.Pipelines.RateLimitingOptions
+CQRSharp.Pipelines.RateLimitingOptions.CleanupInterval.get -> System.TimeSpan
+CQRSharp.Pipelines.RateLimitingOptions.CleanupInterval.set -> void
+CQRSharp.Pipelines.RateLimitingOptions.MaxEntries.get -> int
+CQRSharp.Pipelines.RateLimitingOptions.MaxEntries.set -> void
+CQRSharp.Pipelines.RateLimitingOptions.MaxIdleTime.get -> System.TimeSpan
+CQRSharp.Pipelines.RateLimitingOptions.MaxIdleTime.set -> void
+CQRSharp.Pipelines.RateLimitingOptions.MaxTokens.get -> int
+CQRSharp.Pipelines.RateLimitingOptions.MaxTokens.set -> void
+CQRSharp.Pipelines.RateLimitingOptions.RateLimitingOptions() -> void
+CQRSharp.Pipelines.RateLimitingOptions.ReplenishRatePerSecond.get -> double
+CQRSharp.Pipelines.RateLimitingOptions.ReplenishRatePerSecond.set -> void
+CQRSharp.Pipelines.RateLimitingOptions.Scope.get -> CQRSharp.Pipelines.RateLimitScope
+CQRSharp.Pipelines.RateLimitingOptions.Scope.set -> void
+CQRSharp.Pipelines.RateLimitScope
+CQRSharp.Pipelines.RateLimitScope.Global = 0 -> CQRSharp.Pipelines.RateLimitScope
+CQRSharp.Pipelines.RateLimitScope.PerRequestType = 1 -> CQRSharp.Pipelines.RateLimitScope
+CQRSharp.Pipelines.RequestRateLimiter
+CQRSharp.Pipelines.RequestRateLimiter.Dispose() -> void
+CQRSharp.Pipelines.RequestRateLimiter.RequestRateLimiter(Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.RateLimitingOptions!>! options, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.RequestRateLimiter.TryAcquire(string! userId, System.Type! requestType, out System.TimeSpan retryAfter) -> bool
+CQRSharp.Pipelines.ResilienceBehavior<TRequest, TResult>
+CQRSharp.Pipelines.ResilienceBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.ResilienceBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.ResilienceBehavior<TRequest, TResult>.ResilienceBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.ResilienceBehavior<TRequest, TResult>!>! logger, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.ResilienceOptions!>! options, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.ResilienceOptions
+CQRSharp.Pipelines.ResilienceOptions.BackoffMultiplier.get -> double
+CQRSharp.Pipelines.ResilienceOptions.BackoffMultiplier.set -> void
+CQRSharp.Pipelines.ResilienceOptions.BaseDelay.get -> System.TimeSpan
+CQRSharp.Pipelines.ResilienceOptions.BaseDelay.set -> void
+CQRSharp.Pipelines.ResilienceOptions.MaxDelay.get -> System.TimeSpan
+CQRSharp.Pipelines.ResilienceOptions.MaxDelay.set -> void
+CQRSharp.Pipelines.ResilienceOptions.MaxRetries.get -> int
+CQRSharp.Pipelines.ResilienceOptions.MaxRetries.set -> void
+CQRSharp.Pipelines.ResilienceOptions.ResilienceOptions() -> void
+CQRSharp.Pipelines.StreamExceptionHandlingBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamExceptionHandlingBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamExceptionHandlingBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamExceptionHandlingBehavior<TRequest, TItem>.StreamExceptionHandlingBehavior(System.IServiceProvider! services, CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry! registry, Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamExceptionHandlingBehavior<TRequest, TItem>!>! logger) -> void
+CQRSharp.Pipelines.StreamIdempotencyBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamIdempotencyBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamIdempotencyBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamIdempotencyBehavior<TRequest, TItem>.StreamIdempotencyBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamIdempotencyBehavior<TRequest, TItem>!>! logger, CQRSharp.Persistence.IIdempotencyStore! store, CQRSharp.Core.Idempotency.IRequestFingerprinter? fingerprinter = null) -> void
+CQRSharp.Pipelines.StreamLoggingBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamLoggingBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamLoggingBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamLoggingBehavior<TRequest, TItem>.StreamLoggingBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamLoggingBehavior<TRequest, TItem>!>! logger, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.StreamRateLimitingBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamRateLimitingBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamRateLimitingBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamRateLimitingBehavior<TRequest, TItem>.StreamRateLimitingBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamRateLimitingBehavior<TRequest, TItem>!>! logger, CQRSharp.Pipelines.RequestRateLimiter! rateLimiter) -> void
+CQRSharp.Pipelines.StreamResilienceBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamResilienceBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamResilienceBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamResilienceBehavior<TRequest, TItem>.StreamResilienceBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamResilienceBehavior<TRequest, TItem>!>! logger, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.ResilienceOptions!>! options, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.StreamTimeoutBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamTimeoutBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamTimeoutBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamTimeoutBehavior<TRequest, TItem>.StreamTimeoutBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamTimeoutBehavior<TRequest, TItem>!>! logger, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.TimeoutOptions!>! options, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.StreamUnitOfWorkBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamUnitOfWorkBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamUnitOfWorkBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamUnitOfWorkBehavior<TRequest, TItem>.StreamUnitOfWorkBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.StreamUnitOfWorkBehavior<TRequest, TItem>!>! logger, CQRSharp.Persistence.IUnitOfWork! unitOfWork, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.UnitOfWorkOptions!>! options, System.IServiceProvider! services) -> void
+CQRSharp.Pipelines.StreamValidationBehavior<TRequest, TItem>
+CQRSharp.Pipelines.StreamValidationBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.StreamValidationBehavior<TRequest, TItem>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.StreamValidationBehavior<TRequest, TItem>.StreamValidationBehavior(System.Collections.Generic.IEnumerable<CQRSharp.IRequestValidator<TRequest>!>! validators, System.Collections.Generic.IEnumerable<CQRSharp.IRequestValidator<TRequest>!>? discovered = null) -> void
+CQRSharp.Pipelines.TimeoutBehavior<TRequest, TResult>
+CQRSharp.Pipelines.TimeoutBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.TimeoutBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.TimeoutBehavior<TRequest, TResult>.TimeoutBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.TimeoutBehavior<TRequest, TResult>!>! logger, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.TimeoutOptions!>! options, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Pipelines.TimeoutOptions
+CQRSharp.Pipelines.TimeoutOptions.Timeout.get -> System.TimeSpan
+CQRSharp.Pipelines.TimeoutOptions.Timeout.set -> void
+CQRSharp.Pipelines.TimeoutOptions.TimeoutOptions() -> void
+CQRSharp.Pipelines.UnitOfWorkBehavior<TRequest, TResult>
+CQRSharp.Pipelines.UnitOfWorkBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.UnitOfWorkBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.UnitOfWorkBehavior<TRequest, TResult>.UnitOfWorkBehavior(Microsoft.Extensions.Logging.ILogger<CQRSharp.Pipelines.UnitOfWorkBehavior<TRequest, TResult>!>! logger, CQRSharp.Persistence.IUnitOfWork! unitOfWork, Microsoft.Extensions.Options.IOptions<CQRSharp.Pipelines.UnitOfWorkOptions!>! options, System.IServiceProvider! services) -> void
+CQRSharp.Pipelines.UnitOfWorkOptions
+CQRSharp.Pipelines.UnitOfWorkOptions.DefaultIsolationLevel.get -> System.Data.IsolationLevel
+CQRSharp.Pipelines.UnitOfWorkOptions.DefaultIsolationLevel.set -> void
+CQRSharp.Pipelines.UnitOfWorkOptions.RollbackOnFailedResult.get -> bool
+CQRSharp.Pipelines.UnitOfWorkOptions.RollbackOnFailedResult.set -> void
+CQRSharp.Pipelines.UnitOfWorkOptions.UnitOfWorkOptions() -> void
+CQRSharp.Pipelines.ValidationBehavior<TRequest, TResult>
+CQRSharp.Pipelines.ValidationBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.ValidationBehavior<TRequest, TResult>.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.ValidationBehavior<TRequest, TResult>.ValidationBehavior(System.Collections.Generic.IEnumerable<CQRSharp.IRequestValidator<TRequest>!>! validators, System.Collections.Generic.IEnumerable<CQRSharp.IRequestValidator<TRequest>!>? discovered = null) -> void
+CQRSharp.RateLimitExceededException
+CQRSharp.RateLimitExceededException.RateLimitExceededException(string! message, System.TimeSpan? retryAfter = null) -> void
+CQRSharp.RateLimitExceededException.RetryAfter.get -> System.TimeSpan?
+CQRSharp.RequestTimeoutException
+CQRSharp.RequestTimeoutException.RequestTimeoutException(System.Type! requestType, System.TimeSpan timeout, System.Exception? innerException = null) -> void
+CQRSharp.RequestTimeoutException.RequestType.get -> System.Type!
+CQRSharp.RequestTimeoutException.Timeout.get -> System.TimeSpan
+static CQRSharp.Pipelines.CqrsBuilderBootstrap.Build(Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.Pipelines.ICqrsBuilder!>! configure) -> void

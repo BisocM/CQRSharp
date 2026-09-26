@@ -12,9 +12,14 @@ prompt instructs the model to treat them as data, never as instructions. The bla
 model is text-only (no tools/actions), it receives no secrets, and its verdict is advisory and never gates the
 publish -- so the worst a successful injection can do is make this advisory verdict misleading.
 
+Where it runs: on the release pull request into Release (ci.yml) and on a manual dry run of the release workflow
+(nuget_publish.yml) - never between validation and the push of an immutable version, where nobody could act on it.
+
 Inputs:
   - BISOCM_API_KEY  (env)  : the bsk_... key, sent as the X-API-Key header. If missing, the review is skipped.
   - LLM_REVIEW_CONFIG (env): path to the config JSON (default: .github/llm-review.config.json). 'model' is configurable.
+  - LLM_REVIEW_BASE (env)  : the commit the release is measured from (a pull request's base). Without it, the newest
+                             release tag (v<version>, created by the release workflow); failing both, the last 50 commits.
   - GITHUB_STEP_SUMMARY (env): markdown summary file the verdicts are appended to (also echoed to stdout).
 """
 from __future__ import annotations
@@ -149,8 +154,13 @@ def gather_descriptions() -> str:
 
 
 def gather_release_notes(version: str) -> str:
-    last_tag = git("describe", "--tags", "--abbrev=0")
-    rng = f"{last_tag}..HEAD" if last_tag else "-50"
+    base = os.environ.get("LLM_REVIEW_BASE", "").strip()
+    if base:
+        since = f"{base[:12]} (the base of this pull request)"
+    else:
+        base = git("describe", "--tags", "--abbrev=0", "--match", "v*")
+        since = f"{base} (the last release tag)" if base else ""
+    rng = f"{base}..HEAD" if base else "-50"
     log = git("log", "--no-merges", "--pretty=format:- %s", rng)
     notes = []
     for csproj in sorted(glob.glob("src/**/*.csproj", recursive=True)):
@@ -159,7 +169,7 @@ def gather_release_notes(version: str) -> str:
             notes.append(f"{os.path.basename(csproj)}: {' '.join(m.group(1).split())}")
     return (
         f"Version being published: {version}\n"
-        f"Last release tag: {last_tag or '(none found; using the last 50 commits)'}\n\n"
+        f"Changes since: {since or '(no base and no release tag found; using the last 50 commits)'}\n\n"
         f"Commit subjects:\n{log or '(none)'}\n\n"
         f"Declared package release notes:\n" + ("\n".join(notes) if notes else "(none declared)")
     )

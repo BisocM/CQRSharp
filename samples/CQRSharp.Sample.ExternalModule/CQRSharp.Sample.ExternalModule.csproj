@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!--
+        A second assembly in the Sample's reference graph, so the Native AOT publish exercises CQRSharp's multi-assembly
+        codegen path: this library emits its own uniquely-namespaced module (the AOT canary proves it links and runs),
+        and the Sample (the composition root) wires it via a single AddCqrsGenerated. The handler is internal on purpose.
+    -->
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
+    </ItemGroup>
+
+</Project>

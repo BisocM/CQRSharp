@@ -1,0 +1,69 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot">
+
+    <PropertyGroup>
+        <TargetFrameworks>netstandard2.0;$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <!-- The trim, AOT and single-file analyzers (the -warnaserror gate makes their warnings errors) on every target
+             but netstandard2.0, which has no AOT. -->
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="$([System.String]::Copy('$(TargetFramework)').StartsWith('netstandard'))">
+        <PublishAot>false</PublishAot>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp</PackageTags>
+        <Title>The contracts of CQRSharp, the source-generated, Native-AOT-safe CQRS framework for .NET.</Title>
+        <Description>Shared contracts for CQRSharp: the command, query, stream and notification markers and base types, handler interfaces, CommandResult, the pipeline and validation attribute contracts, exception hooks, and the store and unit-of-work contracts (CQRSharp.Persistence). Reference it directly from a project that only shares contracts or implements a store; a project that declares handlers references the CQRSharp meta-package, whose source generator registers them. Carries the CQRSharp analyzers, which reach every project that references a CQRSharp package.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0 (breaking). The contracts move to two namespaces: CQRSharp (requests, handlers, results, notifications, contexts) and CQRSharp.Persistence (store and unit-of-work contracts).
+            CommandResult gains a typed ErrorKind, kind factories and validation failures as data; CommandResult&lt;T&gt; gains a public constructor. Handler interfaces take no context type argument.
+            IUnitOfWork is the one unit-of-work contract. IOutboxStore is claim-based and gains dead-letter and backlog operations, IInboxStore is new, and IIdempotencyStore claims carry a token and a payload fingerprint and store the result for replay.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <!--
+        netstandard2.0 lacks IAsyncDisposable / IAsyncEnumerable in the BCL; this polyfill supplies them. net8.0 and
+        later have them in-box, so the reference is scoped to netstandard2.0.
+    -->
+    <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+        <PackageReference Include="Microsoft.Bcl.AsyncInterfaces"/>
+    </ItemGroup>
+
+    <!--
+        The CQRSharp analyzers ship in this package and in no other. Every CQRSharp package depends on it and passes the
+        Analyzers asset on (see src/Directory.Build.props), so they reach every project that references any CQRSharp
+        package - including one that lacks the source generator, which is what CQRA010 reports - and a project never
+        loads two copies. The ProjectReference only orders the build (ReferenceOutputAssembly=false: no compile
+        dependency; PrivateAssets=all: nothing flows from the project itself); consumers get the analyzers from the
+        packed analyzers/dotnet/cs DLL below.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Analyzers\CQRSharp.Analyzers.csproj"
+                          PrivateAssets="all"
+                          ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+    <ItemGroup>
+        <None Include="..\CQRSharp.Analyzers\bin\$(Configuration)\netstandard2.0\CQRSharp.Analyzers.dll"
+              Pack="true"
+              PackagePath="analyzers/dotnet/cs"
+              Visible="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The dispatcher (CQRSharp.Core) stamps a context built without a creation time from the application's TimeProvider
+             (RequestContextBase.IsTimestampPending / StampFromApplicationClock). -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Core</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+</Project>

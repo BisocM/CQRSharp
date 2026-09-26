@@ -1,6 +1,4 @@
 using System.Runtime.CompilerServices;
-using CQRSharp.Abstractions.Interfaces.Handlers;
-using CQRSharp.Abstractions.Interfaces.Markers.Stream;
 
 namespace CQRSharp.Tests.Shared;
 

@@ -5,10 +5,16 @@
         (PackageId, Title, Description, PackageTags, TargetFrameworks, PackageReleaseNotes) remain in each project.
     -->
     <PropertyGroup>
+        <!--
+            The target frameworks of every multi-targeting CQRSharp project. global.json requires the .NET 10 SDK, which
+            builds all three, so a package can never be packed with a framework silently missing.
+        -->
+        <CQRSharpTargetFrameworks>net8.0;net9.0;net10.0</CQRSharpTargetFrameworks>
+
         <Authors>BisocM</Authors>
         <Company>BisocM</Company>
-        <Version>4.2.1</Version>
-        <PackageProjectUrl>https://cqrsharp.bisocm.org</PackageProjectUrl>
+        <Version>5.0.0</Version>
+        <PackageProjectUrl>https://github.com/BisocM/CQRSharp</PackageProjectUrl>
         <RepositoryUrl>https://github.com/BisocM/CQRSharp</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>CQRSharp_Icon.png</PackageIcon>
@@ -29,10 +35,55 @@
 
     <!-- Pack the icon, license, and README into every CQRSharp package (inert for non-packable projects). -->
     <ItemGroup>
-        <None Include="$(MSBuildThisFileDirectory)Assets/CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
+        <None Include="$(MSBuildThisFileDirectory)assets/CQRSharp_Icon.png" Pack="true" PackagePath="\" Visible="false"/>
         <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="\" Visible="false"/>
-        <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false"/>
     </ItemGroup>
+
+    <!--
+        The README links to the docs with paths relative to the repository, which GitHub resolves on every branch and tag.
+        nuget.org shows the packed README on its own and cannot resolve them, so the packed copy has each such link rewritten
+        to the file at this version's tag (v<version>, which the release workflow creates on publish): a package's README
+        then always opens the docs of the version it was installed at. validate_packages.py checks the result.
+    -->
+    <PropertyGroup>
+        <_CQRSharpReadme>$(MSBuildThisFileDirectory)README.md</_CQRSharpReadme>
+        <BeforePack>$(BeforePack);PackCQRSharpReadme</BeforePack>
+    </PropertyGroup>
+
+    <UsingTask TaskName="PinCQRSharpReadmeLinks" TaskFactory="RoslynCodeTaskFactory"
+               AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <Source ParameterType="System.String" Required="true"/>
+            <Destination ParameterType="System.String" Required="true"/>
+            <BaseUrl ParameterType="System.String" Required="true"/>
+        </ParameterGroup>
+        <Task>
+            <Using Namespace="System.IO"/>
+            <Using Namespace="System.Text.RegularExpressions"/>
+            <Code Type="Fragment" Language="cs"><![CDATA[
+                // The target of an inline link or image that is a path in the repository: not a URL (it has a scheme), not
+                // an anchor on the same page, and not rooted.
+                var pinned = Regex.Replace(
+                    File.ReadAllText(Source),
+                    @"\]\((?![A-Za-z][A-Za-z0-9+.\-]*:|#|/)([^)\s]+)\)",
+                    match => "](" + BaseUrl + match.Groups[1].Value + ")");
+                Directory.CreateDirectory(Path.GetDirectoryName(Destination));
+                if (!File.Exists(Destination) || File.ReadAllText(Destination) != pinned)
+                    File.WriteAllText(Destination, pinned);
+            ]]></Code>
+        </Task>
+    </UsingTask>
+
+    <Target Name="PackCQRSharpReadme">
+        <PropertyGroup>
+            <_CQRSharpPackedReadme>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'pack', 'README.md'))</_CQRSharpPackedReadme>
+        </PropertyGroup>
+        <PinCQRSharpReadmeLinks Source="$(_CQRSharpReadme)" Destination="$(_CQRSharpPackedReadme)"
+                                BaseUrl="$(PackageProjectUrl)/blob/v$(PackageVersion)/"/>
+        <ItemGroup>
+            <None Include="$(_CQRSharpPackedReadme)" Pack="true" PackagePath="\" Visible="false"/>
+        </ItemGroup>
+    </Target>
 
 
 </Project>

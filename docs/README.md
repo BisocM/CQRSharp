@@ -1,112 +1,102 @@
-# CQRSharp Documentation
+# CQRSharp documentation
 
-CQRSharp is a lightweight, **Native-AOT-first** CQRS (Command Query Responsibility Segregation)
-framework for .NET 8/9/10. A Roslyn **source generator** wires up all dispatch and registration at
-compile time, so there is **zero runtime reflection** and the whole framework is trimming- and
-AOT-friendly. You author commands, queries, streaming requests, and notifications with small marker
-interfaces and handlers, and dispatch everything through a single façade — `ICqrsDispatcher`.
-
-> **Version:** these docs describe **CQRSharp 4.0**.
-
----
-
-## Why CQRSharp
-
-- **Native AOT & trimming-safe.** The source generator emits the dispatch tables, handler registries,
-  and notification serializers as plain C#. No `MakeGenericType`, no reflection-based handler lookup,
-  no `JsonSerializer` reflection. The libraries are marked `IsAotCompatible` and build under the AOT
-  analyzers with warnings-as-errors.
-- **Compile-time correctness.** Analyzers catch missing handlers, the wrong dispatch method, mis-wired
-  pipeline exemptions, and markers that silently do nothing — as you type, with code fixes.
-- **One façade.** Inject `ICqrsDispatcher` and call `Send` / `Stream` / `Publish`. That's the whole
-  dispatch surface.
-- **Fail-fast configuration.** A startup validator turns silent mis-wiring (an enabled outbox with no
-  store, an idempotency marker with no behavior, …) into loud errors at host start.
-- **Batteries included, opt-in.** Validation, logging, rate limiting, resilience/retries, timeouts,
-  unit-of-work, idempotency, and a transactional outbox are all wired through one order-insensitive
-  fluent builder. Nothing runs until you call a builder verb; once you activate the pipeline pack (any
-  pack verb), validation and exception handling come on with it — opt either back out with
-  `UseValidation(false)` / `UseExceptionHandling(false)`. See
-  [Pipeline behaviors](pipeline-behaviors.md#built-in-behaviors).
-
----
-
-## Packages
-
-| Package | Purpose |
-| --- | --- |
-| **`CQRSharp`** | Meta-package. Pulls in the abstractions, runtime, source generator, and analyzers for a plug-and-play setup. Ships convenience global usings. |
-| `CQRSharp.Abstractions` | Contracts only: markers, handler interfaces, attributes, `CommandResult`, store/UoW abstractions. Reference this to define handlers without the runtime. |
-| `CQRSharp.Core` | The runtime: `ICqrsDispatcher`, pipeline execution, notification publishing, the background queue and outbox processor, diagnostics, health checks, and the in-memory stores. |
-| `CQRSharp.Pipelines` | Opt-in pipeline behaviors and the fluent builder (`UseValidation()`, `UseResilience(...)`, `UseOutbox(...)`, …). |
-| `CQRSharp.Redis` | Durable Redis-backed outbox and idempotency stores (Native-AOT-clean). |
-| `CQRSharp.EntityFrameworkCore` | Durable EF Core (relational) outbox and idempotency stores. *(Not AOT-compatible — EF Core uses runtime query compilation.)* |
-
-```bash
-dotnet add package CQRSharp
-```
-
----
+These pages describe **CQRSharp 5.0**: a CQRS framework for .NET 8, 9 and 10 whose dispatch and registration a Roslyn
+source generator writes at compile time. You declare commands, queries, streaming requests and notifications with their
+handlers, and dispatch them through one façade, `ICqrsDispatcher`. What the project offers, the package list and a quick
+start are in the [repository README](../README.md); the namespaces are mapped [below](#namespaces).
 
 ## Table of contents
 
-**Getting started**
-- [Getting started](getting-started.md) — install, your first command, query, notification, and behaviors.
+**Start here**
+- [Getting started](getting-started.md): install, a first program, and a first command, query, stream and notification,
+  then behaviors and an outbox.
 
 **Core concepts**
-- [Requests and handlers](requests-and-handlers.md) — commands, queries, streaming requests, the dispatcher, request context, `CommandResult`, and `RequestMetadata`.
-- [Notifications](notifications.md) — `INotification`, fan-out, publish strategies, lifecycle notifications, and the notification pipeline.
+- [Requests and handlers](requests-and-handlers.md): the request kinds and base classes, handlers, `ICqrsDispatcher`,
+  `CommandResult`, value-returning commands, and the request context.
+- [Notifications](notifications.md): publishing, which handlers a notification reaches, publish strategies, lifecycle
+  notifications, and notification behaviors.
 
-**Configuration & the pipeline**
-- [Configuration](configuration.md) — `AddCqrsGenerated`, the fluent builder, `DispatcherOptions` (run mode / scope mode), `NotificationOptions`, the `TimeProvider` seam, and startup validation.
-- [Pipeline behaviors](pipeline-behaviors.md) — the pipeline model, execution order, the built-in behaviors, validation, custom behaviors, `[PipelineExemption]`, and exception hooks / interceptors.
+**Configuration and the pipeline**
+- [Configuration](configuration.md): `AddCqrsGenerated` and every builder verb, dispatcher, notification and queue
+  options, hosting and lifetimes, startup validation, and the `TimeProvider` seam.
+- [Pipeline behaviors](pipeline-behaviors.md): the pipeline model and its order, the built-in behaviors, validation,
+  exception hooks, custom behaviors, exemptions, and pre- and post-handler interceptors.
 
 **Reliability**
-- [The outbox](outbox.md) — the transactional outbox, outbox modes, stores, the processor, and the `[NotificationName]` durability contract.
-- [Idempotency & resilience](idempotency-and-resilience.md) — `IIdempotentRequest`, idempotency stores, `IRetryableRequest`, retries, and timeouts.
-- [Unit of work & transactions](unit-of-work.md) — `IUnitOfWork` / `IExplicitUnitOfWork`, `ITransactionalCommand` / `ITransactionalQuery`, isolation levels, and outbox integration.
+- [The outbox](outbox.md): outbox modes, durable notifications, per-handler delivery, ordering, the inbox, the processor,
+  dead letters, and stores.
+- [Idempotency and resilience](idempotency-and-resilience.md): idempotent requests and their stores, result replay,
+  retries, and timeouts.
+- [Unit of work and transactions](unit-of-work.md): `IUnitOfWork`, transactional commands and queries, isolation levels,
+  and how the outbox takes part in a transaction.
 
-**Tooling, diagnostics & operations**
-- [Diagnostics & validation](diagnostics.md) — the `CQRA` analyzers, `CQRGEN` generator diagnostics, `CQRCONF` startup validation, the diagnostics introspection API, and health checks.
-- [Observability](observability.md) — distributed tracing and queue metrics.
-- [Testing](testing.md) — store contract tests and testing your handlers.
+**Integrations**
+- [Redis and EF Core stores](integrations.md): the `CQRSharp.Redis` and `CQRSharp.EntityFrameworkCore` stores and the EF
+  Core unit of work.
+- [ASP.NET Core](aspnetcore.md): `CommandResult` to `IResult`, exceptions to ProblemDetails, and the `Idempotency-Key`
+  header.
+- [FluentValidation](fluentvalidation.md): running FluentValidation validators inside the validation behavior.
 
-**Platform & internals**
-- [Native AOT](native-aot.md) — the AOT story, what is and isn't AOT-safe, and how to verify.
-- [Integrations](integrations.md) — Redis and EF Core stores.
-- [The source generator](source-generator.md) — what it emits, the well-known-type handoff, and AOT hints.
+**Tooling and operations**
+- [Diagnostics and validation](diagnostics.md): the `CQRA` analyzers, the `CQRGEN` generator diagnostics, the `CQRCONF`
+  startup checks, the introspection API, and the outbox health check.
+- [Observability](observability.md): tracing, metrics, and log event ids.
+- [Testing](testing.md): testing handlers, the dispatcher and time-dependent behavior.
+- [The testing packages](testing-package.md): `RecordingCqrsDispatcher` and the store contract suites.
 
----
+**Platform and internals**
+- [Native AOT](native-aot.md): what is AOT-safe, publishing, and the limits for value-type results.
+- [The source generator](source-generator.md): what it emits, how it recognizes framework types, incrementality, and
+  multi-assembly applications.
 
-## CQRSharp in 30 seconds
+## Namespaces
 
-```csharp
-// Program.cs — register everything the generator discovered, plus opt-in validation.
-services.AddCqrsGenerated(b => b.UseValidation());
+The namespaces follow who writes the code:
 
-// A command and its handler.
-public sealed class CreateUser : CommandBase
-{
-    public required string Name { get; init; }
-}
+- **`CQRSharp`**: everyday application code. Requests and their base classes, handler interfaces, `CommandResult` and
+  `ValidationFailure`, notifications (yours and the lifecycle ones), the request context and its factory, interceptors,
+  validators, exception hooks, the request markers (`IIdempotentRequest`, `IRetryableRequest`, `ITransactionalCommand`,
+  ...), `ICqrsDispatcher`, `AddCqrsGenerated`, the option types (`DispatcherOptions`, `NotificationOptions`,
+  `OutboxOptions`, ...), and the exceptions callers catch (`RequestValidationException`, `DuplicateRequestException`,
+  `IdempotencyKeyMismatchException`, `RateLimitExceededException`, `RequestTimeoutException`,
+  `BackgroundTaskRejectedException`).
+- **`CQRSharp.Pipelines`**: pipeline authoring and configuration. The fluent builder (`ICqrsBuilder`,
+  `OutboxStoreBuilder`, `IdempotencyStoreBuilder`), the behavior contracts (`IPipelineBehavior<,>`,
+  `IStreamPipelineBehavior<,>`, `INotificationPipelineBehavior<>`, `IPrioritizedPipelineBehavior`) and
+  `CqrsPipelinePriorities`, the built-in behaviors (`LoggingBehavior<,>`, `RateLimitingBehavior<,>`, ..., the types
+  `[PipelineExemption(typeof(...))]` names) and their options, and `IRateLimitedContext`.
+- **`CQRSharp.Persistence`**: the contracts infrastructure implements. `IUnitOfWork`; the outbox and inbox stores
+  (`IOutboxStore`, `IInboxStore`, `OutboxMessage`, `ClaimedOutboxMessage`, `OutboxClaim`, `OutboxBacklog`); the
+  idempotency store (`IIdempotencyStore`, `IdempotencyClaim`, `IIdempotencyResultSerializer`); and
+  `INotificationSerializer`.
 
-public sealed class CreateUserHandler : ICommandHandler<CreateUser>
-{
-    public Task<CommandResult> Handle(CreateUser command, CancellationToken ct)
-        => Task.FromResult(CommandResult.FromSuccess());
-}
+With the `CQRSharp` meta-package and `ImplicitUsings`, `CQRSharp` and `CQRSharp.Pipelines` are global usings
+([Global usings](getting-started.md#global-usings)); a file that implements a store or a unit of work adds
+`using CQRSharp.Persistence;`.
 
-// Dispatch through the single façade — await the result and check IsSuccess.
-public sealed class Users(ICqrsDispatcher cqrs)
-{
-    public async Task<bool> Create(string name)
-    {
-        CommandResult result = await cqrs.Send(new CreateUser { Name = name });
-        return result.IsSuccess;
-    }
-}
-```
+Each integration package has one namespace named after it: `CQRSharp.Redis`, `CQRSharp.EntityFrameworkCore`,
+`CQRSharp.AspNetCore`, `CQRSharp.FluentValidation` and `CQRSharp.Testing`. `CQRSharp.Testing.Xunit.V3` shares the
+`CQRSharp.Testing` namespace. Their registration extensions (`AddRedisOutboxStore`, `UseRedis`,
+`UseEntityFrameworkCore<TContext>`, `AddCqrsProblemDetails`, `UseFluentValidation`, ...) live in
+`Microsoft.Extensions.DependencyInjection`, so they need no `using`. The EF Core model-builder extensions
+(`ApplyCqrsOutbox`, `ApplyCqrsIdempotency`) live in `CQRSharp.EntityFrameworkCore`.
 
-No `using` directives are needed for the authoring types above: the `CQRSharp` meta-package ships
-global usings on projects with `ImplicitUsings` enabled. See [Getting started](getting-started.md) for
-details and how to opt out.
+Runtime extension points live in one namespace per feature under `CQRSharp.Core`. You need them only to extend or observe
+the framework itself:
+
+| Namespace | Holds |
+| --- | --- |
+| `CQRSharp.Core.BackgroundTasks` | `IBackgroundTaskManager`, the queue behind `RunMode.Queued`. |
+| `CQRSharp.Core.Diagnostics` | `ICqrsDiagnostics` and its binding records, and `CqrsTelemetry` (activity source, meter, instrument and tag names). |
+| `CQRSharp.Core.Diagnostics.HealthChecks` | `AddCqrsOutbox`, the outbox health check, and `OutboxHealthCheckOptions`. Add `using CQRSharp.Core.Diagnostics.HealthChecks;` to call `AddCqrsOutbox`. |
+| `CQRSharp.Core.Exceptions` | The exception-hook registry the exception-handling behavior reads. |
+| `CQRSharp.Core.Idempotency` | `IRequestFingerprinter`, which the idempotency behaviors use to fingerprint a request's payload. |
+| `CQRSharp.Core.Modules` | `ICqrsModule` and `CqrsModuleComposition`, through which generated modules are composed, and `DiscoveredServices`. |
+| `CQRSharp.Core.Notifications` | `NotificationRoute` and `NotificationSubscription`, the notification tables generated modules fill. Publishing goes through `ICqrsDispatcher.Publish`. |
+| `CQRSharp.Core.Outbox` | `IOutboxSignal`, which wakes the outbox processor, and `OutboxPartitionKey`. |
+| `CQRSharp.Core.Pipelines` | `RequestRoute` and `StreamRoute`, the route tables generated modules fill, and the closed-behavior catalog used under Native AOT. |
+| `CQRSharp.Core.Registries` | `RequestMetadata` and the registration helpers generated code calls. |
+| `CQRSharp.Core.SourceGeneration` | The assembly-level marker attributes the generator writes and the analyzers read. |
+
+Types in these namespaces that exist only for generated code are hidden from IntelliSense.

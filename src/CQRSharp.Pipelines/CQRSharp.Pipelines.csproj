@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>default</LangVersion>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <!-- Turns on the trim, AOT and single-file analyzers, whose warnings the -warnaserror gate makes errors. -->
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;Pipelines;Resilience;RateLimiting</PackageTags>
+        <Title>The pipeline behaviors and fluent builder of CQRSharp.</Title>
+        <Description>The pipeline behaviors of CQRSharp (validation, exception handling, logging, rate limiting, resilience, timeouts, idempotency with result replay, and the unit of work) and ICqrsBuilder, the fluent builder AddCqrsGenerated(b => ...) configures, including the outbox and idempotency store choice. The builder registers validation and exception handling by default; every other behavior runs only when its verb is called.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0 (breaking). The pipeline pack is removed: each builder verb registers its own behavior, and both forms of AddCqrsGenerated register validation and exception handling unless UseValidation(false) / UseExceptionHandling(false) turns them off.
+            Idempotency replays the original result, rejects a key reused with another payload (IdempotencyKeyMismatchException) and covers streams. The unit-of-work behaviors run on IUnitOfWork and roll back a returned failed CommandResult.
+            UseTimeout throws RequestTimeoutException, and retries stop only at the caller's own cancellation and the library's verdicts. RateLimiter is now RequestRateLimiter and RateLimiterOptions is RateLimitingOptions.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The optional-behavior registration extensions are internal (the fluent builder is the public lane); the
+             test project exercises them directly as white-box coverage. -->
+        <InternalsVisibleTo Include="CQRSharp.Tests"/>
+    </ItemGroup>
+
+</Project>

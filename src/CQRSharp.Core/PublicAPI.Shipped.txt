@@ -1,0 +1,356 @@
+#nullable enable
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.ActivitySourceName = "CQRSharp" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.BackgroundTasksMeterName = "CQRSharp.Core.BackgroundTasks" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.NotificationsPublished = "cqrsharp.notifications.published" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxDeadLetters = "cqrsharp.outbox.dead_letters" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxDispatchDuration = "cqrsharp.outbox.dispatch.duration" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxLag = "cqrsharp.outbox.lag" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxMessages = "cqrsharp.outbox.messages" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxPending = "cqrsharp.outbox.pending" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.RequestDuration = "cqrsharp.request.duration" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.MeterName = "CQRSharp" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.PipelinesActivitySourceName = "CQRSharp.Pipelines" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments.Depth = "cqrsharp.queue.depth" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments.Enqueued = "cqrsharp.queue.enqueued" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments.Evicted = "cqrsharp.queue.evicted" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments.Rejected = "cqrsharp.queue.rejected" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments.WaitDuration = "cqrsharp.queue.wait.duration" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.IsolationLevel = "cqrsharp.transaction.isolation_level" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.MaxRetries = "cqrsharp.resilience.max_retries" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.NotificationHandler = "cqrsharp.notification.handler" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.NotificationName = "cqrsharp.notification.name" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.NotificationType = "cqrsharp.notification.type" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.Outcome = "cqrsharp.outcome" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.PartitionKey = "cqrsharp.partition_key" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.QueueReason = "cqrsharp.queue.reason" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.RateLimitRetryAfterMilliseconds = "cqrsharp.ratelimit.retry_after_ms" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.RateLimitUserId = "cqrsharp.ratelimit.user_id" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.RequestKind = "cqrsharp.request.kind" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.RequestType = "cqrsharp.request.type" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.RetryDelayMilliseconds = "cqrsharp.resilience.retry_delay_ms" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.TimeoutMilliseconds = "cqrsharp.timeout_ms" -> string!
+const CQRSharp.Core.Modules.DiscoveredServices.Key = "CQRSharp.Discovered" -> string!
+const CQRSharp.Pipelines.IPrioritizedPipelineBehavior.DefaultPriority = 1073741823 -> int
+CQRSharp.BackgroundTaskQueueOptions
+CQRSharp.BackgroundTaskQueueOptions.BackgroundTaskQueueOptions() -> void
+CQRSharp.BackgroundTaskQueueOptions.Capacity.get -> int
+CQRSharp.BackgroundTaskQueueOptions.Capacity.set -> void
+CQRSharp.BackgroundTaskQueueOptions.ConsumerCount.get -> int
+CQRSharp.BackgroundTaskQueueOptions.ConsumerCount.set -> void
+CQRSharp.BackgroundTaskQueueOptions.ConsumerStartTimeout.get -> System.TimeSpan
+CQRSharp.BackgroundTaskQueueOptions.ConsumerStartTimeout.set -> void
+CQRSharp.BackgroundTaskQueueOptions.DrainOnShutdown.get -> bool
+CQRSharp.BackgroundTaskQueueOptions.DrainOnShutdown.set -> void
+CQRSharp.BackgroundTaskQueueOptions.FullMode.get -> System.Threading.Channels.BoundedChannelFullMode
+CQRSharp.BackgroundTaskQueueOptions.FullMode.set -> void
+CQRSharp.BackgroundTaskQueueOptions.ShutdownTimeout.get -> System.TimeSpan
+CQRSharp.BackgroundTaskQueueOptions.ShutdownTimeout.set -> void
+CQRSharp.BackgroundTaskRejectedException
+CQRSharp.BackgroundTaskRejectedException.BackgroundTaskRejectedException(CQRSharp.BackgroundTaskRejectionReason reason, string! message) -> void
+CQRSharp.BackgroundTaskRejectedException.Reason.get -> CQRSharp.BackgroundTaskRejectionReason
+CQRSharp.BackgroundTaskRejectionReason
+CQRSharp.BackgroundTaskRejectionReason.Evicted = 1 -> CQRSharp.BackgroundTaskRejectionReason
+CQRSharp.BackgroundTaskRejectionReason.QueueClosed = 2 -> CQRSharp.BackgroundTaskRejectionReason
+CQRSharp.BackgroundTaskRejectionReason.QueueFull = 0 -> CQRSharp.BackgroundTaskRejectionReason
+CQRSharp.CommandCompletedNotification
+CQRSharp.CommandCompletedNotification.Command.get -> CQRSharp.ICommandMarker!
+CQRSharp.CommandCompletedNotification.CommandCompletedNotification(CQRSharp.ICommandMarker! command, CQRSharp.CommandResult! result) -> void
+CQRSharp.CommandCompletedNotification.CommandName.get -> string!
+CQRSharp.CommandCompletedNotification.Result.get -> CQRSharp.CommandResult!
+CQRSharp.CommandFailedNotification
+CQRSharp.CommandFailedNotification.Command.get -> CQRSharp.ICommandMarker!
+CQRSharp.CommandFailedNotification.CommandFailedNotification(CQRSharp.ICommandMarker! command, System.Exception! exception) -> void
+CQRSharp.CommandFailedNotification.CommandName.get -> string!
+CQRSharp.CommandFailedNotification.Exception.get -> System.Exception!
+CQRSharp.CommandInitiatedNotification
+CQRSharp.CommandInitiatedNotification.Command.get -> CQRSharp.ICommandMarker!
+CQRSharp.CommandInitiatedNotification.CommandInitiatedNotification(CQRSharp.ICommandMarker! command) -> void
+CQRSharp.CommandInitiatedNotification.CommandName.get -> string!
+CQRSharp.Core.BackgroundTasks.IBackgroundTaskManager
+CQRSharp.Core.BackgroundTasks.IBackgroundTaskManager.EnqueueAsync(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task!>! workItem, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.Core.BackgroundTasks.IBackgroundTaskManager.EnqueueAsync<TResult>(System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task<TResult>!>! workItem, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Core.Diagnostics.CqrsBindingIssue
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Code.get -> string!
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Code.init -> void
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.CqrsBindingIssue(CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity Severity, string! Code, string! Message) -> void
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Message.get -> string!
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Message.init -> void
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Severity.get -> CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity
+CQRSharp.Core.Diagnostics.CqrsBindingIssue.Severity.init -> void
+CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity
+CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity.Error = 2 -> CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity
+CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity.Warning = 1 -> CQRSharp.Core.Diagnostics.CqrsBindingIssueSeverity
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding.AttributeType.get -> System.Type!
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding.AttributeType.init -> void
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding.CqrsInterceptorBinding(System.Type! AttributeType, int Priority) -> void
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding.Priority.get -> int
+CQRSharp.Core.Diagnostics.CqrsInterceptorBinding.Priority.init -> void
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding.BehaviorType.get -> System.Type!
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding.BehaviorType.init -> void
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding.CqrsPipelineBehaviorBinding(System.Type! BehaviorType, int Priority) -> void
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding.Priority.get -> int
+CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding.Priority.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ContextType.get -> System.Type?
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ContextType.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.CqrsRequestBinding(System.Type! RequestType, System.Type! ResponseType, System.Type? HandlerType, System.Type? ContextType, System.Collections.Generic.IReadOnlyList<System.Type!>! PipelineExemptions, System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsInterceptorBinding!>! PreHandlers, System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsInterceptorBinding!>! PostHandlers, System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding!>! Pipeline, System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding!>! ExemptedPipeline, System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsBindingIssue!>! Issues) -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ExemptedPipeline.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ExemptedPipeline.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.HandlerType.get -> System.Type?
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.HandlerType.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.Issues.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsBindingIssue!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.Issues.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.Pipeline.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsPipelineBehaviorBinding!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.Pipeline.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PipelineExemptions.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PipelineExemptions.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PostHandlers.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsInterceptorBinding!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PostHandlers.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PreHandlers.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsInterceptorBinding!>!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.PreHandlers.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.RequestType.get -> System.Type!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.RequestType.init -> void
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ResponseType.get -> System.Type!
+CQRSharp.Core.Diagnostics.CqrsRequestBinding.ResponseType.init -> void
+CQRSharp.Core.Diagnostics.CqrsTelemetry
+CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments
+CQRSharp.Core.Diagnostics.CqrsTelemetry.QueueInstruments
+CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags
+CQRSharp.Core.Diagnostics.HealthChecks.CqrsOutboxHealthCheck
+CQRSharp.Core.Diagnostics.HealthChecks.CqrsOutboxHealthCheck.CheckHealthAsync(Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult>!
+CQRSharp.Core.Diagnostics.HealthChecks.CqrsOutboxHealthCheck.CqrsOutboxHealthCheck(Microsoft.Extensions.DependencyInjection.IServiceScopeFactory! scopeFactory, Microsoft.Extensions.Options.IOptionsMonitor<CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions!>! options, Microsoft.Extensions.Options.IOptions<CQRSharp.OutboxOptions!>! outboxOptions, System.TimeProvider? timeProvider = null) -> void
+CQRSharp.Core.Diagnostics.HealthChecks.HealthChecksBuilderExtensions
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions.MaxDeadLetters.get -> long?
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions.MaxDeadLetters.set -> void
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions.MaxLag.get -> System.TimeSpan?
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions.MaxLag.set -> void
+CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions.OutboxHealthCheckOptions() -> void
+CQRSharp.Core.Diagnostics.ICqrsDiagnostics
+CQRSharp.Core.Diagnostics.ICqrsDiagnostics.DescribeAllRequests() -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsRequestBinding!>!
+CQRSharp.Core.Diagnostics.ICqrsDiagnostics.DescribeConfiguration() -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Diagnostics.CqrsBindingIssue!>!
+CQRSharp.Core.Diagnostics.ICqrsDiagnostics.DescribeRequest(System.Type! requestType) -> CQRSharp.Core.Diagnostics.CqrsRequestBinding!
+CQRSharp.Core.Diagnostics.ICqrsDiagnostics.TryDescribeRequest(System.Type! requestType, out CQRSharp.Core.Diagnostics.CqrsRequestBinding? binding) -> bool
+CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry
+CQRSharp.Core.Exceptions.IRequestExceptionHookRegistry.TryGetInvoker(System.Type! requestType, out CQRSharp.Core.Exceptions.RequestExceptionHookInvoker? invoker) -> bool
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.Handled.get -> bool
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.Handled.init -> void
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.RequestExceptionHandlingOutcome() -> void
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.RequestExceptionHandlingOutcome(bool Handled, object? Response) -> void
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.Response.get -> object?
+CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.Response.init -> void
+CQRSharp.Core.Exceptions.RequestExceptionHook
+CQRSharp.Core.Exceptions.RequestExceptionHookInvoker
+CQRSharp.Core.Idempotency.IRequestFingerprinter
+CQRSharp.Core.Idempotency.IRequestFingerprinter.TryFingerprint(CQRSharp.IRequest! request, out string! fingerprint) -> bool
+CQRSharp.Core.Modules.CqrsModuleComposition
+CQRSharp.Core.Modules.DiscoveredServices
+CQRSharp.Core.Modules.ICqrsModule
+CQRSharp.Core.Modules.ICqrsModule.ContextSources.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, CQRSharp.Core.Registries.RequestContextSource!>!
+CQRSharp.Core.Modules.ICqrsModule.ExceptionHooks.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Exceptions.RequestExceptionHook!>!
+CQRSharp.Core.Modules.ICqrsModule.HandlerInvokers.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, System.Delegate!>!
+CQRSharp.Core.Modules.ICqrsModule.NotificationRoutes.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, CQRSharp.Core.Notifications.NotificationRoute!>!
+CQRSharp.Core.Modules.ICqrsModule.NotificationSubscriptions.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Notifications.NotificationSubscription!>!
+CQRSharp.Core.Modules.ICqrsModule.OutboxSerializer.get -> CQRSharp.Persistence.INotificationSerializer?
+CQRSharp.Core.Modules.ICqrsModule.PartitionKeySelectors.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, System.Func<CQRSharp.INotification!, string?>!>!
+CQRSharp.Core.Modules.ICqrsModule.RequestFingerprinter.get -> CQRSharp.Core.Idempotency.IRequestFingerprinter?
+CQRSharp.Core.Modules.ICqrsModule.RequestMetadata.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, CQRSharp.Core.Registries.RequestMetadata!>!
+CQRSharp.Core.Modules.ICqrsModule.RequestRoutes.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, CQRSharp.Core.Pipelines.RequestRoute!>!
+CQRSharp.Core.Modules.ICqrsModule.StreamRoutes.get -> System.Collections.Generic.IReadOnlyDictionary<System.Type!, CQRSharp.Core.Pipelines.StreamRoute!>!
+CQRSharp.Core.Notifications.NotificationRoute
+CQRSharp.Core.Notifications.NotificationSubscription
+CQRSharp.Core.Notifications.NotificationSubscription.HandlerName.get -> string!
+CQRSharp.Core.Notifications.NotificationSubscription.HandlerType.get -> System.Type!
+CQRSharp.Core.Notifications.NotificationSubscription.NotificationType.get -> System.Type!
+CQRSharp.Core.Outbox.IOutboxSignal
+CQRSharp.Core.Outbox.IOutboxSignal.Signal() -> void
+CQRSharp.Core.Outbox.OutboxPartitionKey
+CQRSharp.Core.Pipelines.ClosedBehaviorCatalog
+CQRSharp.Core.Pipelines.ClosedBehaviorCatalog.ClosedBehaviorCatalog(System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Pipelines.ClosedBehaviorFactory!>! factories) -> void
+CQRSharp.Core.Pipelines.ClosedBehaviorCatalog.Factories.get -> System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Pipelines.ClosedBehaviorFactory!>!
+CQRSharp.Core.Pipelines.ClosedBehaviorFactory
+CQRSharp.Core.Pipelines.ClosedBehaviorFactory.ClosedBehaviorFactory(System.Type! openBehaviorType, System.Type! serviceType, System.Func<System.IServiceProvider!, object!>! create) -> void
+CQRSharp.Core.Pipelines.ClosedBehaviorFactory.Create.get -> System.Func<System.IServiceProvider!, object!>!
+CQRSharp.Core.Pipelines.ClosedBehaviorFactory.OpenBehaviorType.get -> System.Type!
+CQRSharp.Core.Pipelines.ClosedBehaviorFactory.ServiceType.get -> System.Type!
+CQRSharp.Core.Pipelines.ClosedBehaviorGap
+CQRSharp.Core.Pipelines.ClosedBehaviorGap.ClosedBehaviorGap(System.Type! serviceDefinition, string! targetTypeName, string! targetAssemblyName, string! behaviorTypeName, string! behaviorAssemblyName, string! reason) -> void
+CQRSharp.Core.Pipelines.ClosedBehaviorGap.ClosedBehaviorGap(System.Type! serviceType, string! behaviorTypeName, string! behaviorAssemblyName, string! reason) -> void
+CQRSharp.Core.Pipelines.ClosedBehaviorGapCatalog
+CQRSharp.Core.Pipelines.ClosedBehaviorGapCatalog.ClosedBehaviorGapCatalog(System.Collections.Generic.IReadOnlyList<CQRSharp.Core.Pipelines.ClosedBehaviorGap!>! gaps) -> void
+CQRSharp.Core.Pipelines.RequestRoute
+CQRSharp.Core.Pipelines.StreamRoute
+CQRSharp.Core.Registries.DiscoveredContextFactories
+CQRSharp.Core.Registries.RequestContextSource
+CQRSharp.Core.Registries.RequestMetadata
+CQRSharp.Core.Registries.RequestMetadata.ContextType.get -> System.Type!
+CQRSharp.Core.Registries.RequestMetadata.ContextType.init -> void
+CQRSharp.Core.Registries.RequestMetadata.HandlerType.get -> System.Type!
+CQRSharp.Core.Registries.RequestMetadata.HandlerType.init -> void
+CQRSharp.Core.Registries.RequestMetadata.PipelineExemptions.get -> CQRSharp.PipelineExemptionAttribute![]!
+CQRSharp.Core.Registries.RequestMetadata.PipelineExemptions.init -> void
+CQRSharp.Core.Registries.RequestMetadata.PostHandlers.get -> CQRSharp.IPostHandlerAttribute![]!
+CQRSharp.Core.Registries.RequestMetadata.PostHandlers.init -> void
+CQRSharp.Core.Registries.RequestMetadata.PreHandlers.get -> CQRSharp.IPreHandlerAttribute![]!
+CQRSharp.Core.Registries.RequestMetadata.PreHandlers.init -> void
+CQRSharp.Core.Registries.RequestMetadata.RequestMetadata(System.Type! HandlerType, System.Type! ContextType, CQRSharp.IPreHandlerAttribute![]! PreHandlers, CQRSharp.IPostHandlerAttribute![]! PostHandlers, CQRSharp.PipelineExemptionAttribute![]! PipelineExemptions) -> void
+CQRSharp.CqrsStartupValidationOptions
+CQRSharp.CqrsStartupValidationOptions.CqrsStartupValidationOptions() -> void
+CQRSharp.CqrsStartupValidationOptions.Policy.get -> CQRSharp.CqrsValidationPolicy?
+CQRSharp.CqrsStartupValidationOptions.Policy.set -> void
+CQRSharp.CqrsValidationPolicy
+CQRSharp.CqrsValidationPolicy.Off = 0 -> CQRSharp.CqrsValidationPolicy
+CQRSharp.CqrsValidationPolicy.ThrowOnError = 2 -> CQRSharp.CqrsValidationPolicy
+CQRSharp.CqrsValidationPolicy.ThrowOnWarning = 3 -> CQRSharp.CqrsValidationPolicy
+CQRSharp.CqrsValidationPolicy.WarnOnly = 1 -> CQRSharp.CqrsValidationPolicy
+CQRSharp.DependencyInjectionExtensions
+CQRSharp.DispatcherOptions
+CQRSharp.DispatcherOptions.DispatcherOptions() -> void
+CQRSharp.DispatcherOptions.RunMode.get -> CQRSharp.RunMode
+CQRSharp.DispatcherOptions.RunMode.set -> void
+CQRSharp.DispatcherOptions.ScopeMode.get -> CQRSharp.ExecutionScopeMode
+CQRSharp.DispatcherOptions.ScopeMode.set -> void
+CQRSharp.ExecutionScopeMode
+CQRSharp.ExecutionScopeMode.Current = 0 -> CQRSharp.ExecutionScopeMode
+CQRSharp.ExecutionScopeMode.New = 1 -> CQRSharp.ExecutionScopeMode
+CQRSharp.ICqrsDispatcher
+CQRSharp.ICqrsDispatcher.Publish<TNotification>(TNotification notification, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.ICqrsDispatcher.Send(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<object?>!
+CQRSharp.ICqrsDispatcher.Send<TResponse>(CQRSharp.IRequest<TResponse>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TResponse>!
+CQRSharp.ICqrsDispatcher.Stream(object! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<object?>!
+CQRSharp.ICqrsDispatcher.Stream<TItem>(CQRSharp.IStreamRequest<TItem>! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.InMemoryIdempotencyStoreOptions
+CQRSharp.InMemoryIdempotencyStoreOptions.InMemoryIdempotencyStoreOptions() -> void
+CQRSharp.InMemoryIdempotencyStoreOptions.Retention.get -> System.TimeSpan
+CQRSharp.InMemoryIdempotencyStoreOptions.Retention.set -> void
+CQRSharp.InMemoryOutboxStoreOptions
+CQRSharp.InMemoryOutboxStoreOptions.DeadLetterRetention.get -> System.TimeSpan?
+CQRSharp.InMemoryOutboxStoreOptions.DeadLetterRetention.set -> void
+CQRSharp.InMemoryOutboxStoreOptions.InboxRetention.get -> System.TimeSpan
+CQRSharp.InMemoryOutboxStoreOptions.InboxRetention.set -> void
+CQRSharp.InMemoryOutboxStoreOptions.InMemoryOutboxStoreOptions() -> void
+CQRSharp.InMemoryOutboxStoreOptions.VisibilityTimeout.get -> System.TimeSpan
+CQRSharp.InMemoryOutboxStoreOptions.VisibilityTimeout.set -> void
+CQRSharp.IRequestContextFactory<TContext>
+CQRSharp.IRequestContextFactory<TContext>.CreateContextAsync(CQRSharp.IRequest! request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask<TContext>
+CQRSharp.NotificationOptions
+CQRSharp.NotificationOptions.NotificationOptions() -> void
+CQRSharp.NotificationOptions.PublishStrategy.get -> CQRSharp.PublishStrategy
+CQRSharp.NotificationOptions.PublishStrategy.set -> void
+CQRSharp.OutboxMode
+CQRSharp.OutboxMode.Disabled = 0 -> CQRSharp.OutboxMode
+CQRSharp.OutboxMode.Enabled = 1 -> CQRSharp.OutboxMode
+CQRSharp.OutboxMode.Transactional = 2 -> CQRSharp.OutboxMode
+CQRSharp.OutboxOptions
+CQRSharp.OutboxOptions.Mode.get -> CQRSharp.OutboxMode
+CQRSharp.OutboxOptions.Mode.set -> void
+CQRSharp.OutboxOptions.OutboxOptions() -> void
+CQRSharp.OutboxProcessorOptions
+CQRSharp.OutboxProcessorOptions.BacklogSampleInterval.get -> System.TimeSpan
+CQRSharp.OutboxProcessorOptions.BacklogSampleInterval.set -> void
+CQRSharp.OutboxProcessorOptions.BatchSize.get -> int
+CQRSharp.OutboxProcessorOptions.BatchSize.set -> void
+CQRSharp.OutboxProcessorOptions.MaxAttempts.get -> int
+CQRSharp.OutboxProcessorOptions.MaxAttempts.set -> void
+CQRSharp.OutboxProcessorOptions.MaxDegreeOfParallelism.get -> int
+CQRSharp.OutboxProcessorOptions.MaxDegreeOfParallelism.set -> void
+CQRSharp.OutboxProcessorOptions.OutboxProcessorOptions() -> void
+CQRSharp.OutboxProcessorOptions.PollingInterval.get -> System.TimeSpan
+CQRSharp.OutboxProcessorOptions.PollingInterval.set -> void
+CQRSharp.OutboxProcessorOptions.Retry.get -> CQRSharp.OutboxRetryOptions!
+CQRSharp.OutboxProcessorOptions.Retry.set -> void
+CQRSharp.OutboxProcessorOptions.UnknownRecipientGracePeriod.get -> System.TimeSpan
+CQRSharp.OutboxProcessorOptions.UnknownRecipientGracePeriod.set -> void
+CQRSharp.OutboxProcessorOptions.UseInbox.get -> bool
+CQRSharp.OutboxProcessorOptions.UseInbox.set -> void
+CQRSharp.OutboxRetryOptions
+CQRSharp.OutboxRetryOptions.BackoffMultiplier.get -> double
+CQRSharp.OutboxRetryOptions.BackoffMultiplier.set -> void
+CQRSharp.OutboxRetryOptions.BaseDelay.get -> System.TimeSpan
+CQRSharp.OutboxRetryOptions.BaseDelay.set -> void
+CQRSharp.OutboxRetryOptions.JitterFactor.get -> double
+CQRSharp.OutboxRetryOptions.JitterFactor.set -> void
+CQRSharp.OutboxRetryOptions.MaxDelay.get -> System.TimeSpan
+CQRSharp.OutboxRetryOptions.MaxDelay.set -> void
+CQRSharp.OutboxRetryOptions.OutboxRetryOptions() -> void
+CQRSharp.Pipelines.IdempotencyStoreBuilder
+CQRSharp.Pipelines.IdempotencyStoreBuilder.ReplayResultsWith(CQRSharp.Persistence.IIdempotencyResultSerializer! serializer) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+CQRSharp.Pipelines.IdempotencyStoreBuilder.ReplayResultsWith(System.Text.Json.JsonSerializerOptions! options) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+CQRSharp.Pipelines.IdempotencyStoreBuilder.UseInMemoryStore(System.Action<CQRSharp.InMemoryIdempotencyStoreOptions!>? configure = null) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+CQRSharp.Pipelines.IdempotencyStoreBuilder.UseStore(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection!>! registerStore) -> CQRSharp.Pipelines.IdempotencyStoreBuilder!
+CQRSharp.Pipelines.INotificationPipelineBehavior<TNotification>
+CQRSharp.Pipelines.INotificationPipelineBehavior<TNotification>.Handle(TNotification notification, CQRSharp.Pipelines.NotificationHandlerDelegate! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+CQRSharp.Pipelines.IPipelineBehavior<TRequest, TResult>
+CQRSharp.Pipelines.IPipelineBehavior<TRequest, TResult>.Handle(TRequest request, CQRSharp.Pipelines.RequestHandlerDelegate<TResult>! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TResult>!
+CQRSharp.Pipelines.IPrioritizedPipelineBehavior
+CQRSharp.Pipelines.IPrioritizedPipelineBehavior.PipelineExecutionPriority.get -> int
+CQRSharp.Pipelines.IStreamPipelineBehavior<TRequest, TItem>
+CQRSharp.Pipelines.IStreamPipelineBehavior<TRequest, TItem>.Handle(TRequest request, CQRSharp.Pipelines.StreamHandlerDelegate<TItem>! next, System.Threading.CancellationToken cancellationToken) -> System.Collections.Generic.IAsyncEnumerable<TItem>!
+CQRSharp.Pipelines.NotificationHandlerDelegate
+CQRSharp.Pipelines.OutboxStoreBuilder
+CQRSharp.Pipelines.OutboxStoreBuilder.ConfigureProcessor(System.Action<CQRSharp.OutboxProcessorOptions!>! configure) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+CQRSharp.Pipelines.OutboxStoreBuilder.Enabled() -> CQRSharp.Pipelines.OutboxStoreBuilder!
+CQRSharp.Pipelines.OutboxStoreBuilder.Transactional() -> CQRSharp.Pipelines.OutboxStoreBuilder!
+CQRSharp.Pipelines.OutboxStoreBuilder.UseInMemoryStore(System.Action<CQRSharp.InMemoryOutboxStoreOptions!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+CQRSharp.Pipelines.OutboxStoreBuilder.UseStore(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection!>! registerStore) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+CQRSharp.Pipelines.RequestHandlerDelegate<TResult>
+CQRSharp.Pipelines.StreamHandlerDelegate<TItem>
+CQRSharp.PublishStrategy
+CQRSharp.PublishStrategy.Parallel = 0 -> CQRSharp.PublishStrategy
+CQRSharp.PublishStrategy.ParallelWhenAllAggregate = 2 -> CQRSharp.PublishStrategy
+CQRSharp.PublishStrategy.Sequential = 1 -> CQRSharp.PublishStrategy
+CQRSharp.QueryCompletedNotification<TResult>
+CQRSharp.QueryCompletedNotification<TResult>.Query.get -> CQRSharp.IQuery<TResult>!
+CQRSharp.QueryCompletedNotification<TResult>.QueryCompletedNotification(CQRSharp.IQuery<TResult>! query, TResult result) -> void
+CQRSharp.QueryCompletedNotification<TResult>.QueryName.get -> string!
+CQRSharp.QueryCompletedNotification<TResult>.Result.get -> TResult
+CQRSharp.QueryFailedNotification<TResult>
+CQRSharp.QueryFailedNotification<TResult>.Exception.get -> System.Exception!
+CQRSharp.QueryFailedNotification<TResult>.Query.get -> CQRSharp.IQuery<TResult>!
+CQRSharp.QueryFailedNotification<TResult>.QueryFailedNotification(CQRSharp.IQuery<TResult>! query, System.Exception! exception) -> void
+CQRSharp.QueryFailedNotification<TResult>.QueryName.get -> string!
+CQRSharp.QueryInitiatedNotification<TResult>
+CQRSharp.QueryInitiatedNotification<TResult>.Query.get -> CQRSharp.IQuery<TResult>!
+CQRSharp.QueryInitiatedNotification<TResult>.QueryInitiatedNotification(CQRSharp.IQuery<TResult>! query) -> void
+CQRSharp.QueryInitiatedNotification<TResult>.QueryName.get -> string!
+CQRSharp.RunMode
+CQRSharp.RunMode.Inline = 0 -> CQRSharp.RunMode
+CQRSharp.RunMode.Queued = 1 -> CQRSharp.RunMode
+CQRSharp.StreamCompletedNotification<TItem>
+CQRSharp.StreamCompletedNotification<TItem>.ItemsYielded.get -> long
+CQRSharp.StreamCompletedNotification<TItem>.Request.get -> CQRSharp.IStreamRequest<TItem>!
+CQRSharp.StreamCompletedNotification<TItem>.RequestName.get -> string!
+CQRSharp.StreamCompletedNotification<TItem>.StreamCompletedNotification(CQRSharp.IStreamRequest<TItem>! request, long itemsYielded) -> void
+CQRSharp.StreamFailedNotification<TItem>
+CQRSharp.StreamFailedNotification<TItem>.Exception.get -> System.Exception!
+CQRSharp.StreamFailedNotification<TItem>.ItemsYielded.get -> long
+CQRSharp.StreamFailedNotification<TItem>.Request.get -> CQRSharp.IStreamRequest<TItem>!
+CQRSharp.StreamFailedNotification<TItem>.RequestName.get -> string!
+CQRSharp.StreamFailedNotification<TItem>.StreamFailedNotification(CQRSharp.IStreamRequest<TItem>! request, long itemsYielded, System.Exception! exception) -> void
+CQRSharp.StreamInitiatedNotification<TItem>
+CQRSharp.StreamInitiatedNotification<TItem>.Request.get -> CQRSharp.IStreamRequest<TItem>!
+CQRSharp.StreamInitiatedNotification<TItem>.RequestName.get -> string!
+CQRSharp.StreamInitiatedNotification<TItem>.StreamInitiatedNotification(CQRSharp.IStreamRequest<TItem>! request) -> void
+override CQRSharp.Core.Notifications.NotificationSubscription.ToString() -> string!
+static CQRSharp.Core.Diagnostics.CqrsTelemetry.ActivitySourceNames.get -> string![]!
+static CQRSharp.Core.Diagnostics.CqrsTelemetry.MeterNames.get -> string![]!
+static CQRSharp.Core.Diagnostics.HealthChecks.HealthChecksBuilderExtensions.AddCqrsOutbox(this Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder! builder, string! name = "cqrsharp.outbox", Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus? failureStatus = null, System.Collections.Generic.IEnumerable<string!>? tags = null, System.Action<CQRSharp.Core.Diagnostics.HealthChecks.OutboxHealthCheckOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder!
+static CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.HandledWith(object? response) -> CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome
+static CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome.NotHandled.get -> CQRSharp.Core.Exceptions.RequestExceptionHandlingOutcome
+static CQRSharp.Core.Exceptions.RequestExceptionHook.For<TRequest, TResponse, TException>(bool actions, bool handlers) -> CQRSharp.Core.Exceptions.RequestExceptionHook!
+static CQRSharp.Core.Modules.CqrsModuleComposition.AddCqrsModuleComposition(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static CQRSharp.Core.Notifications.NotificationRoute.For<TNotification>() -> CQRSharp.Core.Notifications.NotificationRoute!
+static CQRSharp.Core.Notifications.NotificationSubscription.For<THandler, TNotification>(string! handlerName) -> CQRSharp.Core.Notifications.NotificationSubscription!
+static CQRSharp.Core.Outbox.OutboxPartitionKey.From<TValue>(TValue value) -> string?
+static CQRSharp.Core.Pipelines.RequestRoute.Command<TRequest>() -> CQRSharp.Core.Pipelines.RequestRoute!
+static CQRSharp.Core.Pipelines.RequestRoute.Query<TRequest, TResult>() -> CQRSharp.Core.Pipelines.RequestRoute!
+static CQRSharp.Core.Pipelines.StreamRoute.For<TRequest, TItem>() -> CQRSharp.Core.Pipelines.StreamRoute!
+static CQRSharp.Core.Registries.DiscoveredContextFactories.Register<TContext, TFactory>(Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> void
+static CQRSharp.Core.Registries.RequestContextSource.For<TContext>() -> CQRSharp.Core.Registries.RequestContextSource!
+static CQRSharp.DependencyInjectionExtensions.AddCqrs(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static CQRSharp.DependencyInjectionExtensions.AddInMemoryIdempotencyStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.InMemoryIdempotencyStoreOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static CQRSharp.DependencyInjectionExtensions.AddInMemoryOutboxStore(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<CQRSharp.InMemoryOutboxStoreOptions!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static CQRSharp.DependencyInjectionExtensions.AddNotificationSerializer<TSerializer>(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

@@ -1,66 +1,119 @@
-using CQRSharp.Abstractions.Interfaces.Idempotency;
-using CQRSharp.Redis.Idempotency;
+using CQRSharp.Persistence;
+using CQRSharp.Redis;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
+using StackExchange.Redis;
 using Xunit;
 
 namespace CQRSharp.Tests.Integrations.Redis;
 
 /// <summary>
-///     Runs the shared <see cref="CQRSharp.Testing.Idempotency.IdempotencyStoreContractTests" /> conformance suite
-///     against the Redis-backed <see cref="RedisIdempotencyStore" />. Every test runs against the live server provided
-///     by <see cref="RedisFixture" />; when no Redis is reachable each test skips cleanly rather than failing. Each
-///     instance gets a unique GUID key prefix and a long retention, so a shared Redis never bleeds state across runs and
-///     the dedup window never trips during the contract tests.
+///     Runs the shared <see cref="CQRSharp.Testing.IdempotencyStoreContractTests" /> conformance suite against the
+///     Redis-backed <see cref="RedisIdempotencyStore" /> on the <see cref="RedisFixture" />'s server. Redis times the
+///     deduplication window itself (the keys' PX expiry), so the suite's clock-driven retention tests are skipped; the
+///     tests below prove the same guarantees against the server without waiting: they read the expiry Redis holds, and
+///     expire a key through Redis (an expiry time in the past) where a test needs it gone.
 /// </summary>
-public sealed class RedisIdempotencyStoreContractTests : CQRSharp.Testing.Idempotency.IdempotencyStoreContractTests, IClassFixture<RedisFixture>
+[Collection(RedisCollection.Name)]
+public sealed class RedisIdempotencyStoreContractTests(RedisFixture fixture) : CQRSharp.Testing.IdempotencyStoreContractTests
 {
-    private readonly RedisFixture _fixture;
-    private readonly string _prefix = $"cqrsharp:test:idemp:{Guid.NewGuid():N}:";
+    private readonly string _prefix = RedisFixture.NewKeyPrefix("idemp");
 
-    public RedisIdempotencyStoreContractTests(RedisFixture fixture) => _fixture = fixture;
+    // The store takes no clock: its expiry is Redis's own PX.
+    protected override FakeTimeProvider Time { get; } = new();
 
-    protected override Task<IIdempotencyStore> CreateStoreAsync()
+    protected override bool SupportsClockDrivenRetention => false;
+
+    protected override Task<IIdempotencyStore> CreateStoreAsync() => Task.FromResult<IIdempotencyStore>(CreateRedisStore());
+
+    public override async ValueTask DisposeAsync()
     {
-        Skip.IfNot(_fixture.Available, "No Redis server is reachable (set CQRSHARP_TEST_REDIS to point at one).");
+        await fixture.DeleteKeysAsync(_prefix);
+        await base.DisposeAsync();
+    }
 
-        var options = new RedisIdempotencyOptions
+    [Fact(DisplayName = "A claim and its fingerprint expire on the server after the retention window")]
+    public async Task A_claim_and_its_fingerprint_expire_after_the_retention_window()
+    {
+        var store = CreateRedisStore();
+        var key = NewKey();
+
+        (await store.TryClaimAsync(key, "fp", TestContext.Current.CancellationToken)).IsClaimed.Should().BeTrue();
+
+        foreach (var redisKey in new[] { ValueKey(key), FingerprintKey(key) })
         {
-            KeyPrefix = _prefix,
-            // Far longer than any contract test runs, so the dedup window never expires mid-test.
-            Retention = TimeSpan.FromHours(1)
-        };
-
-        return Task.FromResult<IIdempotencyStore>(
-            new RedisIdempotencyStore(_fixture.Multiplexer, Options.Create(options)));
+            var ttl = await Database.KeyTimeToLiveAsync(redisKey);
+            ttl.Should().NotBeNull($"{redisKey} must expire, or an abandoned claim would hold its key forever");
+            ttl!.Value.Should().BeGreaterThan(Retention - TimeSpan.FromMinutes(1)).And.BeLessThanOrEqualTo(Retention,
+                "the claim is remembered for the retention window, counted from the claim");
+        }
     }
 
-    /// <summary>
-    ///     The Redis store self-heals on its own: the claim's EX expiry IS the dedup window, server-timed by Redis, so
-    ///     once the short retention TTL elapses the key vanishes and a re-claim succeeds with no explicit release. This
-    ///     exercises the EX-expiry self-heal path against a live server (a real wait, since Redis owns the clock — there
-    ///     is no client TimeProvider to fast-forward), so it is deliberately short. Skips cleanly when Redis is absent.
-    /// </summary>
-    [SkippableFact]
-    public async Task A_claim_self_heals_once_its_retention_ttl_expires()
+    [Fact(DisplayName = "Completing a key keeps the expiry of its claim instead of starting a new window")]
+    public async Task Completing_a_key_keeps_the_expiry_Redis_gave_its_claim()
     {
-        Skip.IfNot(_fixture.Available, "No Redis server is reachable (set CQRSHARP_TEST_REDIS to point at one).");
+        var store = CreateRedisStore();
+        var key = NewKey();
+        var claim = await store.TryClaimAsync(key, null, TestContext.Current.CancellationToken);
 
-        var retention = TimeSpan.FromSeconds(2);
-        var store = new RedisIdempotencyStore(
-            _fixture.Multiplexer,
-            Options.Create(new RedisIdempotencyOptions { KeyPrefix = _prefix, Retention = retention }));
+        // As if the claim had been made half an hour before the retention window ends.
+        var remaining = TimeSpan.FromMinutes(30);
+        (await Database.KeyExpireAsync(ValueKey(key), remaining)).Should().BeTrue();
 
-        var key = $"selfheal:{Guid.NewGuid():N}";
+        await store.CompleteAsync(key, claim.Token!, [7], TestContext.Current.CancellationToken);
 
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should().BeTrue("a fresh key is claimable");
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should()
-            .BeFalse("the key is still within its retention TTL");
-
-        // Wait past the real TTL so Redis expires the key, then re-claim must succeed without any explicit release.
-        await Task.Delay(retention + TimeSpan.FromMilliseconds(500));
-
-        (await store.TryClaimAsync(key, CancellationToken.None)).Should()
-            .BeTrue("the claim's EX TTL expired, so the key self-heals and is claimable again");
+        (await store.TryClaimAsync(key, null, TestContext.Current.CancellationToken)).Status.Should().Be(IdempotencyClaimStatus.Completed);
+        var ttl = await Database.KeyTimeToLiveAsync(ValueKey(key));
+        ttl.Should().NotBeNull("a completed key is forgotten when its claim's window ends");
+        ttl!.Value.Should().BeGreaterThan(remaining - TimeSpan.FromMinutes(1)).And.BeLessThanOrEqualTo(remaining,
+            "the retention window runs from the claim, not from the completion");
     }
+
+    [Fact(DisplayName = "Once Redis expires a claim, the key is claimable again and the stale claimant can touch neither the key nor its successor's claim")]
+    public async Task An_expired_claim_frees_its_key_and_its_stale_claimant_cannot_touch_the_successor()
+    {
+        var store = CreateRedisStore();
+        var key = NewKey();
+        var stale = await store.TryClaimAsync(key, "fp-a", TestContext.Current.CancellationToken);
+        stale.IsClaimed.Should().BeTrue("a fresh key is claimable");
+        (await store.TryClaimAsync(key, "fp-a", TestContext.Current.CancellationToken)).Status.Should()
+            .Be(IdempotencyClaimStatus.InProgress, "the key is held within its retention window");
+
+        // Redis deletes a key whose expiry time is already in the past: the claim's window ends here, on the server.
+        await Database.KeyExpireAsync(ValueKey(key), DateTime.UnixEpoch);
+        await Database.KeyExpireAsync(FingerprintKey(key), DateTime.UnixEpoch);
+
+        // Another store instance - another process - stands in for the crashed claimant's successor.
+        var successorStore = CreateRedisStore();
+        var successor = await successorStore.TryClaimAsync(key, "fp-b", TestContext.Current.CancellationToken);
+        successor.IsClaimed.Should().BeTrue("the expired claim no longer holds the key, nor does its fingerprint");
+        successor.Token.Should().NotBe(stale.Token, "every claim gets its own token");
+
+        await store.ReleaseAsync(key, stale.Token!, TestContext.Current.CancellationToken);
+        await store.CompleteAsync(key, stale.Token!, [9], TestContext.Current.CancellationToken);
+        (await successorStore.TryClaimAsync(key, "fp-b", TestContext.Current.CancellationToken)).Status.Should()
+            .Be(IdempotencyClaimStatus.InProgress, "the successor still holds its claim");
+
+        await successorStore.CompleteAsync(key, successor.Token!, [1], TestContext.Current.CancellationToken);
+        var replay = await successorStore.TryClaimAsync(key, "fp-b", TestContext.Current.CancellationToken);
+        replay.Status.Should().Be(IdempotencyClaimStatus.Completed);
+        replay.StoredResult.Should().Equal(new byte[] { 1 }, "the successor's result, not the stale claimant's");
+    }
+
+    private RedisIdempotencyStore CreateRedisStore()
+    {
+        Assert.SkipUnless(fixture.Available, fixture.SkipReason);
+        return new RedisIdempotencyStore(
+            fixture.Multiplexer,
+            Options.Create(new RedisIdempotencyOptions { KeyPrefix = _prefix, Retention = Retention }));
+    }
+
+    private IDatabase Database => fixture.Multiplexer.GetDatabase();
+
+    private RedisKey ValueKey(string key) => _prefix + "k:" + key;
+
+    private RedisKey FingerprintKey(string key) => _prefix + "f:" + key;
+
+    private static string NewKey() => $"redis:{Guid.NewGuid():N}";
 }

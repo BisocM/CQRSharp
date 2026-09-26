@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <!--
+            Deliberately no IsAotCompatible here: EF Core relies on runtime query
+            compilation (expression trees, reflection) and cannot be Native AOT'd or fully trimmed. The
+            public surface is instead annotated with [RequiresDynamicCode]/[RequiresUnreferencedCode] so
+            callers building AOT/trimmed apps get a clear analyzer warning at the call site.
+        -->
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;EntityFrameworkCore;Outbox;Idempotency</PackageTags>
+        <Title>EF Core integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
+        <Description>An Entity Framework Core integration for CQRSharp: a durable IOutboxStore (leased claims, ordered partitions, retries, dead letters, retention), an IInboxStore, an IIdempotencyStore with claim tokens, payload fingerprints and result replay, and a unit of work over the DbContext (UseEntityFrameworkCoreUnitOfWork&lt;TContext&gt;()) that commits a request's changes with its outbox messages. Each target framework is built against its own EF Core major: net8.0 against EF Core 8, net9.0 against EF Core 9, net10.0 against EF Core 10. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0 (breaking; add a migration). Outbox rows carry a handler name, partition key and failure time, and ApplyCqrsOutbox() maps the CqrsInboxRecords table; the idempotency table stores the result and a payload fingerprint. On SQL Server, map the idempotency key with IdempotencyEntityConfiguration.SqlServerBinaryCollation.
+            New: EfCoreUnitOfWork&lt;TContext&gt; and hosted retention services. Each target framework builds against its own EF Core major (8, 9, 10). The store classes are internal; register them through the store verbs.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <!-- Referenced for the OutboxStoreBuilder/IdempotencyStoreBuilder the UseEntityFrameworkCore&lt;T&gt; fluent
+             verbs extend; the store implementations target only the Abstractions contracts. -->
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
+        <!-- Referenced for the ICqrsBuilder the UseEntityFrameworkCoreUnitOfWork&lt;T&gt; verb extends. -->
+        <ProjectReference Include="..\CQRSharp.Pipelines\CQRSharp.Pipelines.csproj"/>
+    </ItemGroup>
+
+    <!--
+        Versioned per target framework in Directory.Packages.props: each target is compiled against, and depends on, its
+        own EF Core major. The Microsoft.Extensions abstractions come from EF Core and CQRSharp.Core; referencing them
+        here at the Core floor would downgrade what EF Core 9 and 10 require (NU1605).
+    -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.EntityFrameworkCore"/>
+        <!-- ToTable/IsRowVersion and the other fluent relational mapping APIs live in the Relational package; the
+             base EF Core metapackage does not include it. The outbox is a relational table, so this is required. -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+</Project>

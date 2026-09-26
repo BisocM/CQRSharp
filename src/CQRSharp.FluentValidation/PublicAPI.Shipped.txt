@@ -1,0 +1,10 @@
+#nullable enable
+const CQRSharp.FluentValidation.FluentValidationFailureMapper.UnspecifiedErrorCode = "FluentValidation.Unspecified" -> string!
+CQRSharp.FluentValidation.FluentValidationFailureMapper
+CQRSharp.FluentValidation.FluentValidationRequestValidator<TRequest>
+CQRSharp.FluentValidation.FluentValidationRequestValidator<TRequest>.FluentValidationRequestValidator(System.Collections.Generic.IEnumerable<FluentValidation.IValidator<TRequest>!>! validators) -> void
+CQRSharp.FluentValidation.FluentValidationRequestValidator<TRequest>.ValidateAsync(TRequest request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.ValidationFailure[]!>!
+Microsoft.Extensions.DependencyInjection.FluentValidationCqrsExtensions
+static CQRSharp.FluentValidation.FluentValidationFailureMapper.Map(FluentValidation.Results.ValidationFailure! failure) -> CQRSharp.ValidationFailure
+static Microsoft.Extensions.DependencyInjection.FluentValidationCqrsExtensions.AddCqrsFluentValidation(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.FluentValidationCqrsExtensions.UseFluentValidation(this CQRSharp.Pipelines.ICqrsBuilder! builder) -> CQRSharp.Pipelines.ICqrsBuilder!

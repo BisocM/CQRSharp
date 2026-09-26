@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/BisocM/CQRSharp/blob/Release/docs/README.md
+    about: Getting started, configuration, the pipeline, the outbox, diagnostics (CQRA / CQRGEN / CQRCONF) and Native AOT. Check here before opening an issue.
+  - name: Report a security vulnerability
+    url: https://github.com/BisocM/CQRSharp/security/policy
+    about: Never report a vulnerability in a public issue. Read the security policy and report it privately.

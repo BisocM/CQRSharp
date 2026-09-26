@@ -1,0 +1,126 @@
+# Encodes the style the codebase already follows, for editors and `dotnet format`.
+#
+# Every style and naming rule here is `suggestion` or `silent` on purpose: CI builds with -warnaserror, so a rule at
+# `warning` would turn a formatting preference into a failed build. Do not raise a severity in this file without
+# building the whole solution with -warnaserror first.
+#
+# Line endings are deliberately not set: .gitattributes (`* text=auto`) owns them.
+#
+# src/Shared/.editorconfig is nested below this file and still wins for the files in that folder (it turns off the
+# "namespace must match folder" rule for source that is linked into several projects). Nothing here touches that rule.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Trailing double-space is a hard line break in Markdown, and list/code indentation varies by construct.
+[*.md]
+trim_trailing_whitespace = false
+indent_size = unset
+
+# MSBuild files in this repo are indented with 4 spaces.
+[*.{csproj,props,targets}]
+indent_size = 4
+
+[*.{json,yml,yaml,config,nuspec}]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+# Visual Studio writes solution files with tabs and a byte-order mark.
+[*.sln]
+indent_style = tab
+charset = utf-8-bom
+
+[*.cs]
+# Usings: System first, no blank lines between groups, outside the (file-scoped) namespace.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:suggestion
+
+# Namespaces are file-scoped.
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# `var` everywhere.
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Language keywords over framework type names (int, not Int32); no `this.` qualification.
+dotnet_style_predefined_type_for_locals_parameters_members = true:suggestion
+dotnet_style_predefined_type_for_member_access = true:suggestion
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+
+# Modern C# constructs the code already uses: expression bodies, primary constructors, collection expressions,
+# pattern matching, target-typed new.
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_indexers = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_style_expression_bodied_lambdas = true:silent
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_operators = when_on_single_line:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_prefer_primary_constructors = true:suggestion
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_not_pattern = true:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_readonly_field = true:suggestion
+
+# Single-statement bodies may omit braces; multi-line ones keep them.
+csharp_prefer_braces = when_multiline:silent
+
+# Formatting: Allman braces, 4-space indentation.
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
+
+# Naming. Private instance and mutable static fields are _camelCase; constants and private static readonly fields are
+# PascalCase. Rules are evaluated in order, so the two PascalCase rules must come before the general field rule.
+dotnet_naming_symbols.constant_fields.applicable_kinds = field
+dotnet_naming_symbols.constant_fields.required_modifiers = const
+
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static, readonly
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+dotnet_naming_rule.constants_are_pascal_case.symbols = constant_fields
+dotnet_naming_rule.constants_are_pascal_case.style = pascal_case
+dotnet_naming_rule.constants_are_pascal_case.severity = suggestion
+
+# `silent`: most private static readonly fields are PascalCase, but a handful in the generator are _camelCase.
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.severity = silent
+
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = suggestion

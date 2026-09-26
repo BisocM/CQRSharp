@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>CQRSharp.Testing</RootNamespace>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IsPackable>true</IsPackable>
+        <!-- A test-support library with no tests of its own; runners must not treat it as a test assembly. -->
+        <IsTestProject>false</IsTestProject>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>CQRSharp.Testing</PackageId>
+        <PackageTags>CQRS;CQRSharp;Testing;Fakes</PackageTags>
+        <Title>Test support for CQRSharp: a recording dispatcher.</Title>
+        <Description>Test support for CQRSharp, independent of any test framework: RecordingCqrsDispatcher, a fake ICqrsDispatcher that records every Send, Stream and Publish and answers with stubbed results, for unit-testing controllers and services that dispatch requests or publish notifications. The store contract suites ship separately, in CQRSharp.Testing.Xunit.V3 (xUnit v3).</Description>
+        <PackageReleaseNotes>
+            Version 5.0.0. First release: RecordingCqrsDispatcher.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- For ICqrsDispatcher, which RecordingCqrsDispatcher implements. -->
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
+    </ItemGroup>
+
+</Project>

@@ -1,51 +1,66 @@
-using CQRSharp.Abstractions.Interfaces.Idempotency;
 using CQRSharp.EntityFrameworkCore;
-using CQRSharp.EntityFrameworkCore.Persistence;
-using CQRSharp.Testing.Idempotency;
-using Microsoft.Data.Sqlite;
+using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
+using CQRSharp.Testing;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Integrations.EntityFrameworkCore;
 
 /// <summary>
-///     Runs the shared <see cref="IdempotencyStoreContractTests" /> conformance suite against
-///     <see cref="EfCoreIdempotencyStore{TContext}" />. Each store is backed by a private, kept-alive in-memory SQLite
-///     database so the tests are hermetic (no shared file, no external server) and CI-safe (the connection lives for
-///     the store's lifetime, which is how a <c>Filename=:memory:</c> database survives between commands). Retention is
-///     set far longer than any test runs so the contract's duplicate/concurrency assertions never trip claim expiry.
+///     Runs the shared <see cref="IdempotencyStoreContractTests" /> conformance suite against the EF Core idempotency
+///     store as it ships: registered by <c>AddEntityFrameworkCoreIdempotencyStore</c>, a singleton that opens a context of
+///     its own per operation, over a shared in-memory SQLite database - so the suite's concurrent claims race on the
+///     database's unique key rather than queueing behind one context. Time is the suite's fake clock.
 /// </summary>
 public sealed class EfCoreIdempotencyStoreContractTests : IdempotencyStoreContractTests
 {
-    // A long retention keeps every claimed key live for the whole test, so the contract suite exercises pure
-    // duplicate-rejection and single-winner concurrency rather than expiry/take-over behaviour.
-    private static readonly TimeSpan Retention = TimeSpan.FromHours(24);
+    private readonly SharedSqliteDatabase _database = new();
+    private readonly List<ServiceProvider> _providers = [];
 
-    private readonly FakeTimeProvider _time = new();
+    public override async ValueTask DisposeAsync()
+    {
+        foreach (var provider in _providers) await provider.DisposeAsync();
+        await _database.DisposeAsync();
+    }
+
+    protected override FakeTimeProvider Time { get; } = new();
 
     protected override async Task<IIdempotencyStore> CreateStoreAsync()
     {
-        // A :memory: SQLite database exists only while a connection to it is open. Open and keep this one for the
-        // lifetime of the test so the schema and rows persist across the store's individual operations.
-        var connection = new SqliteConnection("Filename=:memory:");
-        connection.Open();
+        var provider = await EfCoreStoreServices.IdempotencyAsync<TestDbContext>(o => o.UseSqlite(_database.ConnectionString), Time, Retention);
+        _providers.Add(provider);
+        return provider.GetRequiredService<IIdempotencyStore>();
+    }
 
-        var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlite(connection)
-            .Options;
+    [Theory(DisplayName = "EF idempotency store: a key or fingerprint longer than its column is refused with the bound named, before the database is touched")]
+    [InlineData(IdempotencyEntityConfiguration.KeyMaxLength + 1, 64, "*450*")]
+    [InlineData(IdempotencyEntityConfiguration.KeyMaxLength, IdempotencyEntityConfiguration.FingerprintMaxLength + 1, "*128*")]
+    public async Task Over_long_values_are_refused_with_the_bound_named(int keyLength, int fingerprintLength, string message)
+    {
+        var store = await CreateStoreAsync();
 
-        var context = new TestDbContext(options);
-        await context.Database.EnsureCreatedAsync();
+        var act = () => store.TryClaimAsync(new string('k', keyLength), new string('f', fingerprintLength), CancellationToken.None);
 
-        var storeOptions = new EfCoreIdempotencyStoreOptions { Retention = Retention };
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage(message);
+        (await store.TryClaimAsync(new string('k', IdempotencyEntityConfiguration.KeyMaxLength), new string('f', IdempotencyEntityConfiguration.FingerprintMaxLength), CancellationToken.None))
+            .IsClaimed.Should().BeTrue("values at the bounds fit");
+    }
 
-        return new EfCoreIdempotencyStore<TestDbContext>(
-            context,
-            _time,
-            Options.Create(storeOptions),
-            NullLogger<EfCoreIdempotencyStore<TestDbContext>>.Instance);
+    [Fact(DisplayName = "EF idempotency store: a claim never deletes expired keys; that is the retention service's work, off the request path")]
+    public async Task A_claim_leaves_expired_keys_to_the_retention_service()
+    {
+        var store = await CreateStoreAsync();
+        (await store.TryClaimAsync("expired", null, CancellationToken.None)).IsClaimed.Should().BeTrue();
+        Time.Advance(Retention + TimeSpan.FromHours(2));
+
+        (await store.TryClaimAsync("fresh", null, CancellationToken.None)).IsClaimed.Should().BeTrue();
+
+        await using var context = new TestDbContext(new DbContextOptionsBuilder<TestDbContext>().UseSqlite(_database.ConnectionString).Options);
+        (await context.Set<IdempotencyEntity>().Select(e => e.Key).ToListAsync(TestContext.Current.CancellationToken))
+            .Should().BeEquivalentTo(["expired", "fresh"]);
     }
 
     /// <summary>A minimal context that maps only the idempotency entity via the shipped configuration.</summary>
