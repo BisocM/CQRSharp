@@ -2,6 +2,17 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.1.0]
+
+A minor release: no breaking changes to the public API or to behavior, so a 5.0 application upgrades by bumping the
+package versions. Package validation now checks every package against 5.0.0.
+
+### Changed
+
+- Dependabot opens its NuGet and GitHub Actions pull requests monthly, and never for the Microsoft.Extensions and
+  Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
+  raised together at a release.
+
 ## [5.0.0]
 
 A major release, measured here against 4.2.1. The authoring surface moves to three namespaces; the outbox delivers
