@@ -93,7 +93,12 @@ The suite covers:
 - dead letters: `GetDeadLettersAsync` lists them oldest first by failure time with their error; `RequeueAsync` gives a
   fresh budget, keeps the last error and waits for an in-flight successor; `PurgeDeadLettersAsync` deletes only what
   failed before the cut-off;
-- the backlog: `GetBacklogAsync` counts undelivered and dead-lettered messages and reports the oldest pending one.
+- the backlog: `GetBacklogAsync` counts undelivered and dead-lettered messages and reports the oldest pending one;
+- scheduling, for a store that implements `ISchedulingOutboxStore` (skipped, with the reason, for one that does not): a
+  message stored with its `CreatedAt` and `NextRetryAt` at a future due time is not claimed before it, takes its place
+  in its partition at that time, is claimed in due-time order however far ahead it is due, and is counted in the
+  backlog's `ScheduledCount`, not its `PendingCount`, until it is due. See
+  [Custom stores](outbox.md#custom-stores).
 
 The single-instance suite cannot observe a double-claim between two *processes*. A store backed by a shared database
 should add its own race test over two independent connections.
@@ -292,7 +297,8 @@ fixtures as private nested classes (the generator skips them), or add `CQRGEN003
 | `SentRequests` / `Sent<T>()` | Requests passed to either `Send` overload. |
 | `StartedStreams` / `Streamed<T>()` | Requests passed to either `Stream` overload, recorded when the stream is requested. |
 | `PublishedNotifications` / `Published<T>()` | Notifications passed to `Publish`. |
-| `Dispatched` | One interleaved log of `DispatchedMessage(DispatchKind Kind, object Message)` across all three. |
+| `ScheduledNotifications` / `Scheduled<T>()` | Notifications passed to `PublishAt` or `PublishAfter`, for later delivery. |
+| `Dispatched` | One interleaved log of `DispatchedMessage(DispatchKind Kind, object Message)` across all of them. A scheduled publish's entry (`DispatchKind.ScheduledPublish`) carries its `DueAt`. |
 | `ClearRecorded()` | Empties the log; stubs are kept. |
 
 **Behaviour worth knowing:**
@@ -303,6 +309,9 @@ fixtures as private nested classes (the generator skips them), or add `CQRGEN003
   with `Throws`, or thrown by a stub delegate, surfaces where a real handler failure would: as a faulted `Send` /
   `Publish` task, or on the first `MoveNextAsync` of a stream.
 - A message is recorded even when dispatching it then fails, so a test can assert on what was attempted.
+- `PublishAfter` dates its entry by the dispatcher's clock: `new RecordingCqrsDispatcher(fakeTimeProvider)` makes the
+  `DueAt` exact (the parameterless constructor uses the system clock). A negative delay throws, as it does on the real
+  dispatcher.
 - The untyped `Send(object)` / `Stream(object)` overloads share the typed overloads' stubs and reject the same
   arguments as the real dispatcher: a non-`IRequest`, a stream request passed to `Send`, a non-stream passed to
   `Stream`. Rejected arguments are not recorded.

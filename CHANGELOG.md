@@ -5,7 +5,44 @@ All notable changes to CQRSharp are documented here. This project adheres to [Se
 ## [5.1.0]
 
 A minor release: no breaking changes to the public API or to behavior, so a 5.0 application upgrades by bumping the
-package versions. Package validation now checks every package against 5.0.0.
+package versions. Notifications can be scheduled for later delivery through the outbox. Package validation now checks
+every package against 5.0.0.
+
+### Upgrading from 5.0.0
+
+No step is required: the EF Core schema and the Redis key layout are unchanged, and 5.0 and 5.1 instances can share one
+outbox during a rolling deploy (a 5.0 processor holds a scheduled message until it is due, as it holds a back-off; only a
+Redis message scheduled past November 2286 needs every instance on 5.1). Three things concern code outside the packages:
+
+1. **A custom `IOutboxStore`** keeps working unchanged. To accept scheduled notifications it also implements
+   `ISchedulingOutboxStore` once it passes the scheduling cases of `OutboxStoreContractTests`; a decorator of a store
+   implements it when the store it wraps does.
+2. **A custom `ICqrsDispatcher`** (a decorator, a fake) keeps compiling: `PublishAt` and `PublishAfter` have default
+   implementations that throw `NotSupportedException`. Implement them to forward scheduled publishes.
+3. **A custom outbox gauge or health probe** built on `OutboxBacklog` sees scheduled messages that are not due in the new
+   `ScheduledCount`, not in `PendingCount` or the lag (only a store that implements `ISchedulingOutboxStore` has any).
+
+### Added
+
+- **Scheduled publishing.** `ICqrsDispatcher.PublishAt(notification, dueAt)` and `PublishAfter(notification, delay)`
+  publish a durable notification for delivery no earlier than its due time, measured on the application's
+  `TimeProvider` when it is published. It is buffered, stored with the unit of work's commit, or stored at once exactly as
+  a durable `Publish` is, and delivered by the outbox processor on its first poll after the due time, as if it had been
+  published then: in its partition it holds back nothing published before it is due, and what is published after waits
+  for it. Once due it is retried, deferred and dead-lettered like any message. It never falls back to in-process
+  delivery: with the outbox off, for a notification that is not durable, or into a store that cannot schedule, the
+  publish fails with an `InvalidOperationException` before anything is buffered. Under `Transactional` mode it goes to
+  the outbox outside a transaction too. See [Scheduled publishing](docs/outbox.md#scheduled-publishing).
+- **`ISchedulingOutboxStore`** (namespace `CQRSharp.Persistence`): the opt-in a store declares to hold scheduled
+  messages, which are stored with their `CreatedAt` and `NextRetryAt` at their due time. The in-memory, Redis and EF Core
+  stores implement it, with no schema change. `OutboxStoreContractTests` gains five scheduling cases, skipped for a store
+  that does not implement the interface.
+- **`OutboxBacklog.ScheduledCount`**, the `cqrsharp.outbox.scheduled` gauge (`CqrsTelemetry.Instruments.OutboxScheduled`)
+  and the outbox health check's `scheduled` datum: the scheduled messages whose due time has not come, which are not
+  late and so stay out of the pending count and the lag.
+- **`RecordingCqrsDispatcher`** records scheduled publishes as `DispatchKind.ScheduledPublish`, with their due time in
+  `DispatchedMessage.DueAt`, listed by `ScheduledNotifications` / `Scheduled<T>()`. The new
+  `RecordingCqrsDispatcher(TimeProvider)` constructor dates a `PublishAfter` by a fake clock.
 
 ### Changed
 

@@ -106,9 +106,10 @@ The **`CQRSharp`** meter (`CqrsTelemetry.MeterName`) carries these instruments (
 | `cqrsharp.notifications.published` | Counter (`{notification}`): notifications published in-process | `cqrsharp.notification.type` |
 | `cqrsharp.outbox.messages` | Counter (`{message}`): outbox messages the processor finished an attempt at | `cqrsharp.notification.name`, `cqrsharp.notification.handler`, `cqrsharp.outcome` (see below) |
 | `cqrsharp.outbox.dispatch.duration` | Histogram (`s`): dispatching one outbox message to its handler | same as `cqrsharp.outbox.messages` |
-| `cqrsharp.outbox.pending` | Gauge (`{message}`): messages still to be delivered, pending or in progress | — |
+| `cqrsharp.outbox.pending` | Gauge (`{message}`): messages still to be delivered, pending or in progress; a [scheduled](outbox.md#scheduled-publishing) message counts once it is due | — |
 | `cqrsharp.outbox.dead_letters` | Gauge (`{message}`): dead-lettered messages awaiting an operator | — |
-| `cqrsharp.outbox.lag` | Gauge (`s`): the age of the oldest undelivered message | — |
+| `cqrsharp.outbox.scheduled` | Gauge (`{message}`): messages published for later delivery whose due time has not come | — |
+| `cqrsharp.outbox.lag` | Gauge (`s`): the age of the oldest undelivered message; a scheduled one ages from its due time | — |
 
 The outbox outcomes are:
 

@@ -13,6 +13,7 @@ notification also commits **atomically** with the data it announces.
 - [How a publish reaches the store](#how-a-publish-reaches-the-store)
 - [One message per handler](#one-message-per-handler)
 - [Ordered delivery](#ordered-delivery)
+- [Scheduled publishing](#scheduled-publishing)
 - [The processor](#the-processor)
 - [The inbox: effectively-once delivery](#the-inbox-effectively-once-delivery)
 - [Dead letters](#dead-letters)
@@ -287,6 +288,66 @@ Two edges are deliberate:
 - The order is the order the messages were **stored**. Two concurrent transactions that publish for one key commit in
   some order, and that is the order the outbox sees.
 
+## Scheduled publishing
+
+`ICqrsDispatcher.PublishAt` and `PublishAfter` publish a durable notification for delivery later: no earlier than a
+given time, or once a delay has passed.
+
+```csharp
+// A reminder a day before the booking starts.
+await dispatcher.PublishAt(new BookingReminderDue(booking.Id), booking.StartsAt.AddDays(-1), ct);
+
+// Give the customer thirty minutes to pay.
+await dispatcher.PublishAfter(new PaymentWindowElapsed(order.Id), TimeSpan.FromMinutes(30), ct);
+```
+
+A scheduled notification travels exactly the way a durable `Publish` does (see
+[How a publish reaches the store](#how-a-publish-reaches-the-store)): buffered while a request of the scope or an outbox
+delivery runs and stored when it succeeds, inside the unit of work's transaction for a store that joins it, or stored at
+once outside a request. A request that fails discards it. Its due time is fixed when it is published: `PublishAfter`
+measures the delay on the application's `TimeProvider` from the call, not from the moment the request commits.
+
+**Delivery.** The processor claims the message on its first poll after the due time, so it is delivered up to
+`PollingInterval` late: storing a message that is not due does not wake the processor, and nothing else does when the
+time comes. From then on it is an ordinary message: one delivery per handler, retried with back-off, deferred,
+dead-lettered and requeued like any other, at least once. A due time that has already passed when the notification is
+stored makes it an ordinary publish, as if it had been published at that moment.
+
+**Order.** The due time is the message's place in the order: it is delivered as if it had been published then. In its
+[partition](#ordered-delivery) it holds back nothing published before it is due, and what is published after its due
+time waits for it; once due, it waits behind an unfinished message of its partition published before its due time, such
+as one backing off. Notifications scheduled for the same instant are delivered in the order they were stored.
+
+**It never runs in-process.** Only the outbox can hold a notification until it is due, so a scheduled publish has no
+in-process fallback. It fails with an `InvalidOperationException`, before anything is buffered or stored, when:
+
+- the outbox is off (`OutboxMode.Disabled`);
+- the notification is not [durable](#which-notifications-are-durable): the serializer gives it no name (it has no
+  `[NotificationName]`, it is a `struct`, or a custom serializer does not name it), or it lost its name to another
+  module's type (**CQRCONF010**);
+- the outbox store cannot schedule (it does not implement `ISchedulingOutboxStore`; every built-in store does, see
+  [Custom stores](#custom-stores));
+- the mode is `Transactional` and no `IUnitOfWork` is registered (**CQRCONF007**), or no outbox store is registered
+  (**CQRCONF001**).
+
+Under `Transactional` with a unit of work, a scheduled notification goes to the outbox whether or not a transaction is
+active: inside one it is stored with the commit, outside one as the `Enabled` mode stores it. A `PublishAfter` with a
+negative delay throws `ArgumentOutOfRangeException`. An `ICqrsDispatcher` implemented elsewhere (a decorator, a fake)
+inherits `PublishAt` and `PublishAfter` members that throw `NotSupportedException` until it implements them.
+
+A scheduled notification cannot be withdrawn once it is stored. When the reason for it can go away (the order was paid
+before the window elapsed), its handler checks that the reason still holds.
+
+**What it looks like in the store.** A scheduled message is stored with its `CreatedAt` and its `NextRetryAt` both at
+its due time; no other column or field marks it, so the EF Core schema is unchanged. Until it is due it is counted in
+the backlog's `ScheduledCount` and the `cqrsharp.outbox.scheduled` gauge, not as pending, and it adds nothing to the lag
+(see [Backlog, gauges and the health check](#backlog-gauges-and-the-health-check)). Its age, for the lag and for the
+[unknown-recipient grace period](#unknown-notifications-and-handlers), counts from its due time. The delivery span is
+parented to the span that scheduled it, so a trace shows the wait between the two.
+
+To assert on scheduling in a unit test, `RecordingCqrsDispatcher` records each scheduled publish with its due time (see
+[The testing packages](testing-package.md#recordingcqrsdispatcher-reference)).
+
 ## The processor
 
 `OutboxProcessorOptions` (namespace `CQRSharp`) tunes the background processor. Invalid values fail host start.
@@ -399,16 +460,18 @@ or purged, in every store; set the store's `DeadLetterRetention` to have old one
 ## Backlog, gauges and the health check
 
 `IOutboxStore.GetBacklogAsync` measures the outbox: how many messages are still to be delivered (pending, backing off or
-in progress), how many are dead-lettered, and how old the oldest undelivered one is. Two consumers are built in:
+in progress), how many are dead-lettered, and how old the oldest undelivered one is. A [scheduled](#scheduled-publishing)
+message whose due time has not come is not late: it is counted apart, in `ScheduledCount`, and joins the pending count,
+aging from its due time, once it is due. Two consumers are built in:
 
-- **Gauges.** The processor refreshes the `cqrsharp.outbox.pending`, `cqrsharp.outbox.dead_letters` and
-  `cqrsharp.outbox.lag` gauges every `BacklogSampleInterval` while a listener is attached, so an idle meter never costs a
-  query. See [Observability](observability.md#dispatch-metrics). Alert on lag and on dead letters.
+- **Gauges.** The processor refreshes the `cqrsharp.outbox.pending`, `cqrsharp.outbox.dead_letters`,
+  `cqrsharp.outbox.scheduled` and `cqrsharp.outbox.lag` gauges every `BacklogSampleInterval` while a listener is
+  attached, so an idle meter never costs a query. See [Observability](observability.md#dispatch-metrics). Alert on lag and on dead letters.
 - **The health check.** `AddCqrsOutbox()` measures the backlog live on every probe. It reports *degraded* when the
   oldest undelivered message is older than `MaxLag` (default 5 minutes; `null` never degrades on lag) or there are more
   dead letters than `MaxDeadLetters` (default 0; `null` never degrades on dead letters), and the registration's failure
   status (default `Unhealthy`) when the store cannot be read. A disabled outbox is healthy. The result's data carries
-  `pending`, `deadLetters`, `lagSeconds` and, when something is pending, `oldestPendingCreatedAt`.
+  `pending`, `deadLetters`, `scheduled`, `lagSeconds` and, when something is pending, `oldestPendingCreatedAt`.
 
 ```csharp
 using CQRSharp.Core.Diagnostics.HealthChecks;
@@ -453,8 +516,19 @@ A store must:
 - claim oldest first by `CreatedAt`, then in the order stored, and honour the [partition rule](#ordered-delivery);
 - implement the dead-letter operations and measure the backlog.
 
+**Scheduling is opt-in.** A store that can hold [scheduled](#scheduled-publishing) messages says so by also implementing
+`ISchedulingOutboxStore` (namespace `CQRSharp.Persistence`), which adds no member: it declares that the store keeps
+`CreatedAt` and `NextRetryAt` exactly as given even when they lie in the future, never claims a message before its
+`NextRetryAt`, orders it by that `CreatedAt` like any other, and leaves a message whose `CreatedAt` is still in the future
+out of `PendingCount` and `OldestPendingCreatedAt`, counting it in `ScheduledCount` instead. A store written against
+5.0 keeps working unchanged for everything else; a scheduled publish into it fails with an error that names it. A
+store that passes the contract suite's claim and ordering cases usually needs only the backlog change and the interface.
+A decorator of `IOutboxStore` should implement `ISchedulingOutboxStore` when the store it wraps does, or it hides the
+capability.
+
 Verify it against the contract suites in `CQRSharp.Testing.Xunit.V3` before relying on it; see
-[The testing packages](testing-package.md#contract-testing-an-outbox-store).
+[The testing packages](testing-package.md#contract-testing-an-outbox-store). The scheduling cases run for a store that
+implements `ISchedulingOutboxStore`.
 
 ### Claims and leases
 

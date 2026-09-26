@@ -154,7 +154,10 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - The entity types (`OutboxEntity`, `InboxEntity`, `IdempotencyEntity`) have virtual properties and change
   notifications, so they map in contexts that use lazy-loading or change-tracking proxies.
 
-Upgrading from 4.x changes the schema; the [CHANGELOG](../CHANGELOG.md) lists the migration steps.
+Upgrading from 4.x changes the schema; the [CHANGELOG](../CHANGELOG.md) lists the migration steps. Upgrading from 5.0 to
+5.1 changes nothing in it: a [scheduled](outbox.md#scheduled-publishing) notification is a row whose `CreatedAt` and
+`NextRetryAt` hold its due time, so 5.1 needs no migration, and 5.0 and 5.1 instances can share one outbox table during a
+rolling deploy (a 5.0 processor holds a scheduled row until it is due, as it holds a back-off).
 
 ### Options and retention
 
@@ -197,6 +200,8 @@ again an interval later. An app without the generic host runs no hosted services
 | In-memory | `CQRSharp.Core` | No | Yes | In-process lock | No |
 | Redis | `CQRSharp.Redis` | Yes | Yes | Server-side Lua script and visibility timeout | No |
 | EF Core | `CQRSharp.EntityFrameworkCore` | Yes | No | Row-version claim and visibility timeout | Yes, while a transaction is open on its context |
+
+Every built-in outbox store can hold [scheduled](outbox.md#scheduled-publishing) notifications until they are due.
 
 A store that joins the unit of work makes a transactional request's notifications atomic with its data, and, with the
 inbox, a delivery exactly-once for what its handler writes through that context. Any other store is written right after

@@ -113,8 +113,8 @@ Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
   **ordered per partition key** (`PartitionBy = nameof(OrderId)`), also across several processor instances, which claim
   messages under leases so they can share one outbox. An **inbox** records each delivery, so a redelivered message is
   recognized and skipped; with an EF Core inbox and unit of work over one `DbContext`, the handler's changes and the
-  record commit together. Dead letters can be listed, requeued and purged. See
-  [The outbox](docs/outbox.md).
+  record commit together. Dead letters can be listed, requeued and purged, and a notification can be **scheduled** for
+  later delivery (`PublishAt` / `PublishAfter`). See [The outbox](docs/outbox.md).
 - **Idempotency that answers the retry.** A duplicate of a completed request gets the **original result** back (a plain
   `CommandResult` always; any other result through a result serializer), a duplicate of one still running gets a
   distinguishable "in progress" (409 with `Retry-After` over HTTP), and a key reused with a **different payload** is
