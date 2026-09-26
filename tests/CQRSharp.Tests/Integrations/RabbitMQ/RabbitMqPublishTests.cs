@@ -58,7 +58,7 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
             transport(r);
         }, time: time);
         _owned.Add(host);
-        await Runtime(host).Publisher.WaitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        await Runtime(host).Publisher.WaitAsync(TestContext.Current.CancellationToken);
         return host;
     }
 
@@ -74,9 +74,8 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
 
         await host.PublishAsync(new RabbitOrderPlaced(1, "order-1"));
 
-        var message = await fixture.GetAsync(Observer, TimeSpan.FromSeconds(30));
-        message.Should().NotBeNull();
-        var properties = message!.BasicProperties;
+        var message = await fixture.ReceiveAsync(Observer);
+        var properties = message.BasicProperties;
         properties.Type.Should().Be(OrderName);
         Guid.TryParseExact(properties.MessageId, "N", out _).Should().BeTrue("the message id is the outbox message's id");
         properties.DeliveryMode.Should().Be(DeliveryModes.Persistent);
@@ -85,7 +84,7 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
         RabbitMqFixture.Header(properties, "cqrsharp-partition-key").Should().Be("order-1");
         Guid.TryParse(RabbitMqFixture.Header(properties, "cqrsharp-notification-id"), out _).Should().BeTrue();
         DateTime.TryParse(RabbitMqFixture.Header(properties, "cqrsharp-created-at"), out _).Should().BeTrue();
-        host.Services.GetRequiredService<INotificationSerializer>().Deserialize(OrderName, message.Body.ToArray())
+        host.Services.GetRequiredService<INotificationSerializer>().Deserialize(OrderName, message.Body)
             .Should().Be(new RabbitOrderPlaced(1, "order-1"));
         message.RoutingKey.Should().Be(OrderName);
     }
@@ -124,7 +123,7 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
         missing.Status.Should().Be(TransportSendStatus.Rejected);
         missing.Reason.Should().Contain("404");
         existing.Should().Be(TransportSendResult.Sent, "a channel the broker closed is not reused");
-        (await fixture.GetAsync(Observer, TimeSpan.FromSeconds(10))).Should().NotBeNull();
+        (await fixture.ReceiveAsync(Observer)).RoutingKey.Should().Be("tests.rabbit.broadcast");
     }
 
     [Fact(DisplayName = "RabbitMQ publish: the transport declares its exchange idempotently, again after every reconnect")]
@@ -166,7 +165,7 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
         deferred.AttemptCount.Should().Be(0, "an outage charges no attempt");
 
         proxy.Restore();
-        (await fixture.GetAsync(Observer, TimeSpan.FromSeconds(30))).Should().NotBeNull("the deferred message is sent once the connection is back");
+        (await fixture.ReceiveAsync(Observer)).RoutingKey.Should().Be(OrderName, "the deferred message is sent once the connection is back");
         outcomes.Measurements.Select(m => m.Tag(CqrsTelemetry.Tags.Outcome)).Should().Contain("unavailable");
         publisher.Current.Should().NotBeNull();
     }
@@ -181,15 +180,9 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
         await host.PublishAsync(Enumerable.Range(1, 20).Select(i => (INotification)new RabbitOrderPlaced(i, "order-42")).ToArray());
 
         var serializer = host.Services.GetRequiredService<INotificationSerializer>();
-        var received = new List<int>();
-        for (var i = 0; i < 20; i++)
-        {
-            var message = await fixture.GetAsync(Observer, TimeSpan.FromSeconds(30));
-            message.Should().NotBeNull();
-            received.Add(((RabbitOrderPlaced)serializer.Deserialize(OrderName, message!.Body.ToArray())!).Seq);
-        }
+        var received = await fixture.ReceiveAsync(Observer, 20);
 
-        received.Should().Equal(Enumerable.Range(1, 20));
+        received.Select(m => ((RabbitOrderPlaced)serializer.Deserialize(OrderName, m.Body)!).Seq).Should().Equal(Enumerable.Range(1, 20));
     }
 
     [Fact(DisplayName = "RabbitMQ publish: a scheduled notification reaches the broker only once it is due")]
@@ -206,11 +199,10 @@ public sealed class RabbitMqPublishTests(RabbitMqFixture fixture) : IAsyncLifeti
         var stored = OutboxTestHarness.Stored(host.Services).Should().ContainSingle().Subject;
         stored.HandlerName.Should().Be("rabbitmq");
         stored.NextRetryAt.Should().Be(time.GetUtcNow().UtcDateTime.AddMinutes(10), "the transport's message carries the due time");
-        (await fixture.GetAsync(Observer, TimeSpan.FromSeconds(1))).Should().BeNull("it is not due");
+        (await fixture.CountAsync(Observer)).Should().Be(0u, "it is not due, on a clock only the test moves");
 
         time.Advance(TimeSpan.FromMinutes(10));
-        var message = await fixture.GetAsync(Observer, TimeSpan.FromSeconds(30));
-        message.Should().NotBeNull();
-        Encoding.UTF8.GetString(message!.Body.Span).Should().Contain("7");
+        var message = await fixture.ReceiveAsync(Observer);
+        Encoding.UTF8.GetString(message.Body).Should().Contain("7");
     }
 }

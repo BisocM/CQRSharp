@@ -16,7 +16,9 @@ namespace CQRSharp.Testing;
 /// </summary>
 /// <remarks>
 ///     Every test works on a notification name of its own (<c>contract.&lt;guid&gt;</c>), so the suite can share one
-///     destination between tests and test processes: route that name, and receive only what was sent under it.
+///     destination between tests and test processes: route that name, and receive only what was sent under it. The suite
+///     waits for what it expects to arrive, never for a fixed time: a message that never arrives is left to the test
+///     runner's cancellation or hang detection.
 /// </remarks>
 [Experimental("CQREXP001", UrlFormat = "https://github.com/BisocM/CQRSharp/blob/Release/docs/diagnostics.md#experimental-apis-cqrexp")]
 public abstract class NotificationTransportContractTests : IAsyncLifetime
@@ -36,11 +38,11 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
     protected abstract Task<INotificationTransport> CreateTransportAsync(string notificationName);
 
     /// <summary>
-    ///     The next message that arrived at the destination under the name <see cref="CreateTransportAsync" /> was given, read
-    ///     back as the receiver sees it; <see langword="null" /> when none arrives within <paramref name="timeout" />.
+    ///     The next message that arrives at the destination under the name <see cref="CreateTransportAsync" /> was given, read
+    ///     back as the receiver sees it, waiting until one does.
     /// </summary>
-    /// <param name="timeout">How long to wait for a message.</param>
-    protected abstract Task<ReceivedTransportMessage?> ReceiveAsync(TimeSpan timeout);
+    /// <param name="cancellationToken">Cancelled when the test is.</param>
+    protected abstract Task<ReceivedTransportMessage> ReceiveAsync(CancellationToken cancellationToken);
 
     /// <summary>
     ///     Makes the destination unreachable for the transport (stops the broker, cuts the connection), and returns whether it
@@ -48,11 +50,11 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
     /// </summary>
     protected virtual Task<bool> MakeUnavailableAsync() => Task.FromResult(false);
 
-    /// <summary>Makes the destination reachable again after <see cref="MakeUnavailableAsync" />.</summary>
+    /// <summary>
+    ///     Makes the destination reachable again after <see cref="MakeUnavailableAsync" />, and completes once the transport
+    ///     can reach it (its connection is open again), so the next send is expected to succeed.
+    /// </summary>
     protected virtual Task RestoreAvailabilityAsync() => Task.CompletedTask;
-
-    /// <summary>How long a test waits for a sent message to arrive; 10 seconds by default.</summary>
-    protected virtual TimeSpan ReceiveTimeout => TimeSpan.FromSeconds(10);
 
     private static string NewName() => $"contract.{Guid.NewGuid():N}";
 
@@ -68,14 +70,7 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
             null,
             attempt);
 
-    private async Task<ReceivedTransportMessage> ReceiveOneAsync(string because)
-        => await ReceiveAsync(ReceiveTimeout) ?? throw FailWith($"Expected a message at the destination because {because}, but none arrived within {ReceiveTimeout}.");
-
-    private static Exception FailWith(string message)
-    {
-        Assert.Fail(message);
-        return new InvalidOperationException(message);
-    }
+    private Task<ReceivedTransportMessage> ReceiveOneAsync() => ReceiveAsync(TestContext.Current.CancellationToken);
 
     /// <summary>Contract: the transport has a name an outbox message can be addressed to.</summary>
     [Fact]
@@ -113,7 +108,7 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
         var result = await transport.SendAsync(sent, CancellationToken.None);
 
         ContractAssert.Equal(TransportSendStatus.Sent, result.Status, $"The send's status (reason: {result.Reason})");
-        var received = await ReceiveOneAsync("the send was reported as sent");
+        var received = await ReceiveOneAsync();
         ContractAssert.Equal(sent.MessageId, received.MessageId, "The received message id");
         ContractAssert.Equal(sent.NotificationName, received.NotificationName, "The received notification name");
         ContractAssert.SequenceEqual(sent.Payload, received.Payload, "The received payload");
@@ -134,7 +129,7 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
 
         var received = new List<Guid?>();
         for (var i = 0; i < sent.Count; i++)
-            received.Add((await ReceiveOneAsync($"{sent.Count} sends were reported as sent")).MessageId);
+            received.Add((await ReceiveOneAsync()).MessageId);
 
         ContractAssert.SequenceEqual(sent.Select(m => (Guid?)m.MessageId).ToList(), received, "The order the messages arrived in");
     }
@@ -153,8 +148,8 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
         await transport.SendAsync(Outbound(name, 1, attempt: 0, messageId: messageId), CancellationToken.None);
         await transport.SendAsync(Outbound(name, 1, attempt: 1, messageId: messageId), CancellationToken.None);
 
-        ContractAssert.Equal(messageId, (await ReceiveOneAsync("the first send was made")).MessageId, "The first arrival's message id");
-        ContractAssert.Equal(messageId, (await ReceiveOneAsync("the second send was made")).MessageId, "The repeated arrival's message id");
+        ContractAssert.Equal(messageId, (await ReceiveOneAsync()).MessageId, "The first arrival's message id");
+        ContractAssert.Equal(messageId, (await ReceiveOneAsync()).MessageId, "The repeated arrival's message id");
     }
 
     /// <summary>
@@ -198,17 +193,9 @@ public abstract class NotificationTransportContractTests : IAsyncLifetime
         Assert.False(string.IsNullOrWhiteSpace(result.Reason), "An unavailable send must say why.");
 
         var again = Outbound(name, 2);
-        TransportSendResult retried = default;
-        var deadline = DateTime.UtcNow + ReceiveTimeout;
-        do
-        {
-            retried = await transport.SendAsync(again, CancellationToken.None);
-            if (retried.Status == TransportSendStatus.Sent) break;
-            await Task.Delay(TimeSpan.FromMilliseconds(250));
-        } while (DateTime.UtcNow < deadline);
-
+        var retried = await transport.SendAsync(again, CancellationToken.None);
         ContractAssert.Equal(TransportSendStatus.Sent, retried.Status, $"The status of a send once the destination is back (reason: {retried.Reason})");
-        ContractAssert.Equal(again.MessageId, (await ReceiveOneAsync("the destination is back")).MessageId, "The message id that arrived");
+        ContractAssert.Equal(again.MessageId, (await ReceiveOneAsync()).MessageId, "The message id that arrived");
     }
 
     // A notification type for the routing question: the suite routes by name, which is what an outbox message carries.

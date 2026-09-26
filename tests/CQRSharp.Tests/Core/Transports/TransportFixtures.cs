@@ -86,7 +86,7 @@ internal sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILo
         => Entries.Where(e => e.Entry.EventId.Id == eventId).Select(e => e.Entry).ToArray();
 
     /// <summary>Completes once <paramref name="count" /> entries with event id <paramref name="eventId" /> were logged.</summary>
-    public Task WaitForAsync(int eventId, int count = 1, TimeSpan? timeout = null)
+    public Task WaitForAsync(int eventId, int count = 1)
     {
         Task reached;
         lock (_gate)
@@ -97,7 +97,7 @@ internal sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILo
             reached = waiter.Task;
         }
 
-        return reached.WaitAsync(timeout ?? TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        return reached.WaitAsync(TestContext.Current.CancellationToken);
     }
 
     public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => _loggers.GetOrAdd(categoryName, _ => new CategoryLogger(this));

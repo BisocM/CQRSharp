@@ -55,7 +55,7 @@ public sealed class RabbitReceived
     }
 
     /// <summary>Completes once <paramref name="count" /> orders in all were received.</summary>
-    public Task WaitForAsync(int count, TimeSpan? timeout = null)
+    public Task WaitForAsync(int count)
     {
         Task reached;
         lock (_gate)
@@ -66,7 +66,7 @@ public sealed class RabbitReceived
             reached = waiter.Task;
         }
 
-        return reached.WaitAsync(timeout ?? TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        return reached.WaitAsync(TestContext.Current.CancellationToken);
     }
 }
 

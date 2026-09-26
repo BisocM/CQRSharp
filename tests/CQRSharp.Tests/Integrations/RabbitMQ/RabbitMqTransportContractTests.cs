@@ -1,8 +1,9 @@
 using CQRSharp.RabbitMQ;
 using CQRSharp.Testing;
+using CQRSharp.Tests.Core;
 using CQRSharp.Transports;
 using Microsoft.Extensions.DependencyInjection;
-using RabbitMQ.Client;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace CQRSharp.Tests.Integrations.RabbitMQ;
@@ -15,6 +16,7 @@ namespace CQRSharp.Tests.Integrations.RabbitMQ;
 public sealed class RabbitMqTransportContractTests(RabbitMqFixture fixture) : NotificationTransportContractTests
 {
     private readonly string _prefix = RabbitMqFixture.NewPrefix();
+    private readonly CapturingLoggerProvider _logs = new();
     private TcpProxy? _proxy;
     private ServiceProvider? _provider;
     private string? _queue;
@@ -28,6 +30,7 @@ public sealed class RabbitMqTransportContractTests(RabbitMqFixture fixture) : No
         _queue = await fixture.BindObserverAsync(Exchange, notificationName, $"{_prefix}.observer");
 
         var services = new ServiceCollection();
+        services.AddSingleton<ILoggerProvider>(_logs);
         services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore().UseRabbitMq(fixture.UriThrough(_proxy), r => r
             .Configure(options =>
             {
@@ -38,38 +41,37 @@ public sealed class RabbitMqTransportContractTests(RabbitMqFixture fixture) : No
             .Publish(notificationName))));
         _provider = services.BuildServiceProvider();
 
-        var runtime = _provider.GetRequiredKeyedService<RabbitMqTransportRuntime>(RabbitMqTransportOptions.DefaultTransportName);
-        await runtime.Publisher.WaitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        var runtime = Runtime;
+        await runtime.Publisher.WaitAsync(TestContext.Current.CancellationToken);
         return runtime.Transport;
     }
 
-    protected override async Task<ReceivedTransportMessage?> ReceiveAsync(TimeSpan timeout)
-    {
-        if (await fixture.GetAsync(_queue!, timeout) is not { } message) return null;
+    private RabbitMqTransportRuntime Runtime => _provider!.GetRequiredKeyedService<RabbitMqTransportRuntime>(RabbitMqTransportOptions.DefaultTransportName);
 
+    protected override async Task<ReceivedTransportMessage> ReceiveAsync(CancellationToken cancellationToken)
+    {
+        var message = await fixture.ReceiveAsync(_queue!);
         var properties = message.BasicProperties;
         return new ReceivedTransportMessage(
             Guid.TryParse(properties.MessageId, out var id) ? id : null,
             properties.Type ?? string.Empty,
-            message.Body.ToArray(),
+            message.Body,
             RabbitMqFixture.Header(properties, "cqrsharp-partition-key"),
             RabbitMqFixture.Header(properties, "traceparent"));
     }
 
+    // Unreachable once the transport has seen its connection go (8001), not only once the proxy dropped it.
     protected override async Task<bool> MakeUnavailableAsync()
     {
         _proxy!.Cut();
-        var publisher = _provider!.GetRequiredKeyedService<RabbitMqTransportRuntime>(RabbitMqTransportOptions.DefaultTransportName).Publisher;
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-        while (publisher.Current is not null && DateTime.UtcNow < deadline)
-            await Task.Delay(TimeSpan.FromMilliseconds(20), TestContext.Current.CancellationToken);
-        return publisher.Current is null;
+        await _logs.WaitForAsync(8001);
+        return Runtime.Publisher.Current is null;
     }
 
-    protected override Task RestoreAvailabilityAsync()
+    protected override async Task RestoreAvailabilityAsync()
     {
         _proxy!.Restore();
-        return Task.CompletedTask;
+        await Runtime.Publisher.WaitAsync(TestContext.Current.CancellationToken);
     }
 
     public override async ValueTask DisposeAsync()

@@ -1,6 +1,7 @@
 using System.Text;
 using CQRSharp.Tests.Integrations.EntityFrameworkCore.Providers;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using Testcontainers.RabbitMq;
 using Xunit;
 
@@ -95,17 +96,32 @@ public sealed class RabbitMqFixture : IAsyncLifetime
         await channel.BasicPublishAsync(exchange, routingKey, mandatory: false, properties, body);
     }
 
-    /// <summary>Takes the next message of <paramref name="queue" />, waiting up to <paramref name="timeout" />; null when none arrives.</summary>
-    public async Task<BasicGetResult?> GetAsync(string queue, TimeSpan timeout)
+    /// <summary>Takes the next message of <paramref name="queue" />, waiting until one arrives.</summary>
+    public async Task<ReceivedMessage> ReceiveAsync(string queue) => (await ReceiveAsync(queue, 1))[0];
+
+    /// <summary>
+    ///     Takes the next <paramref name="count" /> messages of <paramref name="queue" />, in the order they arrive, waiting
+    ///     until they have: a consumer acknowledges them as they come, and what arrives beyond them returns to the queue.
+    /// </summary>
+    public async Task<IReadOnlyList<ReceivedMessage>> ReceiveAsync(string queue, int count)
     {
-        await using var channel = await ChannelAsync();
-        var deadline = DateTime.UtcNow + timeout;
-        while (true)
+        var received = new List<ReceivedMessage>(count);
+        var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var channel = await Connection.CreateChannelAsync(new CreateChannelOptions(false, false, consumerDispatchConcurrency: 1),
+            TestContext.Current.CancellationToken);
+        var consumer = new AsyncEventingBasicConsumer(channel);
+        consumer.ReceivedAsync += async (_, delivery) =>
         {
-            if (await channel.BasicGetAsync(queue, autoAck: true) is { } message) return message;
-            if (DateTime.UtcNow >= deadline) return null;
-            await Task.Delay(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
-        }
+            if (received.Count == count) return;
+            received.Add(new ReceivedMessage(delivery.BasicProperties, delivery.Body.ToArray(), delivery.RoutingKey));
+            await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false);
+            if (received.Count == count) complete.TrySetResult();
+        };
+        await channel.BasicQosAsync(0, (ushort)count, global: false, TestContext.Current.CancellationToken);
+        var tag = await channel.BasicConsumeAsync(queue, autoAck: false, consumer, TestContext.Current.CancellationToken);
+        await complete.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await channel.BasicCancelAsync(tag, cancellationToken: TestContext.Current.CancellationToken);
+        return received;
     }
 
     /// <summary>How many ready messages <paramref name="queue" /> holds.</summary>
@@ -165,6 +181,9 @@ public sealed class RabbitMqFixture : IAsyncLifetime
             await _container.DisposeAsync();
     }
 }
+
+/// <summary>A message a test took off a queue: its properties, its body and the routing key it was published with.</summary>
+public sealed record ReceivedMessage(IReadOnlyBasicProperties BasicProperties, byte[] Body, string RoutingKey);
 
 /// <summary>
 ///     The RabbitMQ-backed tests: one <see cref="RabbitMqFixture" /> (one broker, one connection) for all of them. They run on

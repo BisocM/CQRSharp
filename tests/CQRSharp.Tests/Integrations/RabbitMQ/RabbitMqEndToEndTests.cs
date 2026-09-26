@@ -84,11 +84,10 @@ public sealed class RabbitMqEndToEndTests(RabbitMqFixture broker, RabbitMqPostgr
                 .Send(new PlaceRabbitOrderCommand { Seq = 1, Key = "order-1" }, TestContext.Current.CancellationToken)).IsSuccess.Should().BeTrue();
 
         await consumer.Received.WaitForAsync(1);
-        var copy = await broker.GetAsync($"{_prefix}.copy", TimeSpan.FromSeconds(30));
-        copy.Should().NotBeNull();
+        var copy = await broker.ReceiveAsync($"{_prefix}.copy");
 
         // The same message again, with its message id: the intake finds its record and stores nothing.
-        await broker.PublishRawAsync(Exchange, OrderName, copy!.Body.ToArray(),
+        await broker.PublishRawAsync(Exchange, OrderName, copy.Body,
             RabbitMqFixture.Properties(copy.BasicProperties.MessageId, copy.BasicProperties.Type,
                 copy.BasicProperties.Headers?.ToDictionary(h => h.Key, h => h.Value)));
         await consumer.Logs.WaitForAsync(5101);

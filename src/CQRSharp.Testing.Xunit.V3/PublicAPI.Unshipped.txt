@@ -1,6 +1,6 @@
 #nullable enable
 abstract CQRSharp.Testing.NotificationTransportContractTests.CreateTransportAsync(string! notificationName) -> System.Threading.Tasks.Task<CQRSharp.Transports.INotificationTransport!>!
-abstract CQRSharp.Testing.NotificationTransportContractTests.ReceiveAsync(System.TimeSpan timeout) -> System.Threading.Tasks.Task<CQRSharp.Testing.ReceivedTransportMessage?>!
+abstract CQRSharp.Testing.NotificationTransportContractTests.ReceiveAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Testing.ReceivedTransportMessage!>!
 CQRSharp.Testing.NotificationTransportContractTests
 CQRSharp.Testing.NotificationTransportContractTests.A_cancelled_send_throws() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.NotificationTransportContractTests.A_repeated_send_carries_the_same_message_id() -> System.Threading.Tasks.Task!
@@ -30,5 +30,4 @@ CQRSharp.Testing.ReceivedTransportMessage.TraceParent.init -> void
 virtual CQRSharp.Testing.NotificationTransportContractTests.DisposeAsync() -> System.Threading.Tasks.ValueTask
 virtual CQRSharp.Testing.NotificationTransportContractTests.InitializeAsync() -> System.Threading.Tasks.ValueTask
 virtual CQRSharp.Testing.NotificationTransportContractTests.MakeUnavailableAsync() -> System.Threading.Tasks.Task<bool>!
-virtual CQRSharp.Testing.NotificationTransportContractTests.ReceiveTimeout.get -> System.TimeSpan
 virtual CQRSharp.Testing.NotificationTransportContractTests.RestoreAvailabilityAsync() -> System.Threading.Tasks.Task!
