@@ -27,9 +27,9 @@ services.AddOpenTelemetry()
 
 | Name | Constant | What it carries |
 | --- | --- | --- |
-| `CQRSharp` | `CqrsTelemetry.ActivitySourceName` | Activity source: dispatch, queued-execution and outbox-delivery spans. |
+| `CQRSharp` | `CqrsTelemetry.ActivitySourceName` | Activity source: dispatch, queued-execution, outbox-delivery and transport-receive spans. |
 | `CQRSharp.Pipelines` | `CqrsTelemetry.PipelinesActivitySourceName` | Activity source: the built-in behaviors' spans. |
-| `CQRSharp` | `CqrsTelemetry.MeterName` | Meter: [dispatch, notification and outbox instruments](#dispatch-metrics). |
+| `CQRSharp` | `CqrsTelemetry.MeterName` | Meter: [dispatch, notification, outbox and transport instruments](#dispatch-metrics). |
 | `CQRSharp.Core.BackgroundTasks` | `CqrsTelemetry.BackgroundTasksMeterName` | Meter: [background queue instruments](#queue-metrics). |
 
 `CqrsTelemetry.ActivitySourceNames` and `CqrsTelemetry.MeterNames` list them all. The instrument names are constants on
@@ -49,7 +49,8 @@ path.
 | `CQRS Query <Type>` | Internal | `cqrsharp.request.type` | One per `Send` of a query; status as above. |
 | `CQRS Stream <Type>` | Internal | `cqrsharp.request.type` | One per enumeration of a stream. It is current on every step of the stream, so per-item child spans (EF Core, HTTP) and outbox trace parents attach to it. Status `Error` when the stream throws, and when its consumer stops enumerating early. |
 | `CQRS Queued <Type>` | Internal | `cqrsharp.request.type` | A `RunMode.Queued` dispatch, parented to the caller's span; the request's own span runs under it. |
-| `CQRS Outbox Dispatch` | Consumer | `cqrsharp.notification.name`, `cqrsharp.notification.handler`, `cqrsharp.partition_key` (when partitioned) | One per outbox message delivered to its handler, parented to the span that published it. Status `Error` for a failed attempt or a dead letter. |
+| `CQRS Outbox Dispatch` | Consumer | `cqrsharp.notification.name`, `cqrsharp.notification.handler`, `cqrsharp.partition_key` (when partitioned); for a message sent through a notification transport, also what the transport sets (`CQRSharp.RabbitMQ`: `messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`) | One per outbox message delivered to its handler, or sent through a [transport](rabbitmq.md), parented to the span that published it. Status `Error` for a failed attempt, a dead letter, or a transport that could not reach its destination. |
+| `CQRS Transport Receive` | Consumer | `cqrsharp.transport`, `cqrsharp.notification.name`, `messaging.message.id` (when the message has one) | One per notification a transport received and handed to the intake, parented to the sender's trace when the message carries it. Status `Error` for a message that could not be read, a notification unknown here, or an intake that failed. The outbox messages it stores continue its trace. |
 
 `<Type>` is the request type's short name (`Type.Name`); the attribute carries the full name. A traced `Send` does not
 leave its span as the caller's `Activity.Current`, so consecutive sends are siblings.
@@ -74,6 +75,11 @@ CQRSharp keeps the trace across its asynchronous boundaries:
 - The **outbox** stores the W3C `traceparent` of the span that published a message (`OutboxMessage.TraceParent`: the
   request's span when a handler published it). The processor parents the `CQRS Outbox Dispatch` span to it, so the
   delivery belongs to the original trace even when it runs minutes later in another process.
+- A **notification transport** carries the trace across a broker. A send propagates the `CQRS Outbox Dispatch` span as
+  the message's `traceparent` (and `tracestate` when it has one), or, with no listener recording that span, the stored
+  `traceparent` of the publishing span, so the trace stays connected with tracing off in the processor. The receiving
+  intake parents its `CQRS Transport Receive` span to it, and the local deliveries to that span. The outbox does not
+  store a trace state, so a `tracestate` is propagated only from the dispatch span, where it is usually empty.
 
 ## Attributes
 
@@ -85,8 +91,9 @@ A key means the same thing, with the same value, wherever it appears.
 | `cqrsharp.request.kind` | `RequestKind` | `command`, `query` or `stream` | `cqrsharp.request.duration` |
 | `cqrsharp.outcome` | `Outcome` | Listed with each instrument | `cqrsharp.request.duration`, the outbox instruments |
 | `cqrsharp.notification.type` | `NotificationType` | The notification type's full name, in the form of `cqrsharp.request.type` | `cqrsharp.notifications.published` |
-| `cqrsharp.notification.name` | `NotificationName` | The stable name the message is stored under (`[NotificationName]`) | Outbox dispatch span, outbox instruments |
-| `cqrsharp.notification.handler` | `NotificationHandler` | The stable name of the handler the message is addressed to | Outbox dispatch span, outbox instruments |
+| `cqrsharp.notification.name` | `NotificationName` | The stable name the message is stored under (`[NotificationName]`) | Outbox dispatch span, outbox instruments, transport receive span, transport instruments |
+| `cqrsharp.notification.handler` | `NotificationHandler` | The stable name of the handler the message is addressed to, or of the notification transport it is sent through | Outbox dispatch span, outbox instruments |
+| `cqrsharp.transport` | `Transport` | The name of the notification transport a notification was received through | Transport receive span, transport instruments |
 | `cqrsharp.partition_key` | `PartitionKey` | The message's partition key | Outbox dispatch span, when partitioned |
 | `cqrsharp.transaction.isolation_level` | `IsolationLevel` | The isolation level the transaction began with | `UoW.Transaction` |
 | `cqrsharp.timeout_ms` | `TimeoutMilliseconds` | The request's time budget, in milliseconds | `Timeout.Guard` |
@@ -110,6 +117,8 @@ The **`CQRSharp`** meter (`CqrsTelemetry.MeterName`) carries these instruments (
 | `cqrsharp.outbox.dead_letters` | Gauge (`{message}`): dead-lettered messages awaiting an operator | — |
 | `cqrsharp.outbox.scheduled` | Gauge (`{message}`): messages published for later delivery whose due time has not come | — |
 | `cqrsharp.outbox.lag` | Gauge (`s`): the age of the oldest undelivered message; a scheduled one ages from its due time | — |
+| `cqrsharp.transport.received` | Counter (`{notification}`): notifications a [transport](rabbitmq.md) received and handed to the intake | `cqrsharp.transport`, `cqrsharp.notification.name`, `cqrsharp.outcome` (see below) |
+| `cqrsharp.transport.receive.duration` | Histogram (`s`): taking one received notification into the outbox | same as `cqrsharp.transport.received` |
 
 The outbox outcomes are:
 
@@ -120,9 +129,26 @@ The outbox outcomes are:
 | `unrecorded` | Delivered, but marking it processed failed; it is delivered again once its lease runs out. |
 | `retry` | The handler failed; the attempt was recorded and the message backs off. |
 | `deferred` | This instance does not know the notification or the handler; handed back for another instance without counting an attempt. |
+| `unavailable` | A notification transport could not reach its destination (no connection, a blocked connection, a nack, no confirm in time); sent again later without counting an attempt. |
 | `dead_letter` | Dead-lettered. |
 | `claim_lost` | The lease ran out before the message was dispatched, or before its outcome was recorded; another processor holds it now. |
 | `not_started` | A step before the handler (renewing the lease, checking the inbox, beginning the delivery's transaction) failed; no attempt was charged, and the message is claimable again once its lease runs out. |
+
+For a message sent through a transport, `cqrsharp.notification.handler` is the transport's name, `processed` means the
+destination confirmed it, `retry` and `dead_letter` a rejection. A rising `unavailable` rate is an outage of the broker,
+which the lag gauge shows growing too.
+
+The transport receive outcomes are:
+
+| `cqrsharp.outcome` | Meaning |
+| --- | --- |
+| `stored` | Stored for the local handlers. |
+| `duplicate` | Taken in before: the inbox knows the message id. |
+| `no_subscribers` | No local handler receives it; nothing stored. |
+| `unreadable` | No notification name, or a payload the serializer cannot read. |
+| `unknown_held` | A notification this application does not know, held back for an instance that may know it. |
+| `unknown` | The same, past the unknown-recipient grace period. |
+| `failed` | The intake threw (the store or the inbox is unreachable). |
 
 Request *counts* and *error rates* come from the duration histogram: its count, split by `cqrsharp.outcome`. A command
 that **returns** a failed `CommandResult` is a `failure`, and so is a stream its consumer stops early or that faults.
@@ -221,6 +247,7 @@ time is measured with the injected `TimeProvider`. It sorts every failure:
 | 1204 | Warning | A request's first dispatch met a configuration warning (`CQRCONF006`): `{Code}`, `{RequestName}`, `{Message}`. |
 | 1205 | Warning | A notification's first publish under the outbox met a configuration warning (`CQRCONF003`, `CQRCONF011`): `{Code}`, `{NotificationName}`, `{Message}`. |
 | 1206 | Error | A notification's first publish to the outbox met a configuration error that does not fail it (`CQRCONF012`): `{Code}`, `{NotificationName}`, `{Message}`. |
+| 1207 | Warning | The notification transports' first use met a configuration warning (`CQRCONF017`): `{Code}`, `{TransportName}`, `{Message}`. |
 
 **Logging behavior** (`CQRSharp.Pipelines.LoggingBehavior` / `StreamLoggingBehavior`).
 
@@ -331,6 +358,20 @@ time is measured with the injected `TimeProvider`. It sorts every failure:
 | 5026 | Warning | Deferring a message failed; it is claimable again once its lease runs out. |
 | 5027 | Error | A delivery committed, but storing the notifications its handler published failed; they are lost. |
 | 5028 | Warning | A step before the handler (renewing the claim, checking the inbox, beginning the delivery's transaction) failed; no attempt is charged, and the message is claimable again once its lease runs out. |
+| 5029 | Information | A notification transport could not reach its destination: `{HandlerName}` (the transport), `{Reason}`; deferred until `{NotBefore}`, no attempt charged. |
+| 5030 | Error | A notification transport rejected a message permanently (`{Reason}`); it is dead-lettered. |
+| 5031 | Warning | A notification transport rejected a message on `{Attempt}` of `{MaxAttempts}`, with the `{Reason}`; the last one is also 5015. A send that threw is 5014, with the exception. |
+
+**Notification intake** (`CQRSharp.Core.Transports.NotificationIntake`): what a transport received, taken into the
+outbox; see [RabbitMQ](rabbitmq.md#consuming).
+
+| Id | Level | Event |
+| --- | --- | --- |
+| 5100 | Debug | Stored a received notification: `{NotificationType}` (the stable name), `{MessageId}` (as the sender gave it), `{Source}`, `{Count}` outbox messages. |
+| 5101 | Debug | A redelivery the inbox recognised; nothing stored again. |
+| 5102 | Debug | No local handler receives the notification; nothing stored. |
+| 5103 | Warning | Stored, but recording the intake in the inbox failed; a redelivery would be stored again. |
+| 5104 | Error | Rolling back the intake's transaction failed. |
 
 **EF Core stores** (`CQRSharp.EntityFrameworkCore.*`).
 
@@ -354,5 +395,34 @@ time is measured with the injected `TimeProvider`. It sorts every failure:
 | --- | --- | --- |
 | 7000 | Information | Mapped an exception the caller has to act on to a ProblemDetails response. |
 | 7001 | Warning | Mapped `RequestTimeoutException` or `BackgroundTaskRejectedException`: the server could not serve the request. |
+
+**RabbitMQ transport** (`CQRSharp.RabbitMQ.*`); see [RabbitMQ](rabbitmq.md). `{Role}` is `publish` or `consume`,
+`{TransportName}` the transport's name.
+
+| Id | Level | Event |
+| --- | --- | --- |
+| 8000 | Information | A connection is open, with its `{Endpoint}`. |
+| 8001 | Warning | A connection was lost, with the `{Reason}`; reconnecting. |
+| 8002 | Information | A connection is open again. |
+| 8003 | Warning | Opening a connection failed, with the exception; retrying in `{Delay}`. |
+| 8004 | Warning | The broker blocked a connection (`{Reason}`, a resource alarm); sends are deferred. |
+| 8005 | Information | The broker unblocked a connection. |
+| 8010 | Debug | Declared `{Topology}`. |
+| 8011 | Error | Declaring `{Topology}` failed, with the `{Detail}`: the broker refused it (a queue that exists with other arguments), or a bound type has no name. |
+| 8020 | Information | Consuming a `{Queue}`, with its `{Prefetch}` and `{Lanes}`. |
+| 8021 | Information | Stopping the consumer of a queue. |
+| 8022 | Warning | A consumer stopped (its channel closed, or the broker cancelled the subscription): the `{Reason}`; consuming again in `{Delay}`. |
+| 8023 | Warning | Released `{Count}` unacknowledged messages at shutdown; the broker delivers them again. |
+| 8030 | Error | A message's payload cannot be read; rejected to the dead-letter queue. |
+| 8031 | Information | A notification this application does not know is held for `{RetryAfter}` for an instance that knows it. |
+| 8032 | Error | A notification nobody took in within the grace period; rejected to the dead-letter queue. |
+| 8033 | Warning | Taking a message in failed on `{Attempt}`, with the exception; held and tried again in `{Delay}`. |
+| 8034 | Error | A message without a `type` property; rejected to the dead-letter queue. |
+| 8035 | Warning | A message held for `{MaxHold}` without being taken in; returned to the queue. |
+| 8036 | Error | A consumer failed, with the exception; consuming again in `{Delay}`. |
+| 8037 | Error | A message could not be read off the channel, with the exception; rejected to the dead-letter queue. |
+| 8038 | Error | Taking a message in failed unexpectedly, with the exception; left unacknowledged for the broker to deliver again. |
+| 8040 | Debug | A publish was returned: no queue is bound to its `{Exchange}` and `{RoutingKey}` (the send's outcome is 5031, or sent when the publication allows it). |
+| 8041 | Debug | The broker nacked a publish (the send's outcome is 5029). |
 
 The Redis stores write no logs of their own.

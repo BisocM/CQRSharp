@@ -14,6 +14,7 @@ notification also commits **atomically** with the data it announces.
 - [One message per handler](#one-message-per-handler)
 - [Ordered delivery](#ordered-delivery)
 - [Scheduled publishing](#scheduled-publishing)
+- [Transports: leaving the process](#transports-leaving-the-process)
 - [The processor](#the-processor)
 - [The inbox: effectively-once delivery](#the-inbox-effectively-once-delivery)
 - [Dead letters](#dead-letters)
@@ -56,6 +57,8 @@ services.AddCqrsGenerated(b => b
 | `UseRedis(...)` | The Redis store (`CQRSharp.Redis`); see [Integrations](integrations.md#redis). |
 | `UseEntityFrameworkCore<TContext>()` | The EF Core store (`CQRSharp.EntityFrameworkCore`); see [Integrations](integrations.md#entity-framework-core). |
 | `UseStore(Action<IServiceCollection>)` | Registers any `IOutboxStore` (and its `IInboxStore`). The hook the integration packages build on. |
+| `UseRabbitMq(...)` | Adds the RabbitMQ transport (`CQRSharp.RabbitMQ`): notifications that leave the process through the outbox, and queues that bring them in; see [RabbitMQ](rabbitmq.md). |
+| `AddTransport(Action<IServiceCollection>)` | Registers a notification transport; unlike `UseStore` it replaces nothing, so several may be added. The hook transport packages build on; experimental (`CQREXP001`). |
 | `ConfigureProcessor(Action<OutboxProcessorOptions>)` | Tunes the [processor](#the-processor). Repeated calls, across every `UseOutbox`, all run in call order. |
 
 A chosen store replaces every outbox and inbox store already registered, whatever the order relative to
@@ -240,7 +243,8 @@ The fan-out follows the notification's **runtime type** `R`, the same rule an in
 [Notifications](notifications.md)): every generated handler declared for `R`, a base type or an interface of `R`, each
 once, for its nearest declared type. So:
 
-- A notification **nothing subscribes to** stores no message at all.
+- A notification **nothing subscribes to** stores no message at all, unless a [transport](#transports-leaving-the-process)
+  forwards it: then it stores the transport's message alone.
 - A handler declared for a base type or interface (`INotificationHandler<INotification>`) gets its own message for every
   durable notification assignable to it.
 - Fan-out is decided when the notification is published: a handler added later receives only what is published after
@@ -348,6 +352,38 @@ parented to the span that scheduled it, so a trace shows the wait between the tw
 To assert on scheduling in a unit test, `RecordingCqrsDispatcher` records each scheduled publish with its due time (see
 [The testing packages](testing-package.md#recordingcqrsdispatcher-reference)).
 
+## Transports: leaving the process
+
+A **notification transport** is one more subscriber of the outbox, outside the process: a message broker. A durable
+notification a transport forwards is stored with one extra message, addressed to the transport by its name, after the
+local handlers' messages and with their stamps (notification id, creation or due time, partition key, trace parent). The
+processor hands that message to the transport as stored, byte for byte, without deserializing it, without behaviors and
+without the inbox, and settles it by what the transport answers:
+
+| Transport answer | The message |
+| --- | --- |
+| Sent | Processed. |
+| Unavailable (the destination cannot be reached) | [Deferred](#unknown-notifications-and-handlers) until it may be back, **without an attempt** (outcome `unavailable`, log 5029): an outage never dead-letters anything. |
+| Rejected | An attempt with back-off (5031); a dead letter at the last. |
+| Rejected permanently | A dead letter at once (5030). |
+| The send threw | An attempt, like a failed handler (5014). |
+
+So every guarantee of the outbox covers the send: atomic with the data when the store joins the unit of work, at least
+once, ordered per (partition key, transport), leased, retried, dead-lettered and measured. The transport's name shares
+the namespace of the handler names: it must not change while messages addressed to it may be stored, and must not be a
+handler's name (`CQRCONF015`). A message addressed to a transport this instance does not have is deferred and
+dead-lettered like one for a handler it does not have. A [scheduled](#scheduled-publishing) notification is sent when it
+falls due.
+
+The other direction goes through the **intake** (`INotificationIntake`, registered by `AddCqrsGenerated`): a transport's
+consumer hands it each notification it receives, and the intake deduplicates it by its message id through the inbox and
+stores one message per **local** handler, never one for a transport, so what comes in is not sent back out. With a unit
+of work whose transaction both the store and the inbox join (the EF Core store, inbox and unit of work over one
+`DbContext`), the messages and the dedupe record commit together, and the intake is exactly-once.
+
+The transport package in the box is [RabbitMQ](rabbitmq.md). The extension point (`CQRSharp.Transports`,
+`AddTransport`) is experimental in 5.x (`CQREXP001`).
+
 ## The processor
 
 `OutboxProcessorOptions` (namespace `CQRSharp`) tunes the background processor. Invalid values fail host start.
@@ -436,8 +472,8 @@ timeout.
 
 ## Dead letters
 
-A message that used up its attempts, whose payload cannot be read, or whose notification or handler no instance knew
-within the grace period is **dead-lettered**: kept with its payload, its `LastError`, its `AttemptCount` and the time it
+A message that used up its attempts, whose payload cannot be read, whose notification or handler no instance knew
+within the grace period, or that a transport rejected permanently is **dead-lettered**: kept with its payload, its `LastError`, its `AttemptCount` and the time it
 failed (`FailedAt`), and counted on the gauges and the health check. `IOutboxStore` gives an operator three tools for
 it:
 
@@ -454,7 +490,8 @@ await store.PurgeDeadLettersAsync(failedBefore: DateTime.UtcNow.AddDays(-30), ct
 ```
 
 A requeued message returns to pending with zero attempts, no back-off and no failure time (its `LastError` is kept as
-the record), and takes its place in its partition again by creation time. Dead letters are kept until they are requeued
+the record), and takes its place in its partition again by creation time. A transport's dead letter (its `HandlerName` is
+the transport's name) is sent again once requeued. Dead letters are kept until they are requeued
 or purged, in every store; set the store's `DeadLetterRetention` to have old ones deleted automatically.
 
 ## Backlog, gauges and the health check

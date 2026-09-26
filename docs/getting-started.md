@@ -30,11 +30,13 @@ dotnet add package Microsoft.Extensions.Hosting
 ```
 
 ASP.NET Core and Worker Service projects already have it. For durable outbox and idempotency stores, add an integration
-package as well ([Integrations](integrations.md)):
+package as well ([Integrations](integrations.md)), and a transport to carry notifications between services
+([RabbitMQ](rabbitmq.md)):
 
 ```bash
 dotnet add package CQRSharp.Redis                 # Redis stores
 dotnet add package CQRSharp.EntityFrameworkCore   # EF Core (relational) stores and unit of work
+dotnet add package CQRSharp.RabbitMQ              # RabbitMQ transport for integration events
 ```
 
 CQRSharp targets **net8.0, net9.0 and net10.0**. `CQRSharp.Abstractions`, the contracts package, also targets

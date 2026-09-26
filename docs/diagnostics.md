@@ -2,7 +2,8 @@
 
 CQRSharp catches mistakes at four moments: **as you type** (Roslyn analyzers), **at build** (generator diagnostics),
 **at host start** (the startup validator, on by default in the Development environment) and **at first use** (the
-first dispatch of a request, the first publish of a notification, in every environment). A runtime **introspection
+first dispatch of a request, the first publish of a notification, the first use of a notification transport, in every
+environment). A runtime **introspection
 API** shows how every request is wired, and an **outbox health check** reports the outbox's backlog.
 
 - [Compile-time analyzers (CQRA)](#compile-time-analyzers-cqra)
@@ -12,6 +13,7 @@ API** shows how every request is wired, and an **outbox health check** reports t
 - [The introspection API](#the-introspection-api)
 - [Binding issues (CQRDIAG)](#binding-issues-cqrdiag)
 - [Health checks](#health-checks)
+- [Experimental APIs (CQREXP)](#experimental-apis-cqrexp)
 - [Removed diagnostics](#removed-diagnostics)
 
 Every id is stable: a removed id is never reused.
@@ -121,10 +123,16 @@ anything: some 15 ms for the 18 requests of the Native AOT sample, and 100 to 23
 | `CQRCONF010` | Error | An outbox mode is enabled and two modules give different notification types the same `[NotificationName]`, so a stored message could not be read back as the type it was stored as. The composition root's type keeps the name; the other is not durable. |
 | `CQRCONF011` | Warning | An outbox mode is enabled and handlers registered by hand exist for a durable notification. They have no outbox subscription, so a publish that goes through the outbox never reaches them. Declare them where the source generator runs. |
 | `CQRCONF012` | Error | An outbox mode is enabled and the handlers registered by hand for a notification cannot be constructed (a missing dependency), so the `CQRCONF011` check cannot tell them apart. Publishing the notification in-process fails the same way. Reported instead of aborting host start, so `WarnOnly` still starts. |
+| `CQRCONF013` | Error | A [notification transport](rabbitmq.md) is registered but the outbox mode is `Disabled`. A transport forwards what the outbox stores and stores what it receives in the outbox, so nothing would ever reach it or come in. Turn the outbox on with `UseOutbox(...)`. When it is reported, the other transport rules are not checked. |
+| `CQRCONF014` | Error | A transport is configured to forward a notification type the registered serializer does not name, or to forward a name no module's notification has (checked under the generated serializer only), or to take in a type the serializer does not name. It could never be stored for the transport, or read back when it arrives. Name it with `[NotificationName]` (or have the custom serializer name it). |
+| `CQRCONF015` | Error | A transport's name is empty or longer than 256 characters, or is also the name of another transport or of a notification handler, so an outbox message addressed to it is ambiguous. Give each transport a unique name. |
+| `CQRCONF016` | Warning | The outbox mode is `Transactional` and a transport forwards notifications: a forwarded notification published with no transaction active fails (it would be delivered in-process, where no transport can take it). Whether that happens depends on the call sites. Publish them inside transactional requests, or use the `Enabled` mode. |
+| `CQRCONF017` | Warning | A transport takes in a notification (bound by type, or by an exact name the generated serializer knows) that no local handler receives, so every one received is acknowledged and dropped; or it binds an exact name no module's notification has, so every one received is held back as unknown and then rejected. A binding by pattern is not checked. |
 
 `CQRCONF005` and `CQRCONF006` are not reported for a request whose behaviors could not be resolved (`CQRDIAG004`), nor
 when the behavior is registered but the request is exempted from it. Every check asks the container whether a service
-is registered rather than building it, so validation opens no connection.
+is registered rather than building it, or builds only what opens no connection (a transport connects when the host
+starts), so validation opens no connection.
 
 The validator logs every issue with its code (event 1200 for an error, 1201 for a warning), then a summary (1203), or a
 pass (1202). What happens next follows the policy:
@@ -152,7 +160,7 @@ The rule and its message are the startup validator's own, so a code means the sa
 is kept with the plan and fails **every** dispatch or publish of that type with an `InvalidOperationException` whose
 message starts with `CQRSharp configuration error <code>:`; a warning is logged once, under the category
 `CQRSharp.Core.Diagnostics.CqrsConfiguration` (event 1204 for a request, 1205 for a notification; 1206 for an error that
-does not fail the publish).
+does not fail the publish; 1207 for a notification transport).
 
 | ID | At first use | Why |
 | --- | --- | --- |
@@ -166,6 +174,11 @@ does not fail the publish).
 | `CQRCONF010` | A publish that would go to the outbox of a handled notification that lost its `[NotificationName]` to another module's type fails, every time. Also reported at build as `CQRGEN020`. | Its declared durability cannot be honored. |
 | `CQRCONF011` | The first publish that goes to the outbox of a durable notification with handlers registered by hand logs a warning; delivery is unchanged. | The handlers still run when it is dispatched in-process. |
 | `CQRCONF012` | The same first publish logs an error when those handlers cannot be constructed; the publish, which constructs none of them, is not failed. | An in-process publish of the type fails with the same exception. |
+| `CQRCONF013` | **Always**, in every environment: a transport package validates its options at host start, and this is one of them, so host start fails (for `CQRSharp.RabbitMQ`, as an `OptionsValidationException`). | Nothing would ever reach the transport. |
+| `CQRCONF014` | A publish of a type a transport forwards but the serializer does not name fails, every time (instead of staying in-process). A name no module has, or an unnamed type taken in, has no publish to fail: the startup validator reports it, and the RabbitMQ consumer bound to such a type does not start and reports it through its health check. | It was meant to leave the process, and never can. |
+| `CQRCONF015` | Storing any outbox message fails, every time, and the outbox processor fails as it starts. | A message addressed to the name could reach the wrong recipient. |
+| `CQRCONF016` | Under `Transactional`, a publish of a notification a transport forwards, with no transaction active, fails, every time; any other is delivered in-process as before. | Its forwarding cannot be honored. |
+| `CQRCONF017` | Logged once (event 1207) when the transports are first used, which is as the host starts. | A binding that brings in what nothing handles costs broker traffic and nothing else. |
 
 ## The introspection API
 
@@ -244,6 +257,17 @@ services.AddHealthChecks().AddCqrsOutbox();   // name "cqrsharp.outbox"
 Its thresholds, statuses and data are described in
 [The outbox](outbox.md#backlog-gauges-and-the-health-check). Configuration is not a health signal: use the startup
 validator for it.
+
+## Experimental APIs (CQREXP)
+
+An API marked `[Experimental]` works and is supported, but may still change shape in a minor release, which the rest of
+the public API never does. The compiler reports every use of it with its id, as an error; a project that builds on it
+acknowledges that with `<NoWarn>$(NoWarn);CQREXP001</NoWarn>` (or a `#pragma warning disable CQREXP001` where it is
+used).
+
+| ID | API | Why experimental |
+| --- | --- | --- |
+| `CQREXP001` | The notification transport extension point: `CQRSharp.Transports` (`INotificationTransport`, `INotificationIntake` and their records), `OutboxStoreBuilder.AddTransport(...)`, and `NotificationTransportContractTests` / `ReceivedTransportMessage` in `CQRSharp.Testing.Xunit.V3`. | It is new, with one implementation so far ([RabbitMQ](rabbitmq.md)); the next major release may reshape it after real use (a trace state stored with the message, a destination kind separate from handler names). Using a transport package, `UseRabbitMq(...)` for one, reports nothing: only code that implements or calls the extension point does. |
 
 ## Removed diagnostics
 

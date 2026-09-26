@@ -5,8 +5,9 @@ All notable changes to CQRSharp are documented here. This project adheres to [Se
 ## [5.1.0]
 
 A minor release: no breaking changes to the public API or to behavior, so a 5.0 application upgrades by bumping the
-package versions. Notifications can be scheduled for later delivery through the outbox. Package validation now checks
-every package against 5.0.0.
+package versions. Notifications can be scheduled for later delivery through the outbox, and carried between services
+through RabbitMQ with the new `CQRSharp.RabbitMQ` package, built on a notification transport extension point. Package
+validation now checks every package against 5.0.0.
 
 ### Upgrading from 5.0.0
 
@@ -21,6 +22,11 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
    implementations that throw `NotSupportedException`. Implement them to forward scheduled publishes.
 3. **A custom outbox gauge or health probe** built on `OutboxBacklog` sees scheduled messages that are not due in the new
    `ScheduledCount`, not in `PendingCount` or the lag (only a store that implements `ISchedulingOutboxStore` has any).
+
+A notification transport, such as the RabbitMQ one, is added only by the application that wants it; an application
+without one runs exactly as before, and its outbox messages, schema and logs are unchanged. When a transport is added to
+a fleet, a message addressed to it that an instance without it claims is deferred for an instance that has it, as a
+message for a handler added in a newer version is: add the transport to every instance that processes the outbox.
 
 ### Added
 
@@ -40,6 +46,43 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
 - **`OutboxBacklog.ScheduledCount`**, the `cqrsharp.outbox.scheduled` gauge (`CqrsTelemetry.Instruments.OutboxScheduled`)
   and the outbox health check's `scheduled` datum: the scheduled messages whose due time has not come, which are not
   late and so stay out of the pending count and the lag.
+- **RabbitMQ transport** (`CQRSharp.RabbitMQ`, a new package). `UseRabbitMq(...)` inside `UseOutbox(...)` (or
+  `AddCqrsRabbitMq(...)`), on a connection URI, an `IConnection`, or a factory of either, adds a transport that
+  **publishes** the notifications it is told to (`Publish<T>()`, `Publish("name")`) through the outbox, as mandatory,
+  persistent, broker-confirmed publishes to a durable topic exchange with the notification's name as the routing key,
+  in order per partition key, deferred without an attempt while the broker is unreachable, and rejected (retried, then
+  dead-lettered in the outbox) when no queue is bound unless the publication `AllowUnroutable()`; and **consumes** the
+  queues it is told to (`Consume("queue", q => q.Bind<T>())`), taking each message into the outbox through the intake
+  (deduplicated by message id, acknowledged only once stored, ordered per key across lanes), dead-lettering what cannot
+  be read, has no type or stays unknown, holding what cannot be taken in yet for at most `MaxHold`, and releasing what it
+  holds at shutdown. The topology (quorum queues with a delivery limit and a dead-letter queue, the exchanges, the
+  bindings) is declared idempotently unless `AssumeExistingTopology()`. Connections are opened in the background and
+  reopened when lost, never failing the host; `AddCqrsRabbitMq()` on the health checks builder reports them and every
+  consumer. With the EF Core store, inbox and unit of work, a notification is published atomically with the request's
+  data and taken in exactly once. Native-AOT compatible: a Native AOT publish of an application that publishes and
+  consumes through it reports no trim or AOT warning on net8.0 and net10.0. See [RabbitMQ](docs/rabbitmq.md).
+- **Notification transports**, an extension point in `CQRSharp.Abstractions` (namespace `CQRSharp.Transports`),
+  experimental in 5.x (`[Experimental("CQREXP001")]`): `INotificationTransport` (`Name`, `Declaration`, `Routes`,
+  `SendAsync` returning a `TransportSendResult`: Sent, Unavailable or Rejected) and `INotificationIntake`
+  (`AcceptAsync(InboundNotification)` returning an `IntakeResult`), registered with `OutboxStoreBuilder.AddTransport(...)`.
+  A notification a transport routes is stored with one extra outbox message addressed to the transport, after the local
+  handlers' messages and with their stamps (a scheduled one included); the processor hands it to the transport as stored,
+  without deserializing it, without behaviors and without the inbox. The intake stores a received notification once per
+  local handler, never for a transport, deduplicated through the inbox, in one commit with the dedupe record when the
+  store and the inbox join the unit of work. See [Transports](docs/outbox.md#transports-leaving-the-process).
+- **`NotificationTransportContractTests`** (`CQRSharp.Testing.Xunit.V3`, experimental with the extension point): the
+  conformance suite for a notification transport, which the RabbitMQ transport passes.
+- **Configuration checks** for transports: `CQRCONF013` (a transport while the outbox is off), `CQRCONF014` (a forwarded
+  or bound type the serializer does not name, or a forwarded name no module has; a publish of such a type fails),
+  `CQRCONF015` (a transport name that is invalid or clashes with a handler's or another transport's; nothing is stored
+  and the processor does not start), `CQRCONF016` (under `Transactional`, a forwarded notification published outside a
+  transaction fails; a warning at startup) and `CQRCONF017` (a bound notification no local handler receives, a warning,
+  logged as event 1207 when the transports are first used). See [Diagnostics](docs/diagnostics.md#startup-validation-cqrconf).
+- **Transport telemetry.** The `cqrsharp.transport.received` counter and `cqrsharp.transport.receive.duration` histogram
+  (`CqrsTelemetry.Instruments.TransportReceived` / `TransportReceiveDuration`), tagged with the new `cqrsharp.transport`
+  (`CqrsTelemetry.Tags.Transport`); the `CQRS Transport Receive` span, parented to the sender's trace; the outbox outcome
+  `unavailable`; and the log events 5029 to 5031 (a transport send deferred, rejected permanently, rejected), 5100 to
+  5104 (the intake) and the 8000 block (the RabbitMQ transport). See [Observability](docs/observability.md).
 - **`RecordingCqrsDispatcher`** records scheduled publishes as `DispatchKind.ScheduledPublish`, with their due time in
   `DispatchedMessage.DueAt`, listed by `ScheduledNotifications` / `Scheduled<T>()`. The new
   `RecordingCqrsDispatcher(TimeProvider)` constructor dates a `PublishAfter` by a fake clock.
@@ -53,12 +96,21 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
   its time (`RequestContextBenchmarks`); allocations are unchanged. `CreatedAt` keeps its meaning, the time the request
   was sent, fixed then and not when it is read; a context a factory hydrates asynchronously is still stamped when the
   factory completes, and one built with an explicit time keeps it.
+- The analyzers treat `CQRSharp.RabbitMQ` as one of CQRSharp's own packages, so an application that references it keeps
+  its configuration [in view](docs/diagnostics.md#configuration-in-view) for `CQRA018` to `CQRA020`.
+- The Native AOT canary runs against a RabbitMQ broker: `CQRSharp.Sample` publishes an integration event through the
+  outbox from one application and takes it in from its queue in another, as native binaries for net8.0 and net10.0. The
+  validate job runs the RabbitMQ tests against a RabbitMQ service container.
 - Dependabot opens its NuGet and GitHub Actions pull requests monthly, and never for the Microsoft.Extensions and
   Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
   raised together at a release.
 
 ### Documentation
 
+- **[RabbitMQ](docs/rabbitmq.md)**: the transport end to end, from publishing and consuming to topology, ordering,
+  delivery guarantees, the wire format for services outside CQRSharp, and the failure modes; the outbox page gains
+  [Transports](docs/outbox.md#transports-leaving-the-process), and diagnostics the
+  [experimental APIs](docs/diagnostics.md#experimental-apis-cqrexp).
 - **[Migrating from MediatR](docs/migrating-from-mediatr.md)**: a step-by-step guide for moving a MediatR 12.x
   codebase over, including running both side by side during the migration, a concept map, and what has no equivalent.
 - **AI Use Disclosure.** The README and the documentation index state that all of CQRSharp's documentation, including

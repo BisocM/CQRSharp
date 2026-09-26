@@ -41,6 +41,8 @@ start are in the [repository README](../README.md); the namespaces are mapped [b
 **Integrations**
 - [Redis and EF Core stores](integrations.md): the `CQRSharp.Redis` and `CQRSharp.EntityFrameworkCore` stores and the EF
   Core unit of work.
+- [RabbitMQ](rabbitmq.md): integration events between services through the outbox, with `CQRSharp.RabbitMQ`: publishing,
+  consuming, topology, ordering, guarantees and operations.
 - [ASP.NET Core](aspnetcore.md): `CommandResult` to `IResult`, exceptions to ProblemDetails, and the `Idempotency-Key`
   header.
 - [FluentValidation](fluentvalidation.md): running FluentValidation validators inside the validation behavior.
@@ -50,7 +52,7 @@ start are in the [repository README](../README.md); the namespaces are mapped [b
   startup checks, the introspection API, and the outbox health check.
 - [Observability](observability.md): tracing, metrics, and log event ids.
 - [Testing](testing.md): testing handlers, the dispatcher and time-dependent behavior.
-- [The testing packages](testing-package.md): `RecordingCqrsDispatcher` and the store contract suites.
+- [The testing packages](testing-package.md): `RecordingCqrsDispatcher`, and the store and transport contract suites.
 
 **Platform and internals**
 - [Native AOT](native-aot.md): what is AOT-safe, publishing, and the limits for value-type results.
@@ -74,18 +76,20 @@ The namespaces follow who writes the code:
   `CqrsPipelinePriorities`, the built-in behaviors (`LoggingBehavior<,>`, `RateLimitingBehavior<,>`, ..., the types
   `[PipelineExemption(typeof(...))]` names) and their options, and `IRateLimitedContext`.
 - **`CQRSharp.Persistence`**: the contracts infrastructure implements. `IUnitOfWork`; the outbox and inbox stores
-  (`IOutboxStore`, `IInboxStore`, `OutboxMessage`, `ClaimedOutboxMessage`, `OutboxClaim`, `OutboxBacklog`); the
-  idempotency store (`IIdempotencyStore`, `IdempotencyClaim`, `IIdempotencyResultSerializer`); and
+  (`IOutboxStore`, `ISchedulingOutboxStore`, `IInboxStore`, `OutboxMessage`, `ClaimedOutboxMessage`, `OutboxClaim`,
+  `OutboxBacklog`); the idempotency store (`IIdempotencyStore`, `IdempotencyClaim`, `IIdempotencyResultSerializer`); and
   `INotificationSerializer`.
+- **`CQRSharp.Transports`**: the notification transport extension point a broker package implements
+  (`INotificationTransport`, `INotificationIntake` and their records); experimental in 5.x (`CQREXP001`).
 
 With the `CQRSharp` meta-package and `ImplicitUsings`, `CQRSharp` and `CQRSharp.Pipelines` are global usings
 ([Global usings](getting-started.md#global-usings)); a file that implements a store or a unit of work adds
 `using CQRSharp.Persistence;`.
 
 Each integration package has one namespace named after it: `CQRSharp.Redis`, `CQRSharp.EntityFrameworkCore`,
-`CQRSharp.AspNetCore`, `CQRSharp.FluentValidation` and `CQRSharp.Testing`. `CQRSharp.Testing.Xunit.V3` shares the
-`CQRSharp.Testing` namespace. Their registration extensions (`AddRedisOutboxStore`, `UseRedis`,
-`UseEntityFrameworkCore<TContext>`, `AddCqrsProblemDetails`, `UseFluentValidation`, ...) live in
+`CQRSharp.RabbitMQ`, `CQRSharp.AspNetCore`, `CQRSharp.FluentValidation` and `CQRSharp.Testing`.
+`CQRSharp.Testing.Xunit.V3` shares the `CQRSharp.Testing` namespace. Their registration extensions (`AddRedisOutboxStore`,
+`UseRedis`, `UseEntityFrameworkCore<TContext>`, `UseRabbitMq`, `AddCqrsProblemDetails`, `UseFluentValidation`, ...) live in
 `Microsoft.Extensions.DependencyInjection`, so they need no `using`. The EF Core model-builder extensions
 (`ApplyCqrsOutbox`, `ApplyCqrsIdempotency`) live in `CQRSharp.EntityFrameworkCore`.
 

@@ -2,10 +2,12 @@
 
 The [outbox](outbox.md) and [idempotency](idempotency-and-resilience.md#idempotency) features need a **store**. The core
 package ships in-memory stores for development; for durable storage, add an integration package and select its store
-verb inside `UseOutbox` / `UseIdempotency`.
+verb inside `UseOutbox` / `UseIdempotency`. To carry notifications between services, add a **transport** next to the
+store.
 
 - [Redis](#redis)
 - [Entity Framework Core](#entity-framework-core)
+- [RabbitMQ](#rabbitmq)
 - [Choosing a store](#choosing-a-store)
 - [Writing your own](#writing-your-own)
 
@@ -193,6 +195,30 @@ again an interval later. An app without the generic host runs no hosted services
 > `[RequiresDynamicCode]` / `[RequiresUnreferencedCode]`. If you publish with Native AOT, use the Redis store or an
 > AOT-safe store of your own; see [Native AOT](native-aot.md).
 
+## RabbitMQ
+
+```shell
+dotnet add package CQRSharp.RabbitMQ
+```
+
+`CQRSharp.RabbitMQ` is a **transport**, not a store: the outbox still needs a store, and the transport is added next to
+it. The notifications it is told to publish leave the process through the outbox, confirmed by the broker, and the
+queues it consumes bring notifications into the outbox for the local handlers, deduplicated through the inbox. It is
+Native-AOT compatible.
+
+```csharp
+services.AddCqrsGenerated(b => b
+    .UseOutbox(o => o
+        .UseRedis("localhost:6379")
+        .UseRabbitMq("amqp://user:password@rabbit:5672/", r => r
+            .Publish<OrderPlaced>()
+            .Consume("billing", q => q.Bind<PaymentCaptured>()))));
+```
+
+With the EF Core store, inbox and unit of work, a notification is published atomically with the request's data and
+taken in exactly once. Connections, topology, ordering, guarantees and operations are described in
+[RabbitMQ](rabbitmq.md).
+
 ## Choosing a store
 
 | Store | Package | Durable | Native AOT | Claims | Joins the unit of work |
@@ -209,7 +235,8 @@ the commit; see [How a publish reaches the store](outbox.md#how-a-publish-reache
 [The inbox](outbox.md#the-inbox-effectively-once-delivery).
 
 The outbox and idempotency stores are chosen independently: a Redis outbox with an EF Core idempotency store, or any
-other mix. Every explicit store registration, builder verb or `Add*Store` method, replaces the store of its kind that is
+other mix. A transport such as RabbitMQ works with any outbox store: it is an outbox subscriber, and its messages are
+stored, claimed and dead-lettered by the store like a handler's. Every explicit store registration, builder verb or `Add*Store` method, replaces the store of its kind that is
 already registered, whatever the order relative to `AddCqrsGenerated`; the last explicit choice wins, and the outbox and
 inbox stores are always replaced as a pair.
 
@@ -223,3 +250,8 @@ hook on either builder:
 
 Then verify the store against the contract suites in `CQRSharp.Testing.Xunit.V3`; see
 [The testing packages](testing-package.md#contract-testing-an-outbox-store).
+
+A notification transport for another broker implements `INotificationTransport` (namespace `CQRSharp.Transports`),
+calls `INotificationIntake` from its consumer, registers through `OutboxStoreBuilder.AddTransport(...)`, and proves
+itself against `NotificationTransportContractTests`. The extension point is experimental in 5.x (`CQREXP001`); see
+[Other transports](rabbitmq.md#other-transports).
