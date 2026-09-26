@@ -71,10 +71,12 @@ internal sealed class ScriptedTransport(string name = ScriptedTransport.DefaultN
     }
 }
 
-/// <summary>Captures every log entry of the container it is registered in, with its category.</summary>
+/// <summary>Captures every log entry of the container it is registered in, with its category, and wakes those waiting for one.</summary>
 internal sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILoggerProvider
 {
     private readonly ConcurrentDictionary<string, CategoryLogger> _loggers = new();
+    private readonly object _gate = new();
+    private readonly List<(int EventId, int Count, TaskCompletionSource Reached)> _waiters = [];
 
     public IReadOnlyList<(string Category, CQRSharp.Tests.Shared.CapturedLogEntry Entry)> Entries
         => _loggers.SelectMany(l => l.Value.Inner.Entries.Select(e => (l.Key, e))).ToArray();
@@ -83,13 +85,40 @@ internal sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILo
     public IReadOnlyList<CQRSharp.Tests.Shared.CapturedLogEntry> WithId(int eventId)
         => Entries.Where(e => e.Entry.EventId.Id == eventId).Select(e => e.Entry).ToArray();
 
-    public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => _loggers.GetOrAdd(categoryName, _ => new CategoryLogger());
+    /// <summary>Completes once <paramref name="count" /> entries with event id <paramref name="eventId" /> were logged.</summary>
+    public Task WaitForAsync(int eventId, int count = 1, TimeSpan? timeout = null)
+    {
+        Task reached;
+        lock (_gate)
+        {
+            if (WithId(eventId).Count >= count) return Task.CompletedTask;
+            var waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _waiters.Add((eventId, count, waiter));
+            reached = waiter.Task;
+        }
+
+        return reached.WaitAsync(timeout ?? TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+    }
+
+    public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => _loggers.GetOrAdd(categoryName, _ => new CategoryLogger(this));
 
     public void Dispose()
     {
     }
 
-    private sealed class CategoryLogger : Microsoft.Extensions.Logging.ILogger
+    private void Logged()
+    {
+        List<TaskCompletionSource> reached;
+        lock (_gate)
+        {
+            reached = _waiters.Where(w => WithId(w.EventId).Count >= w.Count).Select(w => w.Reached).ToList();
+            _waiters.RemoveAll(w => reached.Contains(w.Reached));
+        }
+
+        foreach (var waiter in reached) waiter.TrySetResult();
+    }
+
+    private sealed class CategoryLogger(CapturingLoggerProvider owner) : Microsoft.Extensions.Logging.ILogger
     {
         public CQRSharp.Tests.Shared.CapturingLogger<CategoryLogger> Inner { get; } = new();
 
@@ -99,6 +128,9 @@ internal sealed class CapturingLoggerProvider : Microsoft.Extensions.Logging.ILo
 
         public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state,
             Exception? exception, Func<TState, Exception?, string> formatter)
-            => Inner.Log(logLevel, eventId, state, exception, formatter);
+        {
+            Inner.Log(logLevel, eventId, state, exception, formatter);
+            owner.Logged();
+        }
     }
 }

@@ -57,10 +57,18 @@ public abstract class RelationalProviderFixture : IAsyncLifetime
     protected abstract string WithDatabaseSuffix(string connectionString, string suffix);
 
     /// <summary>
-    ///     The database this process owns on a server the test processes share: the configured one suffixed with the
-    ///     runtime's major version, which differs between the concurrently running target frameworks.
+    ///     What sets this fixture's database apart from the other fixtures' of the same provider in one test process, for a
+    ///     collection that needs a database of its own; none by default.
     /// </summary>
-    internal string OwnDatabaseOn(string sharedServer) => WithDatabaseSuffix(sharedServer, $"net{Environment.Version.Major}");
+    protected virtual string? Area => null;
+
+    /// <summary>
+    ///     The database this process owns on a server the test processes share: the configured one suffixed with the
+    ///     fixture's <see cref="Area" /> and the runtime's major version, which differs between the concurrently running target
+    ///     frameworks.
+    /// </summary>
+    internal string OwnDatabaseOn(string sharedServer)
+        => WithDatabaseSuffix(sharedServer, Area is null ? $"net{Environment.Version.Major}" : $"{Area}_net{Environment.Version.Major}");
 
     /// <summary>Points <paramref name="builder" /> at this fixture's database: what an application's <c>AddDbContext</c> call does.</summary>
     public abstract void Configure(DbContextOptionsBuilder builder);
@@ -122,7 +130,7 @@ public abstract class RelationalProviderFixture : IAsyncLifetime
     }
 }
 
-public sealed class PostgreSqlFixture : RelationalProviderFixture
+public class PostgreSqlFixture : RelationalProviderFixture
 {
     protected override string EnvironmentVariable => "CQRSHARP_TEST_POSTGRES";
 

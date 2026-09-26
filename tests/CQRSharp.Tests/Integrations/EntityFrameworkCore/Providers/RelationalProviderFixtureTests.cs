@@ -1,3 +1,4 @@
+using CQRSharp.Tests.Integrations.RabbitMQ;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
 using Npgsql;
@@ -47,5 +48,13 @@ public sealed class RelationalProviderFixtureTests
         var connectionString = new SqlServerFixture().OwnDatabaseOn("Server=db;User Id=sa;Password=p");
 
         new SqlConnectionStringBuilder(connectionString).InitialCatalog.Should().Be($"cqrsharp_{Own}");
+    }
+
+    [Fact(DisplayName = "A fixture with an area of its own owns a database apart from the provider's other fixtures")]
+    public void An_area_gets_a_database_of_its_own()
+    {
+        var connectionString = new RabbitMqPostgreSqlFixture().OwnDatabaseOn("Host=db;Username=u;Password=p;Database=cqrsharp");
+
+        new NpgsqlConnectionStringBuilder(connectionString).Database.Should().Be($"cqrsharp_rabbitmq_{Own}");
     }
 }

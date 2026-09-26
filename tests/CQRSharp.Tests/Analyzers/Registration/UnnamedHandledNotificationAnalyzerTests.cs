@@ -76,6 +76,16 @@ public sealed class UnnamedHandledNotificationAnalyzerTests
         static string Message(string name) => $"'{name}' has handlers but no [NotificationName], so while the outbox is on (UseOutbox) it is never stored in the outbox and every publish of it is delivered in-process. Add [NotificationName(\"...\")] to make it durable, or leave it as it is if it is meant to stay in-process.";
     }
 
+    [Fact(DisplayName = "CQRA020: a RabbitMQ transport inside a visible UseOutbox keeps the configuration in view")]
+    public async Task A_RabbitMq_transport_keeps_the_outbox_in_view()
+    {
+        var diagnostics = await AnalyzeAsync(
+            "services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore().UseRabbitMq(\"amqp://localhost/\", r => r" +
+            ".Publish<Shop.Orders.OrderShipped>().Consume(\"shipping\", q => q.Bind<Shop.Orders.OrderShipped>()))))");
+
+        diagnostics.Where(d => d.Id == "CQRA020").Should().HaveCount(2, "OrderPlacedNotification and LoginAudited are handled but unnamed, as before");
+    }
+
     [Theory(DisplayName = "CQRA020: nothing is reported without a visible outbox under the generated serializer")]
     [InlineData("services.AddCqrsGenerated(b => b.UseLogging())", false)]
     [InlineData("services.AddCqrsGenerated()", false)]

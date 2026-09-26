@@ -46,6 +46,10 @@
              Redis (Docker); without either the Redis tests skip. -->
         <PackageReference Include="StackExchange.Redis"/>
         <PackageReference Include="Testcontainers.Redis"/>
+        <!-- The RabbitMQ transport against a real broker: CQRSHARP_TEST_RABBITMQ (CI's service container) or a
+             Testcontainers RabbitMQ (Docker); without either the RabbitMQ tests skip. -->
+        <PackageReference Include="RabbitMQ.Client"/>
+        <PackageReference Include="Testcontainers.RabbitMq"/>
         <!-- EF Core Sqlite brings the SQLitePCLRaw e_sqlite3 native library in transitively, at a version with a
              vulnerable SQLite (GHSA-2m69-gcr7-jv3q); the direct reference lifts it to a patched bundle. -->
         <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
@@ -93,6 +97,7 @@
         <ProjectReference Include="..\CQRSharp.Tests.ExternalModule\CQRSharp.Tests.ExternalModule.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.EntityFrameworkCore\CQRSharp.EntityFrameworkCore.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+        <ProjectReference Include="..\..\src\CQRSharp.RabbitMQ\CQRSharp.RabbitMQ.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.FluentValidation\CQRSharp.FluentValidation.csproj"/>
         <ProjectReference Include="..\..\src\CQRSharp.AspNetCore\CQRSharp.AspNetCore.csproj"/>
     </ItemGroup>
