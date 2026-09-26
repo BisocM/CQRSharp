@@ -1,6 +1,34 @@
 #nullable enable
+abstract CQRSharp.Testing.NotificationTransportContractTests.CreateTransportAsync(string! notificationName) -> System.Threading.Tasks.Task<CQRSharp.Transports.INotificationTransport!>!
+abstract CQRSharp.Testing.NotificationTransportContractTests.ReceiveAsync(System.TimeSpan timeout) -> System.Threading.Tasks.Task<CQRSharp.Testing.ReceivedTransportMessage?>!
+CQRSharp.Testing.NotificationTransportContractTests
+CQRSharp.Testing.NotificationTransportContractTests.A_cancelled_send_throws() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.A_repeated_send_carries_the_same_message_id() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.A_sent_notification_arrives_as_it_was_sent() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.An_unreachable_destination_is_unavailable_never_rejected() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.NotificationTransportContractTests() -> void
+CQRSharp.Testing.NotificationTransportContractTests.Sequential_sends_arrive_in_order() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.The_transport_has_a_valid_name() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.NotificationTransportContractTests.The_transport_routes_what_it_was_configured_for() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.OutboxStoreContractTests.A_due_scheduled_message_keeps_its_place_in_its_partition() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.OutboxStoreContractTests.A_scheduled_message_does_not_hold_back_its_partition_before_it_is_due() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.OutboxStoreContractTests.A_scheduled_message_is_not_claimed_before_it_is_due() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.OutboxStoreContractTests.Backlog_counts_a_scheduled_message_as_pending_only_once_it_is_due() -> System.Threading.Tasks.Task!
 CQRSharp.Testing.OutboxStoreContractTests.Scheduled_messages_are_claimed_in_the_order_of_their_due_times() -> System.Threading.Tasks.Task!
+CQRSharp.Testing.ReceivedTransportMessage
+CQRSharp.Testing.ReceivedTransportMessage.MessageId.get -> System.Guid?
+CQRSharp.Testing.ReceivedTransportMessage.MessageId.init -> void
+CQRSharp.Testing.ReceivedTransportMessage.NotificationName.get -> string!
+CQRSharp.Testing.ReceivedTransportMessage.NotificationName.init -> void
+CQRSharp.Testing.ReceivedTransportMessage.PartitionKey.get -> string?
+CQRSharp.Testing.ReceivedTransportMessage.PartitionKey.init -> void
+CQRSharp.Testing.ReceivedTransportMessage.Payload.get -> byte[]!
+CQRSharp.Testing.ReceivedTransportMessage.Payload.init -> void
+CQRSharp.Testing.ReceivedTransportMessage.ReceivedTransportMessage(System.Guid? MessageId, string! NotificationName, byte[]! Payload, string? PartitionKey, string? TraceParent) -> void
+CQRSharp.Testing.ReceivedTransportMessage.TraceParent.get -> string?
+CQRSharp.Testing.ReceivedTransportMessage.TraceParent.init -> void
+virtual CQRSharp.Testing.NotificationTransportContractTests.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual CQRSharp.Testing.NotificationTransportContractTests.InitializeAsync() -> System.Threading.Tasks.ValueTask
+virtual CQRSharp.Testing.NotificationTransportContractTests.MakeUnavailableAsync() -> System.Threading.Tasks.Task<bool>!
+virtual CQRSharp.Testing.NotificationTransportContractTests.ReceiveTimeout.get -> System.TimeSpan
+virtual CQRSharp.Testing.NotificationTransportContractTests.RestoreAvailabilityAsync() -> System.Threading.Tasks.Task!
