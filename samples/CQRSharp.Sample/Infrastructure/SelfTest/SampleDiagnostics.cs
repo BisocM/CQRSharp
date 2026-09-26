@@ -23,6 +23,7 @@ public sealed class SampleDiagnostics
     private readonly ConcurrentDictionary<Type, TaskCompletionSource> _notificationPipelineCompleted = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<UserCreatedDelivery>> _usersCreated = new();
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<OrderPlacedNotification>> _ordersPlaced = new();
+    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<DateTimeOffset>> _remindersDue = new();
 
     public void RecordRequest(Type requestType) => Increment(_requests, requestType);
 
@@ -84,6 +85,13 @@ public sealed class SampleDiagnostics
 
     public Task<OrderPlacedNotification> WaitForOrderPlacedAsync(Guid orderId, TimeSpan timeout, CancellationToken cancellationToken)
         => Latch(_ordersPlaced, orderId).Task.WaitAsync(timeout, cancellationToken);
+
+    public void RecordReminderDue(ReminderDueNotification notification, DateTimeOffset deliveredAt)
+        => Latch(_remindersDue, notification.ReminderId).TrySetResult(deliveredAt);
+
+    /// <summary>Completes with the time the reminder reached its handler.</summary>
+    public Task<DateTimeOffset> WaitForReminderDueAsync(Guid reminderId, TimeSpan timeout, CancellationToken cancellationToken)
+        => Latch(_remindersDue, reminderId).Task.WaitAsync(timeout, cancellationToken);
 
     private static void Increment<TKey>(ConcurrentDictionary<TKey, int> counts, TKey key) where TKey : notnull
         => counts.AddOrUpdate(key, 1, static (_, count) => count + 1);

@@ -24,6 +24,7 @@ public sealed partial class SelfTestRunner(IServiceProvider services, SampleDiag
             ("scope semantics", RunScopeSemanticsTestAsync),
             ("transactional outbox", RunTransactionalOutboxTestAsync),
             ("outbox serialization", RunOutboxSerializationTestAsync),
+            ("scheduled publishing", RunScheduledPublishingTestAsync),
             ("value-returning command", RunResultCommandTestAsync),
             ("value-type results", RunValueTypeResultTestAsync),
             ("idempotency and replay", RunIdempotencyTestAsync),
