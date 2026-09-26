@@ -154,6 +154,8 @@ Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
 
 **Choose MediatR** if you want the de-facto standard and its ecosystem, and the licensing fits. **Choose CQRSharp** if
 you want AOT-safe dispatch *and* the outbox, idempotency, resilience and diagnostics from one tested, MIT-licensed place.
+Moving an existing MediatR 12.x codebase is covered step by step, one feature at a time, in
+[Migrating from MediatR](docs/migrating-from-mediatr.md).
 
 ### Dispatch overhead
 

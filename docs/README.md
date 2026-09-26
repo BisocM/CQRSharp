@@ -15,6 +15,8 @@ start are in the [repository README](../README.md); the namespaces are mapped [b
 **Start here**
 - [Getting started](getting-started.md): install, a first program, and a first command, query, stream and notification,
   then behaviors and an outbox.
+- [Migrating from MediatR](migrating-from-mediatr.md): the concept map, an incremental migration with both libraries in
+  one container, and each MediatR feature ported, with what has no equivalent.
 
 **Core concepts**
 - [Requests and handlers](requests-and-handlers.md): the request kinds and base classes, handlers, `ICqrsDispatcher`,
