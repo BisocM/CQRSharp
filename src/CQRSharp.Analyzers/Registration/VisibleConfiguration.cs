@@ -78,7 +78,7 @@ internal sealed class VisibleConfigurationCollector
     private static readonly ImmutableHashSet<string> CqrsSharpAssemblies = ImmutableHashSet.Create(
         StringComparer.Ordinal,
         "CQRSharp.Abstractions", "CQRSharp.Core", "CQRSharp.Pipelines", "CQRSharp.Redis", "CQRSharp.EntityFrameworkCore",
-        "CQRSharp.FluentValidation", "CQRSharp.AspNetCore", "CQRSharp.Testing", "CQRSharp.Testing.Xunit.V3");
+        "CQRSharp.RabbitMQ", "CQRSharp.FluentValidation", "CQRSharp.AspNetCore", "CQRSharp.Testing", "CQRSharp.Testing.Xunit.V3");
 
     // Builder extensions of CQRSharp's own packages that the chain may use; neither registers a verb's behavior.
     private static readonly ImmutableHashSet<string> KnownBuilderExtensionAssemblies = ImmutableHashSet.Create(

@@ -1,0 +1,55 @@
+#nullable enable
+const CQRSharp.RabbitMQ.RabbitMqTransportOptions.DefaultTransportName = "rabbitmq" -> string!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.Bind(string! routingPattern, string? exchange = null) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.Bind<TNotification>(string? exchange = null) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.Classic() -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.DeadLetterQueue(bool enabled = true) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.DeliveryLimit(int? limit) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.Lanes(int count) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.MaxHold(System.TimeSpan duration) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.Prefetch(ushort count) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqConsumerBuilder.SingleActiveConsumer(bool enabled = true) -> CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!
+CQRSharp.RabbitMQ.RabbitMqPublication
+CQRSharp.RabbitMQ.RabbitMqPublication.AllowUnroutable() -> CQRSharp.RabbitMQ.RabbitMqPublication!
+CQRSharp.RabbitMQ.RabbitMqPublication.ToExchange(string! exchange) -> CQRSharp.RabbitMQ.RabbitMqPublication!
+CQRSharp.RabbitMQ.RabbitMqPublication.WithRoutingKey(string! routingKey) -> CQRSharp.RabbitMQ.RabbitMqPublication!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.AssumeExistingTopology() -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.Configure(System.Action<CQRSharp.RabbitMQ.RabbitMqTransportOptions!>! configure) -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.Consume(string! queue, System.Action<CQRSharp.RabbitMQ.RabbitMqConsumerBuilder!>! configure) -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.Name(string! transportName) -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.Publish(string! notificationName, System.Action<CQRSharp.RabbitMQ.RabbitMqPublication!>? configure = null) -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportBuilder.Publish<TNotification>(System.Action<CQRSharp.RabbitMQ.RabbitMqPublication!>? configure = null) -> CQRSharp.RabbitMQ.RabbitMqTransportBuilder!
+CQRSharp.RabbitMQ.RabbitMqTransportOptions
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.AppId.get -> string?
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.AppId.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ClientProvidedName.get -> string?
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ClientProvidedName.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ContentType.get -> string!
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ContentType.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DeadLetterExchange.get -> string!
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DeadLetterExchange.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DeclareTopology.get -> bool
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DeclareTopology.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DefaultExchange.get -> string!
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.DefaultExchange.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.MaxMessageSize.get -> int
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.MaxMessageSize.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.PublishTimeout.get -> System.TimeSpan
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.PublishTimeout.set -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.RabbitMqTransportOptions() -> void
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ReconnectMaxDelay.get -> System.TimeSpan
+CQRSharp.RabbitMQ.RabbitMqTransportOptions.ReconnectMaxDelay.set -> void
+Microsoft.Extensions.DependencyInjection.RabbitMqHealthChecksBuilderExtensions
+Microsoft.Extensions.DependencyInjection.RabbitMqOutboxBuilderExtensions
+Microsoft.Extensions.DependencyInjection.RabbitMqServiceCollectionExtensions
+static Microsoft.Extensions.DependencyInjection.RabbitMqHealthChecksBuilderExtensions.AddCqrsRabbitMq(this Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder! builder, string! name = "cqrsharp.rabbitmq", Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus? failureStatus = null, System.Collections.Generic.IEnumerable<string!>? tags = null) -> Microsoft.Extensions.DependencyInjection.IHealthChecksBuilder!
+static Microsoft.Extensions.DependencyInjection.RabbitMqOutboxBuilderExtensions.UseRabbitMq(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, RabbitMQ.Client.IConnection! connection, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RabbitMqOutboxBuilderExtensions.UseRabbitMq(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, string! connectionUri, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RabbitMqOutboxBuilderExtensions.UseRabbitMq(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, System.Func<System.IServiceProvider!, RabbitMQ.Client.IConnection!>! connectionFactory, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RabbitMqOutboxBuilderExtensions.UseRabbitMq(this CQRSharp.Pipelines.OutboxStoreBuilder! builder, System.Func<System.IServiceProvider!, RabbitMQ.Client.IConnectionFactory!>! factory, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> CQRSharp.Pipelines.OutboxStoreBuilder!
+static Microsoft.Extensions.DependencyInjection.RabbitMqServiceCollectionExtensions.AddCqrsRabbitMq(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, RabbitMQ.Client.IConnection! connection, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RabbitMqServiceCollectionExtensions.AddCqrsRabbitMq(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, string! connectionUri, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RabbitMqServiceCollectionExtensions.AddCqrsRabbitMq(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Func<System.IServiceProvider!, RabbitMQ.Client.IConnection!>! connectionFactory, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+static Microsoft.Extensions.DependencyInjection.RabbitMqServiceCollectionExtensions.AddCqrsRabbitMq(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Func<System.IServiceProvider!, RabbitMQ.Client.IConnectionFactory!>! factory, System.Action<CQRSharp.RabbitMQ.RabbitMqTransportBuilder!>? configure = null) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!

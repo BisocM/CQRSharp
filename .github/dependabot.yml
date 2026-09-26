@@ -77,6 +77,12 @@ updates:
       - dependency-name: "Microsoft.AspNetCore.TestHost"
         update-types:
           - "version-update:semver-major"
+      # CQRSharp.RabbitMQ is built on the 7.x client's async API (tracked publisher confirms, AsyncEventingBasicConsumer),
+      # and its Native AOT publish is verified against it by the canary: a new major is adopted with a CQRSharp release, by
+      # hand. Minor and patch updates are fine, and the canary checks each one.
+      - dependency-name: "RabbitMQ.Client"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: "/"

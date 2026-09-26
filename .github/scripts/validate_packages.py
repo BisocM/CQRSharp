@@ -32,6 +32,7 @@ LIBRARIES = {
     "CQRSharp.Core",
     "CQRSharp.Pipelines",
     "CQRSharp.Redis",
+    "CQRSharp.RabbitMQ",
     "CQRSharp.EntityFrameworkCore",
     "CQRSharp.FluentValidation",
     "CQRSharp.AspNetCore",
