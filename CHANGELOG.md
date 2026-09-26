@@ -57,6 +57,15 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
   Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
   raised together at a release.
 
+### Documentation
+
+- **[Migrating from MediatR](docs/migrating-from-mediatr.md)**: a step-by-step guide for moving a MediatR 12.x
+  codebase over, including running both side by side during the migration, a concept map, and what has no equivalent.
+- **AI Use Disclosure.** The README and the documentation index state that all of CQRSharp's documentation, including
+  the XML documentation comments and certain code comments, was generated using large language models, and link a new
+  documentation issue form for reporting a discrepancy.
+- The `CQRA018`-`CQRA020` rows of the analyzer table in [Diagnostics](docs/diagnostics.md) render as part of the table.
+
 ## [5.0.0]
 
 A major release, measured here against 4.2.1. The authoring surface moves to three namespaces; the outbox delivers
