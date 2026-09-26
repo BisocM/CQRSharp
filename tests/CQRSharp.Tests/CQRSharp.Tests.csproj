@@ -62,6 +62,17 @@
     <ItemGroup>
         <Using Include="Xunit"/>
     </ItemGroup>
+    <!--
+        Microsoft.CodeAnalysis.Common brings the analyzer-authoring rules (RS1xxx) in transitively. They check a project that
+        ships an analyzer, which this one does not, and RS1022 alone took most of this project's compile time (about 19 of
+        26 minutes of analyzer time, measured with -p:ReportAnalyzer=true). ExcludeAssets cannot drop them: the package
+        also flows through Microsoft.CodeAnalysis.Common, so they are removed from the compiler's analyzers instead.
+    -->
+    <Target Name="RemoveAnalyzerAuthoringRules" AfterTargets="ResolveLockFileAnalyzers">
+        <ItemGroup>
+            <Analyzer Remove="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'Microsoft.CodeAnalysis.Analyzers'"/>
+        </ItemGroup>
+    </Target>
 
     <ItemGroup>
         <ProjectReference Include="..\..\src\CQRSharp.Core\CQRSharp.Core.csproj"/>
