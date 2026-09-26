@@ -9,11 +9,11 @@ namespace CQRSharp.Core.Outbox;
 ///     guarantee — use a database- or Redis-backed store in production. It honors the full store contract: claims are
 ///     atomic and carry a token, a message left in progress past the visibility timeout is handed out again under a
 ///     new claim, an operation presented with a lost claim changes nothing, a partitioned message is held back while
-///     an earlier message with the same key and handler is unfinished, and dead letters can be listed, requeued and
-///     purged. Processed messages are evicted, so a long-running node does not grow without bound; dead-lettered
+///     an earlier message with the same key and handler is unfinished, messages can be scheduled for later delivery,
+///     and dead letters can be listed, requeued and purged. Processed messages are evicted, so a long-running node does not grow without bound; dead-lettered
 ///     (failed) messages are kept for inspection until requeued, purged, or aged out by the configured retention.
 /// </summary>
-internal sealed class InMemoryOutboxStore : IOutboxStore
+internal sealed class InMemoryOutboxStore : ISchedulingOutboxStore
 {
     // One lock rather than lock-free structures: every operation is a read-check-write on a message's state, and this
     // store is for development and tests, where being obviously correct matters more than contention.
@@ -247,7 +247,8 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
     {
         lock (_gate)
         {
-            long pending = 0, dead = 0;
+            var now = Now();
+            long pending = 0, scheduled = 0, dead = 0;
             DateTime? oldest = null;
             foreach (var entry in _messages.Values)
             {
@@ -256,6 +257,10 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
                     case OutboxMessageStatus.Failed:
                         dead++;
                         break;
+                    // A message created in the future is one scheduled for later: not due, so not late.
+                    case OutboxMessageStatus.Pending or OutboxMessageStatus.InProgress when entry.Message.CreatedAt > now:
+                        scheduled++;
+                        break;
                     case OutboxMessageStatus.Pending or OutboxMessageStatus.InProgress:
                         pending++;
                         if (oldest is null || entry.Message.CreatedAt < oldest) oldest = entry.Message.CreatedAt;
@@ -263,7 +268,7 @@ internal sealed class InMemoryOutboxStore : IOutboxStore
                 }
             }
 
-            return Task.FromResult(new OutboxBacklog(pending, dead, oldest));
+            return Task.FromResult(new OutboxBacklog(pending, dead, oldest) { ScheduledCount = scheduled });
         }
     }
 

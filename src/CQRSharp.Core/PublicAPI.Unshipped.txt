@@ -1,1 +1,4 @@
 #nullable enable
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxScheduled = "cqrsharp.outbox.scheduled" -> string!
+CQRSharp.ICqrsDispatcher.PublishAfter<TNotification>(TNotification notification, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.ICqrsDispatcher.PublishAt<TNotification>(TNotification notification, System.DateTimeOffset dueAt, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!

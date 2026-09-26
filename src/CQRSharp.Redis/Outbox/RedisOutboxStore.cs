@@ -14,11 +14,13 @@ namespace CQRSharp.Redis;
 ///     finished: each (handler, key) has its own sorted set whose head is the only member ever in the due set, and
 ///     finishing the head promotes the next. All claim and finalize transitions run as atomic server-side Lua so two
 ///     processors never claim the same message and a crashed claimant's message reappears only once its lease
-///     elapses. A processed message is deleted at once; a dead letter stays in the dead-letter set until it is requeued,
+///     elapses. A message scheduled for later delivery is stored with its due time as both its creation time and its
+///     back-off, so it waits in the due set and takes its place in its partition as any other message would at that time.
+///     A processed message is deleted at once; a dead letter stays in the dead-letter set until it is requeued,
 ///     purged, or expired by <see cref="RedisOutboxOptions.DeadLetterRetention" />. Every time decision is driven by the
 ///     injected <see cref="TimeProvider" />; Redis server time is never consulted.
 /// </summary>
-internal sealed class RedisOutboxStore : IOutboxStore
+internal sealed class RedisOutboxStore : ISchedulingOutboxStore
 {
     private readonly IConnectionMultiplexer _mux;
     private readonly TimeProvider _timeProvider;
@@ -85,6 +87,9 @@ internal sealed class RedisOutboxStore : IOutboxStore
     // Shared Lua prelude.
     //   member(key, id)   the due-set / partition-set member of a message: zero-padded CreatedAt and sequence, then the
     //                     id, so equal scores sort by (CreatedAt, sequence) and the id can be read back from the tail.
+    //                     CreatedAt takes 13 digits until November 2286; a later one (only a message scheduled that far
+    //                     ahead) takes 16 behind a '~', which sorts after every digit, so the order holds across the two
+    //                     forms and every member stored with 13 digits keeps its place.
     //   partkey(key)      the partition set of a message (nil when it has no partition key), named by the handler's
     //                     length, the handler and the key, so no two (handler, key) pairs share a set whatever
     //                     characters either contains.
@@ -112,7 +117,10 @@ internal sealed class RedisOutboxStore : IOutboxStore
     private const string Prelude = @"
 local prefix = KEYS[1]
 local function member(key, id)
-    return string.format('%013d:%016d:', tonumber(redis.call('HGET', key, '" + FieldCreated + @"')), tonumber(redis.call('HGET', key, '" + FieldSequence + @"'))) .. id
+    local created = tonumber(redis.call('HGET', key, '" + FieldCreated + @"'))
+    local stamp
+    if created < 10000000000000 then stamp = string.format('%013d', created) else stamp = '~' .. string.format('%016d', created) end
+    return stamp .. string.format(':%016d:', tonumber(redis.call('HGET', key, '" + FieldSequence + @"'))) .. id
 end
 local function partkey(key)
     local partition = redis.call('HGET', key, '" + FieldPartition + @"')
@@ -403,11 +411,15 @@ for _, id in ipairs(ids) do
 end
 return #ids";
 
-    // The backlog: [pending count, dead-letter count, oldest pending creation ms or ''].
+    // The backlog: [pending count, dead-letter count, oldest pending creation ms or '', scheduled count]. The all set is
+    // scored by creation time, and a message created after now is one scheduled for later: not due, so not late.
+    // ARGV: now.
     private const string BacklogScript = @"
 local prefix = KEYS[1]
-local oldest = redis.call('ZRANGE', prefix .. 'all', 0, 0, 'WITHSCORES')
-return {redis.call('ZCARD', prefix .. 'all'), redis.call('ZCARD', prefix .. 'dead'), oldest[2] or ''}";
+local now = ARGV[1]
+local oldest = redis.call('ZRANGEBYSCORE', prefix .. 'all', '-inf', now, 'WITHSCORES', 'LIMIT', 0, 1)
+return {redis.call('ZCOUNT', prefix .. 'all', '-inf', now), redis.call('ZCARD', prefix .. 'dead'), oldest[2] or '',
+    redis.call('ZCOUNT', prefix .. 'all', '(' .. now, '+inf')}";
 
     // Extend the lease: move the due entry to the new horizon. The token is unchanged. Returns 0 when the claim was lost,
     // and when its lease already ran out (the due entry is no longer ahead of now - a claim since may have moved it into
@@ -569,12 +581,13 @@ return released";
 
     public async Task<OutboxBacklog> GetBacklogAsync(CancellationToken cancellationToken)
     {
-        var result = (RedisResult[])(await EvalAsync(BacklogScript, []).ConfigureAwait(false))!;
+        var now = ToUnixMs(_timeProvider.GetUtcNow().UtcDateTime);
+        var result = (RedisResult[])(await EvalAsync(BacklogScript, [now]).ConfigureAwait(false))!;
         var oldest = (RedisValue)result[2];
         return new OutboxBacklog(
             (long)result[0],
             (long)result[1],
-            oldest.IsNullOrEmpty ? null : FromUnixMs((long)oldest));
+            oldest.IsNullOrEmpty ? null : FromUnixMs((long)oldest)) { ScheduledCount = (long)result[3] };
     }
 
     public async Task<OutboxClaim?> RenewAsync(OutboxClaim claim, CancellationToken cancellationToken)

@@ -112,6 +112,77 @@ internal sealed class NotificationPublisher : IDisposable
             ? PublishInProcess(services, notification, cancellationToken)
             : PublishUnderOutboxMode(services, notification, cancellationToken);
 
+    /// <summary>
+    ///     Publishes a notification from <paramref name="services" /> for delivery no earlier than <paramref name="dueAt" />:
+    ///     into the outbox, buffered or stored exactly as <see cref="Publish{TNotification}" /> would store it, whatever the
+    ///     outbox mode (under <see cref="OutboxMode.Transactional" />, outside a transaction too). Only the outbox can hold a
+    ///     notification until it is due, so what it cannot hold fails here, before anything is buffered: a publish while
+    ///     the outbox is off, of a notification the serializer does not name, or into a store that cannot schedule.
+    /// </summary>
+    /// <param name="services">The publishing scope.</param>
+    /// <param name="notification">The notification; not null.</param>
+    /// <param name="dueAt">The UTC time before which it must not be delivered.</param>
+    /// <param name="cancellationToken">A token to cancel the store.</param>
+    /// <returns>A task that completes when the notification has been buffered or stored.</returns>
+    public Task Schedule<TNotification>(IServiceProvider services, TNotification notification, DateTime dueAt, CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        // A value type's runtime type is its static type; asking the instance would box it.
+        var runtimeType = typeof(TNotification).IsValueType ? typeof(TNotification) : notification.GetType();
+
+        if (_outboxMode == OutboxMode.Disabled)
+            return Task.FromException(new InvalidOperationException(
+                $"Notification '{runtimeType.FullName}' cannot be published for later delivery: the outbox is off " +
+                $"({nameof(OutboxMode)}.{nameof(OutboxMode.Disabled)}), and only the outbox can hold a notification until it is " +
+                "due. Turn it on with UseOutbox(...)."));
+
+        // Transactional mode with no unit of work registered is misconfigured for every durable publish (CQRCONF007). With
+        // one registered, a scheduled publish outside a transaction still goes to the outbox: it cannot run in-process.
+        if (_outboxMode == OutboxMode.Transactional && services.GetService<IUnitOfWork>() is null)
+            return Task.FromException(new InvalidOperationException(
+                CqrsConfigurationRules.FailureMessage(CqrsConfigurationRules.TransactionalOutboxWithoutUnitOfWork)));
+
+        if (services.GetService<INotificationSerializer>() is not { } serializer || services.GetService<IOutboxStore>() is not { } store)
+            return Task.FromException(OutboxWriter.ServicesMissing());
+
+        if (!serializer.TryGetNotificationName(runtimeType, out var name))
+            return Task.FromException(new InvalidOperationException(NotDurableForScheduling(runtimeType, serializer)));
+
+        // Checked before the notification is buffered: a store failure after the request's commit is only logged, and the
+        // notification would be lost with it.
+        if (store is not ISchedulingOutboxStore)
+            return Task.FromException(new InvalidOperationException(
+                $"Notification '{runtimeType.FullName}' cannot be published for later delivery: the outbox store " +
+                $"'{store.GetType().FullName}' cannot hold a message until it is due (it does not implement " +
+                $"{nameof(ISchedulingOutboxStore)}). The built-in in-memory, Redis and EF Core stores can; a custom store opts " +
+                "in by implementing the interface once it passes the scheduling cases of the outbox store contract suite."));
+
+        CheckDurableHandlers(services, notification, name);
+
+        if (services.GetService<ScopedOutbox>() is { } outbox && outbox.TryBuffer(notification, dueAt))
+            return Task.CompletedTask;
+
+        return RequestOutboxScope.StoreAsync(services, [new OutboxEntry(notification, dueAt)], cancellationToken);
+    }
+
+    // Why a notification the serializer does not name cannot be scheduled: it lost its name to another module's type
+    // (CQRCONF010), or it simply has none, which the remedy for the registered serializer fixes.
+    private string NotDurableForScheduling(Type notificationType, INotificationSerializer serializer)
+    {
+        if (CqrsConfigurationRules.UnnamedHandledNotification(notificationType, serializer, _outboxMode) is { Severity: CqrsBindingIssueSeverity.Error } error)
+            return CqrsConfigurationRules.FailureMessage(error);
+
+        var remedy = serializer is not CompositeOutboxNotificationSerializer
+            ? $"The registered serializer '{serializer.GetType().FullName}' decides what is durable: have its TryGetNotificationName name the type."
+            : notificationType.IsValueType
+                ? "[NotificationName] applies to classes only: make it a class (or a record class) to make it durable."
+                : "Mark it with [NotificationName] to make it durable.";
+
+        return $"Notification '{notificationType.FullName}' cannot be published for later delivery: the registered " +
+               $"{nameof(INotificationSerializer)} gives it no name, so it cannot be stored in the outbox, and only the outbox " +
+               $"can hold a notification until it is due. {remedy}";
+    }
+
     /// <summary>Publishes a notification in-process, bypassing the outbox, resolving its handlers and behaviors from <paramref name="services" />.</summary>
     /// <param name="services">The publishing scope.</param>
     /// <param name="notification">The notification; not null.</param>
@@ -230,7 +301,7 @@ internal sealed class NotificationPublisher : IDisposable
         if (services.GetService<ScopedOutbox>() is { } outbox && outbox.TryBuffer(notification))
             return Task.CompletedTask;
 
-        return RequestOutboxScope.StoreAsync(services, [notification], cancellationToken);
+        return RequestOutboxScope.StoreAsync(services, [new OutboxEntry(notification)], cancellationToken);
     }
 
     // Transactional mode with no unit of work registered: there is never a transaction to store a notification in. A

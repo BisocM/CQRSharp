@@ -68,6 +68,7 @@ public sealed class CqrsOutboxHealthCheck(
         {
             ["pending"] = backlog.PendingCount,
             ["deadLetters"] = backlog.DeadLetterCount,
+            ["scheduled"] = backlog.ScheduledCount,
             ["lagSeconds"] = Math.Round(lag.TotalSeconds, 3)
         };
         if (backlog.OldestPendingCreatedAt is { } oldest)

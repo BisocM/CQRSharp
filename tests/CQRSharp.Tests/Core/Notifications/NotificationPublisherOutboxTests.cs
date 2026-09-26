@@ -5,6 +5,7 @@ using CQRSharp.Tests.Shared;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Core;
 
@@ -20,10 +21,14 @@ public sealed class NotificationPublisherOutboxTests
     private readonly UnstableTestNotification _unstableNotification = new();
     private readonly TransactionLog _log = new();
 
+    // The instant the fake clock of every container built here starts at.
+    private static readonly DateTime Now = new(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc);
+
     private (ServiceProvider Provider, RecordingOutboxStore Store, RecordingUnitOfWork UnitOfWork) Build(OutboxMode mode, bool registerOutbox = true)
     {
         var services = new ServiceCollection();
         services.Configure<OutboxOptions>(o => o.Mode = mode);
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider(new DateTimeOffset(Now)));
         services.AddSingleton(_inProcess);
         services.AddTransient<SubscribedHandler>();
         services.AddTransient<INotificationHandler<UnstableTestNotification>, HandRegisteredHandler>();
@@ -43,6 +48,9 @@ public sealed class NotificationPublisherOutboxTests
 
     private static Task Publish<TNotification>(IServiceProvider scope, TNotification notification) where TNotification : INotification
         => scope.GetRequiredService<NotificationPublisher>().Publish(scope, notification, CancellationToken.None);
+
+    private static Task Schedule<TNotification>(IServiceProvider scope, TNotification notification, DateTime dueAt) where TNotification : INotification
+        => scope.GetRequiredService<NotificationPublisher>().Schedule(scope, notification, dueAt, CancellationToken.None);
 
     // As the executor runs a request: registered with the scope's buffer and current for everything the body awaits.
     private static async Task AsRequest(IServiceProvider scope, Func<Task> body)
@@ -140,6 +148,50 @@ public sealed class NotificationPublisherOutboxTests
 
         scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(1);
         _inProcess.Published.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "Transactional: a scheduled publish without an active transaction still goes to the outbox, buffered inside a request and stored outside one")]
+    public async Task Schedule_WhenModeIsTransactional_And_NoTransaction_GoesToTheOutbox()
+    {
+        var (provider, store, _) = Build(OutboxMode.Transactional);
+        await using var _ = provider;
+        await using var scope = provider.CreateAsyncScope();
+        var dueAt = Now.AddDays(3);
+
+        await AsRequest(scope.ServiceProvider, () => Schedule(scope.ServiceProvider, _testNotification, dueAt));
+        await Schedule(scope.ServiceProvider, new TestNotification(), dueAt);
+
+        scope.ServiceProvider.GetRequiredService<ScopedOutbox>().Count.Should().Be(1, "the request's scheduled notification waits for the request");
+        store.Stored.Should().ContainSingle("the one scheduled outside the request is stored at once").Which.NextRetryAt.Should().Be(dueAt);
+        _inProcess.Published.Should().BeEmpty("a scheduled notification can only wait in the outbox");
+    }
+
+    [Fact(DisplayName = "Transactional without a unit of work: a scheduled publish fails with CQRCONF007, like a durable publish")]
+    public async Task Schedule_WhenModeIsTransactional_WithoutAUnitOfWork_Throws()
+    {
+        var services = new ServiceCollection();
+        services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Transactional);
+        services.AddSingleton<INotificationSerializer>(new SingleTypeNotificationSerializer<TestNotification>("test.notification"));
+        services.AddSingleton(NotificationPublisher.Create);
+        await using var provider = services.BuildServiceProvider();
+
+        var act = () => Schedule(provider, _testNotification, Now.AddDays(1));
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("CQRCONF007");
+    }
+
+    [Fact(DisplayName = "A scheduled publish fails with CQRCONF001 when no store is registered")]
+    public async Task Schedule_WithoutAStore_Throws()
+    {
+        var services = new ServiceCollection();
+        services.Configure<OutboxOptions>(o => o.Mode = OutboxMode.Enabled);
+        services.AddSingleton<INotificationSerializer>(new SingleTypeNotificationSerializer<TestNotification>("test.notification"));
+        services.AddSingleton(NotificationPublisher.Create);
+        await using var provider = services.BuildServiceProvider();
+
+        var act = () => Schedule(provider, _testNotification, Now.AddDays(1));
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("CQRCONF001");
     }
 
     [Fact(DisplayName = "A publish that goes straight to the store fails clearly when no store is registered")]

@@ -64,13 +64,13 @@ internal readonly struct RequestOutboxScope
     public void Abandon() => _outbox.AbandonRequest(_owner);
 
     /// <summary>Writes notifications straight to the durable store (no buffering).</summary>
-    public static async Task StoreAsync(IServiceProvider provider, IReadOnlyList<INotification> notifications, CancellationToken cancellationToken)
+    public static async Task StoreAsync(IServiceProvider provider, IReadOnlyList<OutboxEntry> entries, CancellationToken cancellationToken)
     {
         var writer = OutboxWriter.Resolve(provider);
 
         // Nothing here commits around the write, so the processor is woken at once. A write into a transaction the
         // caller owns only becomes visible at the caller's commit; the poll after it picks the messages up.
-        if (await writer.StoreAsync(notifications, cancellationToken).ConfigureAwait(false) > 0)
+        if (await writer.StoreAsync(entries, cancellationToken).ConfigureAwait(false))
             writer.Signal();
     }
 }

@@ -1,1 +1,9 @@
 #nullable enable
+CQRSharp.Testing.DispatchedMessage.DueAt.get -> System.DateTimeOffset?
+CQRSharp.Testing.DispatchedMessage.DueAt.init -> void
+CQRSharp.Testing.DispatchKind.ScheduledPublish = 3 -> CQRSharp.Testing.DispatchKind
+CQRSharp.Testing.RecordingCqrsDispatcher.PublishAfter<TNotification>(TNotification notification, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.Testing.RecordingCqrsDispatcher.PublishAt<TNotification>(TNotification notification, System.DateTimeOffset dueAt, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.Testing.RecordingCqrsDispatcher.RecordingCqrsDispatcher(System.TimeProvider! timeProvider) -> void
+CQRSharp.Testing.RecordingCqrsDispatcher.Scheduled<TNotification>() -> System.Collections.Generic.IReadOnlyList<TNotification>!
+CQRSharp.Testing.RecordingCqrsDispatcher.ScheduledNotifications.get -> System.Collections.Generic.IReadOnlyList<object!>!

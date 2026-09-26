@@ -20,6 +20,7 @@ internal sealed class CqrsMetrics : IDisposable
     private readonly TimeProvider _clock;
     private readonly ObservableGauge<long> _outboxPending;
     private readonly ObservableGauge<long> _outboxDeadLetters;
+    private readonly ObservableGauge<long> _outboxScheduled;
     private readonly ObservableGauge<double> _outboxLag;
     private readonly object _backlogGate = new();
     private OutboxBacklog? _backlog;
@@ -54,6 +55,9 @@ internal sealed class CqrsMetrics : IDisposable
             CqrsTelemetry.Instruments.OutboxPending, () => Backlog?.PendingCount ?? 0, "{message}", "Outbox messages still to be delivered.");
         _outboxDeadLetters = Meter.CreateObservableGauge(
             CqrsTelemetry.Instruments.OutboxDeadLetters, () => Backlog?.DeadLetterCount ?? 0, "{message}", "Dead-lettered outbox messages.");
+        _outboxScheduled = Meter.CreateObservableGauge(
+            CqrsTelemetry.Instruments.OutboxScheduled, () => Backlog?.ScheduledCount ?? 0, "{message}",
+            "Outbox messages scheduled for later delivery whose due time has not come.");
         _outboxLag = Meter.CreateObservableGauge(
             CqrsTelemetry.Instruments.OutboxLag, () => Backlog?.LagAt(_clock.GetUtcNow().UtcDateTime).TotalSeconds ?? 0, "s",
             "Age of the oldest undelivered outbox message.");
@@ -71,7 +75,7 @@ internal sealed class CqrsMetrics : IDisposable
     public Histogram<double> OutboxDispatchDuration { get; }
 
     /// <summary>Whether anything listens to the backlog gauges, so the processor samples the backlog only when it is looked at.</summary>
-    public bool OutboxBacklogEnabled => _outboxPending.Enabled || _outboxDeadLetters.Enabled || _outboxLag.Enabled;
+    public bool OutboxBacklogEnabled => _outboxPending.Enabled || _outboxDeadLetters.Enabled || _outboxScheduled.Enabled || _outboxLag.Enabled;
 
     private OutboxBacklog? Backlog
     {

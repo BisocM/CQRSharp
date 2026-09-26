@@ -59,13 +59,26 @@ public static class CqrsTelemetry
         /// <summary>Histogram (seconds): how long dispatching one outbox message to its handler took. Same tags as <see cref="OutboxMessages" />.</summary>
         public const string OutboxDispatchDuration = "cqrsharp.outbox.dispatch.duration";
 
-        /// <summary>Gauge: outbox messages still to be delivered (pending or in progress), as last sampled by the processor.</summary>
+        /// <summary>
+        ///     Gauge: outbox messages still to be delivered (pending or in progress), as last sampled by the processor. A
+        ///     scheduled message whose due time has not come is counted by <see cref="OutboxScheduled" /> instead.
+        /// </summary>
         public const string OutboxPending = "cqrsharp.outbox.pending";
+
+        /// <summary>
+        ///     Gauge: outbox messages published for later delivery (<c>PublishAt</c> / <c>PublishAfter</c>) whose due time
+        ///     has not come yet, as last sampled by the processor. Not late, so in neither <see cref="OutboxPending" /> nor
+        ///     <see cref="OutboxLag" />.
+        /// </summary>
+        public const string OutboxScheduled = "cqrsharp.outbox.scheduled";
 
         /// <summary>Gauge: dead-lettered outbox messages awaiting an operator, as last sampled by the processor.</summary>
         public const string OutboxDeadLetters = "cqrsharp.outbox.dead_letters";
 
-        /// <summary>Gauge (seconds): the age of the oldest undelivered outbox message — how far behind the outbox is.</summary>
+        /// <summary>
+        ///     Gauge (seconds): the age of the oldest undelivered outbox message — how far behind the outbox is. A scheduled
+        ///     message ages from its due time.
+        /// </summary>
         public const string OutboxLag = "cqrsharp.outbox.lag";
     }
 

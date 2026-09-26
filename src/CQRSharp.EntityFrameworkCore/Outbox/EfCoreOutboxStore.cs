@@ -17,12 +17,14 @@ namespace CQRSharp.EntityFrameworkCore;
 ///     again, which recovers messages whose claimant crashed mid-dispatch. Messages are claimed by
 ///     <see cref="OutboxEntity.CreatedAt" /> then <see cref="OutboxEntity.Sequence" />, and a partitioned message is held
 ///     back while an earlier message with the same partition key and handler is still pending or in progress, or while
-///     any message of that partition is being delivered. All time is read from the injected <see cref="TimeProvider" />
+///     any message of that partition is being delivered. A message scheduled for later delivery is a row whose
+///     <see cref="OutboxEntity.CreatedAt" /> and <see cref="OutboxEntity.NextRetryAt" /> are its due time, so it needs no
+///     column of its own. All time is read from the injected <see cref="TimeProvider" />
 ///     so back-off and visibility are deterministic under test. Retention is not this store's work: the outbox retention
 ///     service purges on its own schedule.
 /// </summary>
 /// <typeparam name="TContext">The application's <see cref="DbContext" /> that maps <see cref="OutboxEntity" />.</typeparam>
-internal sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext : DbContext
+internal sealed class EfCoreOutboxStore<TContext> : ISchedulingOutboxStore where TContext : DbContext
 {
     private readonly TContext _context;
     private readonly TimeProvider _timeProvider;
@@ -525,16 +527,20 @@ internal sealed class EfCoreOutboxStore<TContext> : IOutboxStore where TContext 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var now = Now();
             var messages = _context.Set<OutboxEntity>().AsNoTracking();
-            var pending = messages.Where(e => e.Status == OutboxMessageStatus.Pending || e.Status == OutboxMessageStatus.InProgress);
+            var undelivered = messages.Where(e => e.Status == OutboxMessageStatus.Pending || e.Status == OutboxMessageStatus.InProgress);
+            // A row created in the future is a message scheduled for later: not due, so not late.
+            var pending = undelivered.Where(e => e.CreatedAt <= now);
 
             var pendingCount = await pending.LongCountAsync(cancellationToken).ConfigureAwait(false);
             var oldest = pendingCount == 0
                 ? null
                 : await pending.OrderBy(e => e.CreatedAt).Select(e => (DateTime?)e.CreatedAt).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var scheduled = await undelivered.LongCountAsync(e => e.CreatedAt > now, cancellationToken).ConfigureAwait(false);
             var deadLetters = await messages.LongCountAsync(e => e.Status == OutboxMessageStatus.Failed, cancellationToken).ConfigureAwait(false);
 
-            return new OutboxBacklog(pendingCount, deadLetters, oldest);
+            return new OutboxBacklog(pendingCount, deadLetters, oldest) { ScheduledCount = scheduled };
         }
         finally
         {

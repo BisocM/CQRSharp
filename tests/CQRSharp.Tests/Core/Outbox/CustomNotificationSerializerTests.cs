@@ -100,7 +100,7 @@ public sealed class CustomNotificationSerializerTests
         await using var provider = Build();
 
         var act = () => OutboxMessageFactory.Create(
-            new INotification[] { new GeneratedOnlyNotification(Guid.NewGuid()) },
+            new[] { new OutboxEntry(new GeneratedOnlyNotification(Guid.NewGuid())) },
             provider.GetRequiredService<INotificationSerializer>(),
             provider.GetRequiredService<INotificationSubscriptionRegistry>(),
             provider.GetRequiredService<TimeProvider>());

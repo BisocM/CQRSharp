@@ -1,1 +1,4 @@
 #nullable enable
+CQRSharp.Persistence.ISchedulingOutboxStore
+CQRSharp.Persistence.OutboxBacklog.ScheduledCount.get -> long
+CQRSharp.Persistence.OutboxBacklog.ScheduledCount.init -> void

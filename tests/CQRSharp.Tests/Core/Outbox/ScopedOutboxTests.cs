@@ -34,7 +34,7 @@ public sealed class ScopedOutboxTests
             return outbox.CompleteRequest(owner);
         });
 
-        settled.Should().Equal(a, b);
+        settled.Select(e => e.Notification).Should().Equal(a, b);
         outbox.Count.Should().Be(0);
     }
 
@@ -77,7 +77,7 @@ public sealed class ScopedOutboxTests
             return outbox.CompleteRequest(owner);
         });
 
-        settled.Should().Equal(outer, inner);
+        settled.Select(e => e.Notification).Should().Equal(outer, inner);
     }
 
     [Fact(DisplayName = "Two requests running side by side in one scope settle independently: a failure never takes a sibling's notifications")]
@@ -108,7 +108,7 @@ public sealed class ScopedOutboxTests
         });
         secondDone.SetResult();
 
-        (await first).Should().Equal(succeeded);
+        (await first).Select(e => e.Notification).Should().Equal(succeeded);
         outbox.Count.Should().Be(0);
     }
 
@@ -120,7 +120,7 @@ public sealed class ScopedOutboxTests
         var inner = new Pong();
         var nestedBuffered = new TaskCompletionSource();
         var callerDone = new TaskCompletionSource();
-        Task<IReadOnlyList<INotification>>? nestedTask = null;
+        Task<IReadOnlyList<OutboxEntry>>? nestedTask = null;
 
         var callerSettled = await Run(async () =>
         {
@@ -142,8 +142,8 @@ public sealed class ScopedOutboxTests
         });
         callerDone.SetResult();
 
-        callerSettled.Should().Equal(outer);
-        (await nestedTask!).Should().Equal(inner);
+        callerSettled.Select(e => e.Notification).Should().Equal(outer);
+        (await nestedTask!).Select(e => e.Notification).Should().Equal(inner);
     }
 
     [Fact(DisplayName = "A publish while another request of the scope runs, but from outside it, is not buffered")]

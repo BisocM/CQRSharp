@@ -534,8 +534,8 @@ internal sealed partial class OutboxProcessor : BackgroundService
             // The handler's work is committed and stands: notifications that could not be stored after the commit are
             // lost, not retried, since a retry would run the committed work again.
             if (committed is not null && await committed.CompleteAsync().ConfigureAwait(false) is { } storeFailure)
-                LogPublishesLostAfterCommit(_logger, storeFailure, message.Id, message.HandlerName, committed.Notifications.Count,
-                    string.Join(", ", committed.Notifications.Select(n => n.GetType().Name)));
+                LogPublishesLostAfterCommit(_logger, storeFailure, message.Id, message.HandlerName, committed.Entries.Count,
+                    committed.NotificationTypeNames());
 
             await SettleAsync(publishes).ConfigureAwait(false);
             return joined ? DeliveryOutcome.Delivered : await RecordDeliveredAsync(inbox, message).ConfigureAwait(false);

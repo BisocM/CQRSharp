@@ -1,5 +1,6 @@
 using CQRSharp.Testing;
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Testing;
 
@@ -234,6 +235,39 @@ public sealed class RecordingCqrsDispatcherTests
     }
 
     [Fact]
+    public async Task Scheduled_publishes_are_recorded_apart_from_publishes_with_their_due_time()
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero));
+        var dispatcher = new RecordingCqrsDispatcher(time);
+        var dueAt = new DateTimeOffset(2026, 12, 24, 18, 0, 0, TimeSpan.FromHours(1));
+
+        await dispatcher.PublishAt(new UserRenamed(1), dueAt, TestContext.Current.CancellationToken);
+        await dispatcher.PublishAfter(new UserRenamed(2), TimeSpan.FromMinutes(30), TestContext.Current.CancellationToken);
+        await dispatcher.Publish(new UserRenamed(3), TestContext.Current.CancellationToken);
+
+        dispatcher.Scheduled<UserRenamed>().Select(n => n.Id).Should().Equal(1, 2);
+        dispatcher.ScheduledNotifications.Should().HaveCount(2);
+        dispatcher.Published<UserRenamed>().Should().ContainSingle().Which.Id.Should().Be(3);
+        dispatcher.Dispatched.Select(entry => (entry.Kind, entry.DueAt)).Should().Equal(
+            (DispatchKind.ScheduledPublish, dueAt),
+            (DispatchKind.ScheduledPublish, time.GetUtcNow().AddMinutes(30)),
+            (DispatchKind.Publish, (DateTimeOffset?)null));
+    }
+
+    [Fact]
+    public async Task A_scheduled_publish_can_be_made_to_fail_and_rejects_a_negative_delay()
+    {
+        _dispatcher.Throws<UserDeleted>(new InvalidOperationException("store failed"));
+
+        var scheduled = () => _dispatcher.PublishAt(new UserDeleted(7), DateTimeOffset.UnixEpoch);
+        var negative = () => _dispatcher.PublishAfter(new UserRenamed(7), TimeSpan.FromTicks(-1));
+
+        await scheduled.Should().ThrowAsync<InvalidOperationException>().WithMessage("store failed");
+        AssertThrowsSynchronously<ArgumentOutOfRangeException>(() => negative());
+        _dispatcher.ScheduledNotifications.Should().ContainSingle("a rejected argument records nothing");
+    }
+
+    [Fact]
     public async Task Dispatched_keeps_one_ordered_log_across_all_operations_and_ClearRecorded_keeps_stubs()
     {
         _dispatcher.Setup<GetUserName, string>("Ada").SetupStream<CountTo, int>(_ => [1]);
@@ -273,10 +307,14 @@ public sealed class RecordingCqrsDispatcherTests
     {
         var send = () => _dispatcher.Send<string>(null!);
         var publish = () => _dispatcher.Publish<UserRenamed>(null!);
+        var publishAt = () => _dispatcher.PublishAt<UserRenamed>(null!, DateTimeOffset.UnixEpoch);
+        var publishAfter = () => _dispatcher.PublishAfter<UserRenamed>(null!, TimeSpan.Zero);
         var setup = () => _dispatcher.Setup<GetUserName, string>((Func<GetUserName, string>)null!);
 
         await send.Should().ThrowAsync<ArgumentNullException>();
         await publish.Should().ThrowAsync<ArgumentNullException>();
+        await publishAt.Should().ThrowAsync<ArgumentNullException>();
+        await publishAfter.Should().ThrowAsync<ArgumentNullException>();
         setup.Should().Throw<ArgumentNullException>();
     }
 

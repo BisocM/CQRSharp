@@ -12,7 +12,7 @@ namespace CQRSharp.Testing;
 ///     <para>
 ///         Unstubbed behaviour is chosen so a forgotten stub fails loudly instead of handing the code under test a
 ///         <see langword="null" />: a plain <see cref="ICommand" /> succeeds with
-///         <see cref="CommandResult.FromSuccess" />, a published notification completes, and any value-returning
+///         <see cref="CommandResult.FromSuccess" />, a published or scheduled notification completes, and any value-returning
 ///         request or stream throws an <see cref="InvalidOperationException" /> naming the unstubbed request type.
 ///     </para>
 ///     <para>
@@ -36,6 +36,24 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
 
     private readonly object _gate = new();
     private readonly List<DispatchedMessage> _log = [];
+    private readonly TimeProvider _timeProvider;
+
+    /// <summary>Creates a recording dispatcher that dates a <c>PublishAfter</c> by the system clock.</summary>
+    public RecordingCqrsDispatcher()
+        : this(TimeProvider.System)
+    {
+    }
+
+    /// <summary>
+    ///     Creates a recording dispatcher that dates a <c>PublishAfter</c> by <paramref name="timeProvider" />, as the real
+    ///     dispatcher dates it by the application's clock: pass the test's fake clock to assert the due time.
+    /// </summary>
+    /// <param name="timeProvider">The clock a delay is measured from.</param>
+    public RecordingCqrsDispatcher(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        _timeProvider = timeProvider;
+    }
 
     /// <summary>Everything dispatched so far (sends, streams, and publishes interleaved), in call order.</summary>
     public IReadOnlyList<DispatchedMessage> Dispatched
@@ -56,6 +74,12 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
     /// <summary>Every notification passed to <c>Publish</c>, in call order.</summary>
     public IReadOnlyList<object> PublishedNotifications => Messages(DispatchKind.Publish);
 
+    /// <summary>
+    ///     Every notification passed to <c>PublishAt</c> or <c>PublishAfter</c>, in call order. When each is due is on its
+    ///     entry in <see cref="Dispatched" /> (<see cref="DispatchedMessage.DueAt" />).
+    /// </summary>
+    public IReadOnlyList<object> ScheduledNotifications => Messages(DispatchKind.ScheduledPublish);
+
     /// <summary>The sent requests assignable to <typeparamref name="TRequest" />, in call order.</summary>
     /// <typeparam name="TRequest">The request type (or a base type/interface) to filter by.</typeparam>
     public IReadOnlyList<TRequest> Sent<TRequest>() => SentRequests.OfType<TRequest>().ToArray();
@@ -67,6 +91,10 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
     /// <summary>The published notifications assignable to <typeparamref name="TNotification" />, in call order.</summary>
     /// <typeparam name="TNotification">The notification type (or a base type/interface) to filter by.</typeparam>
     public IReadOnlyList<TNotification> Published<TNotification>() => PublishedNotifications.OfType<TNotification>().ToArray();
+
+    /// <summary>The notifications scheduled for later delivery that are assignable to <typeparamref name="TNotification" />, in call order.</summary>
+    /// <typeparam name="TNotification">The notification type (or a base type/interface) to filter by.</typeparam>
+    public IReadOnlyList<TNotification> Scheduled<TNotification>() => ScheduledNotifications.OfType<TNotification>().ToArray();
 
     /// <summary>Stubs the response for <typeparamref name="TRequest" />, computed from the request that was sent.</summary>
     /// <typeparam name="TRequest">The request type to answer.</typeparam>
@@ -140,7 +168,7 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
 
     /// <summary>
     ///     Makes dispatching a <typeparamref name="TMessage" /> fail. A send returns a faulted task, a stream throws when
-    ///     enumerated, and a publish returns a faulted task, mirroring where a real handler failure would surface.
+    ///     enumerated, and a publish or scheduled publish returns a faulted task, mirroring where a real failure would surface.
     ///     Takes precedence over any response or stream stub for the same message.
     /// </summary>
     /// <typeparam name="TMessage">The request or notification type that should fail.</typeparam>
@@ -238,10 +266,39 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
         ArgumentNullException.ThrowIfNull(notification);
         Record(DispatchKind.Publish, notification);
 
-        return Find(_failures, notification.GetType()) is { } failure
+        return Completion(notification);
+    }
+
+    /// <inheritdoc />
+    public Task PublishAt<TNotification>(TNotification notification, DateTimeOffset dueAt, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+        Record(new DispatchedMessage(DispatchKind.ScheduledPublish, notification) { DueAt = dueAt });
+
+        return Completion(notification);
+    }
+
+    /// <inheritdoc />
+    public Task PublishAfter<TNotification>(TNotification notification, TimeSpan delay, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
+
+        var now = _timeProvider.GetUtcNow();
+        if (delay > DateTimeOffset.MaxValue - now)
+            throw new ArgumentOutOfRangeException(nameof(delay), delay, "The due time would lie past the end of the calendar.");
+
+        Record(new DispatchedMessage(DispatchKind.ScheduledPublish, notification) { DueAt = now + delay });
+        return Completion(notification);
+    }
+
+    // How a publish of either kind completes: faulted when the test made the notification's type fail.
+    private Task Completion(object notification)
+        => Find(_failures, notification.GetType()) is { } failure
             ? Task.FromException(failure(notification))
             : Task.CompletedTask;
-    }
 
     // Resolution happens synchronously in Send so a missing stub (a test-setup mistake) throws at the call site even if
     // the code under test never awaits the task; failures the TEST configured surface through the task instead.
@@ -306,10 +363,12 @@ public sealed class RecordingCqrsDispatcher : ICqrsDispatcher
         return null;
     }
 
-    private void Record(DispatchKind kind, object message)
+    private void Record(DispatchKind kind, object message) => Record(new DispatchedMessage(kind, message));
+
+    private void Record(DispatchedMessage entry)
     {
         lock (_gate)
-            _log.Add(new DispatchedMessage(kind, message));
+            _log.Add(entry);
     }
 
     private object[] Messages(DispatchKind kind)

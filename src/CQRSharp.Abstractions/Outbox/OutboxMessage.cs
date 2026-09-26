@@ -14,7 +14,11 @@ namespace CQRSharp.Persistence;
 ///     the name given with <c>[NotificationHandlerName]</c>.
 /// </param>
 /// <param name="Payload">The serialized content of the notification.</param>
-/// <param name="CreatedAt">The UTC timestamp when the message was created; the primary FIFO ordering key.</param>
+/// <param name="CreatedAt">
+///     The UTC time the message takes its place in the delivery order, the primary FIFO ordering key: when it was
+///     created, or, for a message scheduled for later delivery (see <see cref="ISchedulingOutboxStore" />), the time it is
+///     due, as if it had been published then.
+/// </param>
 /// <param name="Status">The current processing status of the message.</param>
 /// <param name="ProcessedAt">The UTC timestamp when the message was processed, or null if not yet processed.</param>
 /// <param name="LastError">Error information from the most recent failed delivery attempt, if any.</param>
@@ -24,8 +28,9 @@ namespace CQRSharp.Persistence;
 ///     (rather than being tracked only in memory by the processor).
 /// </param>
 /// <param name="NextRetryAt">
-///     The earliest UTC time at which a failed message becomes eligible to be claimed again, or null to make it
-///     immediately eligible. Used to back off between retries.
+///     The earliest UTC time at which the message may be claimed, or null to make it immediately eligible: the back-off
+///     after a failed attempt, the not-before time of a deferral, or, for a message scheduled for later delivery, its due
+///     time.
 /// </param>
 /// <param name="TraceParent">
 ///     The W3C <c>traceparent</c> of the request that produced this message, captured at enqueue time so the outbox

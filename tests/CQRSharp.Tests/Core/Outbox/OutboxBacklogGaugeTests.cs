@@ -20,7 +20,7 @@ public sealed class OutboxBacklogGaugeTests
         var (provider, time, _) = BuildProbed(outbox: clock => store = new ScriptedOutboxStore(clock));
         await using var _ = provider;
         using var gauges = new GaugeReader(provider);
-        store!.Backlog = new OutboxBacklog(7, 2, time.GetUtcNow().UtcDateTime.AddSeconds(-90));
+        store!.Backlog = new OutboxBacklog(7, 2, time.GetUtcNow().UtcDateTime.AddSeconds(-90)) { ScheduledCount = 4 };
 
         var processor = Processor(provider);
         await processor.StartAsync(CancellationToken.None);
@@ -31,6 +31,7 @@ public sealed class OutboxBacklogGaugeTests
             {
                 [CqrsTelemetry.Instruments.OutboxPending] = 7,
                 [CqrsTelemetry.Instruments.OutboxDeadLetters] = 2,
+                [CqrsTelemetry.Instruments.OutboxScheduled] = 4,
                 [CqrsTelemetry.Instruments.OutboxLag] = 90
             });
         }
@@ -40,7 +41,7 @@ public sealed class OutboxBacklogGaugeTests
         }
 
         store.Calls.Should().StartWith(new[] { "backlog", "claim:0" }, "a shutdown during the sample must never leave a claimed batch behind");
-        gauges.Read().Values.Should().HaveCount(3).And.OnlyContain(v => v == 0, "a stopped processor's last sample is not current");
+        gauges.Read().Values.Should().HaveCount(4).And.OnlyContain(v => v == 0, "a stopped processor's last sample is not current");
     }
 
     [Fact(DisplayName = "Outbox: two hosts in one process each report their own backlog, and one stopping leaves the other's standing")]
@@ -75,6 +76,7 @@ public sealed class OutboxBacklogGaugeTests
             {
                 [CqrsTelemetry.Instruments.OutboxPending] = 7,
                 [CqrsTelemetry.Instruments.OutboxDeadLetters] = 2,
+                [CqrsTelemetry.Instruments.OutboxScheduled] = 0,
                 [CqrsTelemetry.Instruments.OutboxLag] = 90
             }, "the other host's processor stopping clears only its own sample");
         }
@@ -99,7 +101,8 @@ public sealed class OutboxBacklogGaugeTests
                 InstrumentPublished = (instrument, l) =>
                 {
                     if (ReferenceEquals(instrument.Meter, meter)
-                        && instrument.Name is CqrsTelemetry.Instruments.OutboxPending or CqrsTelemetry.Instruments.OutboxDeadLetters or CqrsTelemetry.Instruments.OutboxLag)
+                        && instrument.Name is CqrsTelemetry.Instruments.OutboxPending or CqrsTelemetry.Instruments.OutboxDeadLetters
+                            or CqrsTelemetry.Instruments.OutboxScheduled or CqrsTelemetry.Instruments.OutboxLag)
                         l.EnableMeasurementEvents(instrument);
                 }
             };
