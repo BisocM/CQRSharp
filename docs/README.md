@@ -5,6 +5,11 @@ source generator writes at compile time. You declare commands, queries, streamin
 handlers, and dispatch them through one façade, `ICqrsDispatcher`. What the project offers, the package list and a quick
 start are in the [repository README](../README.md); the namespaces are mapped [below](#namespaces).
 
+> **AI Use Disclosure.** All of CQRSharp's documentation was generated using large language models (LLMs): these
+> pages, the README, the XML documentation comments in the source code, and certain code comments. It may contain
+> errors, omissions, or statements that do not match what the library actually does. Where the documentation and the
+> library disagree, the library's behavior is what counts; please [report the discrepancy](https://github.com/BisocM/CQRSharp/issues/new?template=documentation.yml).
+
 ## Table of contents
 
 **Start here**

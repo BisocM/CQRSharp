@@ -1,0 +1,43 @@
+name: Documentation issue
+description: Something in the documentation is wrong, unclear, out of date or missing.
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CQRSharp's documentation (the README, the docs, the XML documentation comments and certain code comments) was
+        generated using large language models and may contain mistakes. Thank you for reporting one.
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: The page and section (a link to the heading is ideal), on GitHub, NuGet or bisocm.org.
+      placeholder: https://github.com/BisocM/CQRSharp/blob/Release/docs/outbox.md#partition-ordering
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - The documentation says something the library does not do
+        - A code sample does not compile or does not work
+        - Unclear or confusing
+        - Out of date
+        - Missing
+        - Broken link
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: What the documentation says, and what actually happens or what you expected it to say.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CQRSharp version
+      placeholder: "5.0.0"

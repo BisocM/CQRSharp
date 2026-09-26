@@ -196,6 +196,14 @@ PostgreSQL and SQL Server tests use the servers named by `CQRSHARP_TEST_REDIS`, 
 `CQRSHARP_TEST_SQLSERVER` when set, and otherwise start containers with Testcontainers; without Docker they skip.
 [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
 
+## AI Use Disclosure
+
+All of CQRSharp's documentation was generated using large language models (LLMs): this README, the guides in
+[docs](docs/README.md), the project pages on [bisocm.org](https://bisocm.org/projects/cqrsharp), the XML documentation
+comments (the summaries IntelliSense shows) in the source code, and certain code comments. It may contain errors,
+omissions, or statements that do not match what the library actually does. Where the documentation and the library
+disagree, the library's behavior is what counts; please [report the discrepancy](https://github.com/BisocM/CQRSharp/issues/new?template=documentation.yml) so it can be fixed.
+
 ## Contributing
 
 Issues and pull requests are welcome. CI builds every pull request with warnings as errors and runs the full suite; a
