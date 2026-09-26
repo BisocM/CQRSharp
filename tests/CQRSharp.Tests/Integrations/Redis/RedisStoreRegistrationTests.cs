@@ -306,12 +306,15 @@ public sealed class RedisStoreRegistrationTests(RedisFixture fixture) : IAsyncLi
         {
             _multiplexer.Setup(m => m.GetDatabase(It.IsAny<int>(), It.IsAny<object?>())).Returns(_database.Object);
             _database.Setup(d => d.KeyExistsAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>())).ReturnsAsync(false);
+            // Shaped as the outbox's backlog script answers an empty outbox (pending, dead letters, oldest, scheduled); the
+            // other stores' scripts read no more of it than they need.
             _database.Setup(d => d.ScriptEvaluateAsync(It.IsAny<string>(), It.IsAny<RedisKey[]>(), It.IsAny<RedisValue[]>(), It.IsAny<CommandFlags>()))
                 .ReturnsAsync(RedisResult.Create(
                 [
                     RedisResult.Create((RedisValue)0),
                     RedisResult.Create((RedisValue)0),
-                    RedisResult.Create(RedisValue.EmptyString)
+                    RedisResult.Create(RedisValue.EmptyString),
+                    RedisResult.Create((RedisValue)0)
                 ]));
         }
 
