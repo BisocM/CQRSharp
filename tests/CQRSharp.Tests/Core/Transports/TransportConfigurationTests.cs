@@ -1,11 +1,14 @@
 using CQRSharp.Core.Diagnostics;
-using CQRSharp.Pipelines;
+using CQRSharp.Core.Modules;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Transports;
+using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using CQRSharp.Transports;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace CQRSharp.Tests.Core;
@@ -197,6 +200,23 @@ public sealed class TransportConfigurationTests
 
         provider.GetRequiredService<NotificationTransportRegistry>();
         logs.WithId(1207).Should().HaveCount(3).And.OnlyContain(e => e.Level == LogLevel.Warning && e.Message.Contains("CQRCONF017"));
+    }
+
+    [Fact(DisplayName = "Transports: a serializer registered scoped is asked of a scope, so a provider that validates scopes forwards as usual")]
+    public async Task A_scoped_serializer_is_asked_of_a_scope()
+    {
+        var transport = new ScriptedTransport("broker", Forwarded) { Declaration = new() { ConsumedTypes = [typeof(ForwardedNotification)] } };
+        var services = new ServiceCollection();
+        services.AddSingleton<INotificationTransport>(transport);
+        services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore()));
+        services.RemoveAll<INotificationSerializer>();
+        services.AddScoped<INotificationSerializer>(sp => new CompositeOutboxNotificationSerializer(sp.GetServices<ICqrsModule>()));
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
+        await PublishAsync(provider, new ForwardedNotification(1, null));
+
+        OutboxTestHarness.Stored(provider).Should().ContainSingle().Which.HandlerName.Should().Be("broker");
+        provider.GetRequiredService<NotificationTransportRegistry>().Failure.Should().BeNull();
     }
 
     [Fact(DisplayName = "AddTransport registers a transport with the outbox and composes across UseOutbox calls")]

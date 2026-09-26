@@ -23,6 +23,7 @@
         <PackageReleaseNotes>
             Version 5.1.0. ICqrsDispatcher.PublishAt / PublishAfter publish a durable notification for delivery once it is due, through the outbox, as if published then; they fail rather than deliver in-process when the outbox cannot hold it. The in-memory store can schedule; the cqrsharp.outbox.scheduled gauge and the health check's scheduled datum count what waits.
             A custom-context dispatch reads the application's clock once instead of twice.
+            Notification transports (experimental, CQREXP001): a notification a registered transport routes is stored with an outbox message for it, which the processor sends as stored (Unavailable defers without an attempt), and INotificationIntake takes received notifications into the outbox, deduplicated through the inbox. OutboxStoreBuilder.AddTransport(...) registers one; CQRCONF013 to CQRCONF017 check them; cqrsharp.transport.received counts what comes in.
             See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>

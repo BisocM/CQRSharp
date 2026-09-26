@@ -1,7 +1,7 @@
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Outbox;
-using CQRSharp.Pipelines;
 using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using CQRSharp.Transports;
 using FluentAssertions;

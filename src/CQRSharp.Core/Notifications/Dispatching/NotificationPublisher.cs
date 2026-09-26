@@ -46,7 +46,7 @@ internal sealed class NotificationPublisher : IDisposable
     private readonly CqrsMetrics? _metrics;
     private readonly ILogger _configurationLogger;
     private readonly NotificationTransportRegistry _transports;
-    private readonly INotificationSerializer? _rootSerializer;
+    private readonly IServiceScopeFactory? _scopes;
 
     /// <param name="rootProvider">The provider's root, which the plans ask about its registrations.</param>
     /// <param name="modules">The composed modules, whose notification routes are merged into one table.</param>
@@ -81,8 +81,8 @@ internal sealed class NotificationPublisher : IDisposable
         _configurationLogger = configurationLogger;
         _transports = transports ?? NotificationTransportRegistry.Empty;
         // Only asked, per type, whether a transport forwards it: a notification nothing subscribes to may still leave the
-        // process. The serializer is a singleton, so the root's is the one every scope stores with.
-        _rootSerializer = _transports.IsEmpty ? null : rootProvider.GetService<INotificationSerializer>();
+        // process.
+        _scopes = _transports.IsEmpty ? null : rootProvider.GetService<IServiceScopeFactory>();
     }
 
     /// <summary>The concrete notification types some module has a route for.</summary>
@@ -416,10 +416,7 @@ internal sealed class NotificationPublisher : IDisposable
         var mayHaveHandRegisteredHandlers = _registrations.MayBeRegistered(typeof(INotificationHandler<TNotification>));
         // The configuration checks are asked of the routed types only, as the startup validator asks them.
         var routedUnderOutbox = _outboxMode != OutboxMode.Disabled && _routes.ContainsKey(typeof(TNotification));
-        var forwarded = _outboxMode != OutboxMode.Disabled &&
-                        _rootSerializer is not null &&
-                        _rootSerializer.TryGetNotificationName(typeof(TNotification), out var name) &&
-                        _transports.TransportsFor(typeof(TNotification), name).Length > 0;
+        var forwarded = _outboxMode != OutboxMode.Disabled && _scopes is not null && IsForwarded(typeof(TNotification));
         return new NotificationPlan<TNotification>
         {
             Owner = owner,
@@ -432,6 +429,16 @@ internal sealed class NotificationPublisher : IDisposable
             OutboxNaming = routedUnderOutbox && subscriptions.Count > 0 ? new OutboxNamingCheck(typeof(TNotification)) : null,
             DurableHandlers = routedUnderOutbox && mayHaveHandRegisteredHandlers ? new DurableHandlersCheck<TNotification>() : null
         };
+    }
+
+    // Whether a transport forwards the type, by the name the serializer gives it, asked of a scope as every writer asks it
+    // (an application may register its serializer scoped); once per type, as the plan is built.
+    private bool IsForwarded(Type notificationType)
+    {
+        using var scope = _scopes!.CreateScope();
+        return scope.ServiceProvider.GetService<INotificationSerializer>() is { } serializer &&
+               serializer.TryGetNotificationName(notificationType, out var name) &&
+               _transports.TransportsFor(notificationType, name).Length > 0;
     }
 
     private IReadOnlyList<NotificationSubscription> SubscriptionsOf(Type runtimeType)

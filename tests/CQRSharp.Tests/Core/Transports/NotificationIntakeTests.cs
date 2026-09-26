@@ -1,7 +1,7 @@
 using CQRSharp.Core.Diagnostics;
-using CQRSharp.Pipelines;
 using CQRSharp.Core.Transports;
 using CQRSharp.Persistence;
+using CQRSharp.Pipelines;
 using CQRSharp.Tests.Shared;
 using CQRSharp.Transports;
 using FluentAssertions;

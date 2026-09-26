@@ -76,7 +76,9 @@ internal sealed class NotificationTransportRegistry
 
         // The first-use half of CQRCONF017: nothing fails, since the transport acknowledges what nothing here handles, but
         // a binding that brings in notifications no handler receives is worth a warning where the transports come to life.
-        if (subscriptions is not null && provider.GetService<INotificationSerializer>() is { } serializer)
+        // Asked of a scope, as every writer asks it: an application may register its serializer scoped.
+        using var scope = provider.CreateScope();
+        if (subscriptions is not null && scope.ServiceProvider.GetService<INotificationSerializer>() is { } serializer)
         {
             var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(CqrsConfigurationLog.Category) ?? NullLogger.Instance;
             foreach (var transport in transports)
