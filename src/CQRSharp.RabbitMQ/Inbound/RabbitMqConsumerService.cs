@@ -309,13 +309,15 @@ internal sealed class RabbitMqConsumerService : BackgroundService
     {
         var properties = delivery.BasicProperties;
         var type = properties.Type;
+        var receivedAt = _runtime.TimeProvider.GetUtcNow().UtcDateTime;
         var message = new InboundNotification(
             _runtime.Name,
             _source,
             properties.MessageId,
             type ?? string.Empty,
             delivery.Body.ToArray(),
-            RabbitMqMessageMapper.SentAt(properties),
+            // A message from a producer that sets no time is as old as this delivery of it.
+            RabbitMqMessageMapper.SentAt(properties) ?? receivedAt,
             RabbitMqMessageMapper.Header(properties, RabbitMqMessageMapper.TraceParentHeader),
             RabbitMqMessageMapper.Header(properties, RabbitMqMessageMapper.TraceStateHeader));
         return new ReceivedDelivery(
@@ -324,7 +326,7 @@ internal sealed class RabbitMqConsumerService : BackgroundService
             message,
             RabbitMqMessageMapper.Header(properties, RabbitMqMessageMapper.PartitionKeyHeader),
             !string.IsNullOrEmpty(type),
-            _runtime.TimeProvider.GetUtcNow().UtcDateTime);
+            receivedAt);
     }
 
     // One delivery, from its lane: taken in, held and tried again while it cannot be yet, then settled on its channel.

@@ -142,24 +142,27 @@ public sealed class RabbitMqConsumeTests(RabbitMqFixture fixture) : IAsyncLifeti
         await PublishRawAsync("{ not json"u8.ToArray(), "m-1", OrderName);
         await PublishRawAsync(Payload(consumer, new RabbitOrderPlaced(1, "k")), "m-2", type: null);
 
-        var first = await fixture.GetAsync(DeadLetterQueue, TimeSpan.FromSeconds(30));
-        var second = await fixture.GetAsync(DeadLetterQueue, TimeSpan.FromSeconds(30));
-        new[] { first?.BasicProperties.MessageId, second?.BasicProperties.MessageId }.Should().BeEquivalentTo("m-1", "m-2");
+        var deadLettered = await fixture.ReceiveAsync(DeadLetterQueue, 2);
+        deadLettered.Select(m => m.BasicProperties.MessageId).Should().BeEquivalentTo("m-1", "m-2");
         consumer.Logs.WithId(8030).Should().ContainSingle();
         consumer.Logs.WithId(8034).Should().ContainSingle();
         consumer.Received.Orders.Should().BeEmpty();
     }
 
-    [Fact(DisplayName = "RabbitMQ consume: an unknown notification is held for the grace period, then dead-lettered")]
-    public async Task An_unknown_notification_is_held_then_dead_lettered()
+    [Theory(DisplayName = "RabbitMQ consume: an unknown notification is held for the grace period, then dead-lettered, aged from its creation time or, without one, from its arrival")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_unknown_notification_is_held_then_dead_lettered(bool withCreationTime)
     {
         var consumer = await ConsumerAsync(cqrs: b => b.UseOutbox(o => o.ConfigureProcessor(p => p.UnknownRecipientGracePeriod = TimeSpan.FromSeconds(2))));
-        var createdAt = new Dictionary<string, object?> { ["cqrsharp-created-at"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) };
+        var createdAt = withCreationTime
+            ? new Dictionary<string, object?> { ["cqrsharp-created-at"] = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) }
+            : null;
 
         await PublishRawAsync("{}"u8.ToArray(), "m-1", "tests.rabbit.added-by-a-newer-version", createdAt);
 
         await consumer.Logs.WaitForAsync(8031);
-        (await fixture.GetAsync(DeadLetterQueue, TimeSpan.FromSeconds(30))).Should().NotBeNull("past its grace period nobody is going to know it");
+        (await fixture.ReceiveAsync(DeadLetterQueue)).BasicProperties.MessageId.Should().Be("m-1", "past its grace period nobody is going to know it");
         consumer.Logs.WithId(8032).Should().ContainSingle();
     }
 
@@ -226,7 +229,7 @@ public sealed class RabbitMqConsumeTests(RabbitMqFixture fixture) : IAsyncLifeti
         await consumer.StopAsync();
 
         consumer.Logs.WithId(8023).Should().ContainSingle().Which.Message.Should().Contain("released 1");
-        (await fixture.GetAsync(Queue, TimeSpan.FromSeconds(30)))?.BasicProperties.MessageId
+        (await fixture.ReceiveAsync(Queue)).BasicProperties.MessageId
             .Should().Be("m-1", "the broker returned the unacknowledged message to the queue when the channel closed");
     }
 
