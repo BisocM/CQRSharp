@@ -24,6 +24,44 @@ public sealed class PingStreamHandler : IStreamRequestHandler<PingStream, int>
     }
 }
 
+// A custom context, as an application carries the caller's tenant: one factory builds it with the parameterless
+// constructor, which the dispatcher then stamps, the other passes the application's time itself.
+public sealed class TenantContext : RequestContextBase
+{
+    public required string Tenant { get; init; }
+}
+
+public sealed class TimedTenantContext(DateTime createdAt) : RequestContextBase(createdAt)
+{
+    public required string Tenant { get; init; }
+}
+
+public sealed class TenantContextFactory : IRequestContextFactory<TenantContext>
+{
+    public ValueTask<TenantContext> CreateContextAsync(IRequest request, CancellationToken cancellationToken)
+        => new(new TenantContext { Tenant = "acme" });
+}
+
+public sealed class TimedTenantContextFactory(TimeProvider timeProvider) : IRequestContextFactory<TimedTenantContext>
+{
+    public ValueTask<TimedTenantContext> CreateContextAsync(IRequest request, CancellationToken cancellationToken)
+        => new(new TimedTenantContext(timeProvider.GetUtcNow().UtcDateTime) { Tenant = "acme" });
+}
+
+public sealed class PingWithTenant : QueryBase<int, TenantContext>;
+
+public sealed class PingWithTenantHandler : IQueryHandler<PingWithTenant, int>
+{
+    public Task<int> Handle(PingWithTenant query, CancellationToken cancellationToken) => Task.FromResult(42);
+}
+
+public sealed class PingWithTimedTenant : QueryBase<int, TimedTenantContext>;
+
+public sealed class PingWithTimedTenantHandler : IQueryHandler<PingWithTimedTenant, int>
+{
+    public Task<int> Handle(PingWithTimedTenant query, CancellationToken cancellationToken) => Task.FromResult(42);
+}
+
 public sealed record Pinged : INotification;
 
 public sealed class PingedHandler : INotificationHandler<Pinged>
