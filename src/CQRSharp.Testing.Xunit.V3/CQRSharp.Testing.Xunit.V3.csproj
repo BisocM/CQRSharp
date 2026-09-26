@@ -19,8 +19,8 @@
         <Title>CQRSharp store contract suites for xUnit v3.</Title>
         <Description>The abstract xUnit v3 contract suites every IOutboxStore, IInboxStore and IIdempotencyStore implementation must pass, so a custom store proves the same semantics as the built-in in-memory, EF Core, and Redis stores: atomic claims, claim tokens and leases, renewal, release, retries, dead letters and their operations, FIFO and partition order, the backlog, the inbox, idempotency claim tokens, stored results and payload fingerprints. Assertions use plain xUnit; no mocking or assertion library is forced on the consumer.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. First release: OutboxStoreContractTests, InboxStoreContractTests and IdempotencyStoreContractTests, for xUnit v3.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. OutboxStoreContractTests gains the scheduling cases, which run for a store that implements ISchedulingOutboxStore and are skipped for one that does not.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 

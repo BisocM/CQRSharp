@@ -16,10 +16,8 @@
         <Title>Redis integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
         <Description>A Native-AOT-compatible Redis integration for CQRSharp: a durable IOutboxStore whose claim, lease and finalize logic runs as atomic Lua scripts (ordered partitions, retries, dead letters), an IInboxStore for effectively-once delivery, and an IIdempotencyStore with token-owned claims, payload fingerprints and result replay.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0 (breaking). A new key layout under the {cqrsharp:outbox}: and {cqrs:idemp}: prefixes, and every KeyPrefix must contain a hash tag; drain the outbox with 4.x processors before upgrading.
-            Messages carry a handler name and partition key, claims are leases checked inside the scripts, dead letters can be listed, requeued and purged, and an inbox records deliveries. The idempotency store keeps a claim token, a payload fingerprint and the result.
-            CQRSharp no longer registers an IConnectionMultiplexer: each store runs on the connection it is given (a connection string, an instance or a factory).
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. The Redis outbox store holds notifications scheduled for later delivery (ISchedulingOutboxStore), in the existing key layout.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 

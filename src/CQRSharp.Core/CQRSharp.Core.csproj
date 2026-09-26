@@ -16,10 +16,9 @@
         <Title>The CQRSharp runtime: source-generated, Native-AOT-safe CQRS dispatch for .NET.</Title>
         <Description>The CQRSharp runtime: the ICqrsDispatcher facade, pipeline execution, notification publishing, background task queue and transactional outbox processing, distributed-tracing hooks, health checks, and the source-generated, Native-AOT-friendly handler registries.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0 (breaking). The outbox delivers per handler and in order per partition key, under leases, with an inbox, dead-letter operations, backlog gauges and the AddCqrsOutbox() health check; a request's notifications are stored when it succeeds and discarded when it fails.
-            Notifications reach the handlers of their runtime type. A new CQRSharp meter joins renamed span attributes (every name is on CqrsTelemetry), and every log line has an event id.
-            The background queue drains within ShutdownTimeout and reports refused work as BackgroundTaskRejectedException. Core no longer depends on Microsoft.Extensions.Hosting.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. ICqrsDispatcher.PublishAt / PublishAfter publish a durable notification for delivery once it is due, through the outbox, as if published then; they fail rather than deliver in-process when the outbox cannot hold it. The in-memory store can schedule; the cqrsharp.outbox.scheduled gauge and the health check's scheduled datum count what waits.
+            A custom-context dispatch reads the application's clock once instead of twice.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 
