@@ -11,14 +11,14 @@ namespace CQRSharp.Core.Diagnostics;
 /// </summary>
 public static class CqrsTelemetry
 {
-    /// <summary>The activity source for request dispatch, queued execution and outbox delivery spans.</summary>
+    /// <summary>The activity source for request dispatch, queued execution, outbox delivery and transport receive spans.</summary>
     public const string ActivitySourceName = "CQRSharp";
 
     /// <summary>The activity source for the spans of the built-in pipeline behaviors (rate limiting, resilience, unit of work, timeout, …).</summary>
     public const string PipelinesActivitySourceName = "CQRSharp.Pipelines";
 
     /// <summary>
-    ///     The meter for dispatch, notification and outbox instruments. Each service provider owns its own instance of it
+    ///     The meter for dispatch, notification, outbox and transport instruments. Each service provider owns its own instance of it
     ///     (created through its <c>IMeterFactory</c> when one is registered), so two hosts in one process never report
     ///     each other's measurements.
     /// </summary>
@@ -49,10 +49,12 @@ public static class CqrsTelemetry
 
         /// <summary>
         ///     Counter: outbox messages the processor finished an attempt at. Tags: <see cref="Tags.NotificationName" />,
-        ///     <see cref="Tags.NotificationHandler" /> and <see cref="Tags.Outcome" /> (<c>processed</c> /
-        ///     <c>duplicate</c> / <c>unrecorded</c> / <c>retry</c> / <c>deferred</c> / <c>dead_letter</c> /
-        ///     <c>claim_lost</c> / <c>not_started</c>, the last for a delivery whose claim renewal, inbox check or
-        ///     transaction failed before the handler ran).
+        ///     <see cref="Tags.NotificationHandler" /> (the handler's name, or the transport's for a message sent through a
+        ///     notification transport) and <see cref="Tags.Outcome" /> (<c>processed</c> / <c>duplicate</c> /
+        ///     <c>unrecorded</c> / <c>retry</c> / <c>deferred</c> / <c>unavailable</c> / <c>dead_letter</c> /
+        ///     <c>claim_lost</c> / <c>not_started</c>; <c>unavailable</c> for a transport that could not reach its
+        ///     destination, which defers the message without charging an attempt, and <c>not_started</c> for a delivery
+        ///     whose claim renewal, inbox check or transaction failed before the handler ran).
         /// </summary>
         public const string OutboxMessages = "cqrsharp.outbox.messages";
 
@@ -80,6 +82,19 @@ public static class CqrsTelemetry
         ///     message ages from its due time.
         /// </summary>
         public const string OutboxLag = "cqrsharp.outbox.lag";
+
+        /// <summary>
+        ///     Counter: notifications received through a notification transport and handed to the intake. Tags:
+        ///     <see cref="Tags.Transport" />, <see cref="Tags.NotificationName" /> and <see cref="Tags.Outcome" />
+        ///     (<c>stored</c> / <c>duplicate</c> / <c>no_subscribers</c> / <c>unreadable</c> / <c>unknown_held</c> /
+        ///     <c>unknown</c> / <c>failed</c>; <c>unknown_held</c> for a notification this application does not know that
+        ///     is held back for an instance that may, <c>unknown</c> once that grace period is over, and <c>failed</c> for
+        ///     an intake that threw).
+        /// </summary>
+        public const string TransportReceived = "cqrsharp.transport.received";
+
+        /// <summary>Histogram (seconds): how long taking one received notification in took. Same tags as <see cref="TransportReceived" />.</summary>
+        public const string TransportReceiveDuration = "cqrsharp.transport.receive.duration";
     }
 
     /// <summary>
@@ -150,6 +165,12 @@ public static class CqrsTelemetry
         ///     instruments.
         /// </summary>
         public const string NotificationHandler = "cqrsharp.notification.handler";
+
+        /// <summary>
+        ///     The name of the notification transport a notification was received through. On the <c>CQRS Transport Receive</c>
+        ///     span and the transport instruments.
+        /// </summary>
+        public const string Transport = "cqrsharp.transport";
 
         /// <summary>The partition key an outbox message is delivered in order within, when it has one. On the outbox dispatch span.</summary>
         public const string PartitionKey = "cqrsharp.partition_key";

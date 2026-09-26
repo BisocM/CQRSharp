@@ -1,5 +1,6 @@
 using CQRSharp.Core.Notifications;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CQRSharp.Core.Diagnostics;
@@ -7,7 +8,7 @@ namespace CQRSharp.Core.Diagnostics;
 /// <summary>
 ///     The <c>CQRCONF</c> checks: misconfigurations that would otherwise degrade silently at runtime (an idle outbox
 ///     processor, a transactional outbox with no transaction to join, notifications that bypass the outbox, markers whose
-///     behavior is not wired). Asks the container whether services are registered rather than activating them where the
+///     behavior is not wired, notification transports that cannot forward or receive what they are configured for). Asks the container whether services are registered rather than activating them where the
 ///     answer allows it, and performs no reflection over consumer types.
 /// </summary>
 internal static class CqrsConfigurationInspector
@@ -30,6 +31,7 @@ internal static class CqrsConfigurationInspector
         var outboxEnabled = outbox.Mode != OutboxMode.Disabled;
 
         if (outboxEnabled) InspectOutbox(services, isService, outbox, issues);
+        InspectTransports(services, outbox, issues);
 
         foreach (var binding in requestBindings)
             InspectMarkers(binding, issues);
@@ -122,6 +124,45 @@ internal static class CqrsConfigurationInspector
                 if (byHand.Length > 0)
                     issues.Add(CqrsConfigurationRules.HandRegisteredHandlersOfDurableNotification(notificationType, name, byHand));
             }
+    }
+
+    // CQRCONF013 to CQRCONF017: the notification transports, which exist only through the outbox. Asked of the transports'
+    // declarations and of the serializer and subscriptions the outbox uses; nothing is sent or received.
+    private static void InspectTransports(IServiceProvider services, OutboxOptions outbox, List<CqrsBindingIssue> issues)
+    {
+        var transports = services.GetServices<INotificationTransport>().ToArray();
+        if (transports.Length == 0) return;
+
+        // CQRCONF013: without the outbox a transport is never fed and has nowhere to store what it receives; the other
+        // checks would only describe a configuration that cannot run.
+        if (outbox.Mode == OutboxMode.Disabled)
+        {
+            issues.Add(CqrsConfigurationRules.TransportsWithoutOutbox(transports));
+            return;
+        }
+
+        var subscriptions = services.GetService<INotificationSubscriptionRegistry>();
+
+        // CQRCONF015: a transport's messages are addressed to it by name, in the namespace of the handler names.
+        issues.AddRange(CqrsConfigurationRules.TransportNameClashes(transports, subscriptions));
+
+        // CQRCONF014 / CQRCONF017: what a transport forwards must be storable, and what it takes in should reach a handler.
+        // Without a serializer CQRCONF001 already names the cause.
+        if (services.GetService<INotificationSerializer>() is { } serializer)
+            foreach (var transport in transports)
+            {
+                issues.AddRange(CqrsConfigurationRules.UnstorablePublications(transport, serializer));
+                if (subscriptions is not null)
+                    issues.AddRange(CqrsConfigurationRules.ConsumedWithoutSubscribers(transport, serializer, subscriptions));
+            }
+
+        // CQRCONF016: under Transactional, a forwarded notification published outside a transaction fails; whether one ever
+        // is depends on the call sites, so the configuration itself is only a warning.
+        var forwarding = transports
+            .Where(t => t.Declaration.PublishedTypes.Count > 0 || t.Declaration.PublishedNames.Count > 0)
+            .ToArray();
+        if (outbox.Mode == OutboxMode.Transactional && forwarding.Length > 0)
+            issues.Add(CqrsConfigurationRules.TransactionalOutboxWithForwarding(forwarding));
     }
 
     // CQRCONF005 / CQRCONF006: a request opts into idempotency or retries through a marker interface, but the behavior

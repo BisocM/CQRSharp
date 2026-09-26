@@ -49,6 +49,10 @@ internal sealed class CqrsMetrics : IDisposable
             CqrsTelemetry.Instruments.OutboxMessages, "{message}", "Outbox messages the processor finished an attempt at, by outcome.");
         OutboxDispatchDuration = Meter.CreateHistogram<double>(
             CqrsTelemetry.Instruments.OutboxDispatchDuration, "s", "Duration of dispatching one outbox message to its handler.");
+        TransportReceived = Meter.CreateCounter<long>(
+            CqrsTelemetry.Instruments.TransportReceived, "{notification}", "Notifications received through a notification transport, by outcome.");
+        TransportReceiveDuration = Meter.CreateHistogram<double>(
+            CqrsTelemetry.Instruments.TransportReceiveDuration, "s", "Duration of taking one received notification into the outbox.");
 
         // Observable: the collector pulls them, so they report the processor's last backlog sample rather than the store.
         _outboxPending = Meter.CreateObservableGauge(
@@ -73,6 +77,10 @@ internal sealed class CqrsMetrics : IDisposable
     public Counter<long> OutboxMessages { get; }
 
     public Histogram<double> OutboxDispatchDuration { get; }
+
+    public Counter<long> TransportReceived { get; }
+
+    public Histogram<double> TransportReceiveDuration { get; }
 
     /// <summary>Whether anything listens to the backlog gauges, so the processor samples the backlog only when it is looked at.</summary>
     public bool OutboxBacklogEnabled => _outboxPending.Enabled || _outboxDeadLetters.Enabled || _outboxScheduled.Enabled || _outboxLag.Enabled;
@@ -109,6 +117,18 @@ internal sealed class CqrsMetrics : IDisposable
         };
         OutboxMessages.Add(1, tags);
         OutboxDispatchDuration.Record(elapsed.TotalSeconds, tags);
+    }
+
+    public void RecordTransportReceive(string transport, string notificationName, string outcome, TimeSpan elapsed)
+    {
+        var tags = new TagList
+        {
+            { CqrsTelemetry.Tags.Transport, transport },
+            { CqrsTelemetry.Tags.NotificationName, notificationName },
+            { CqrsTelemetry.Tags.Outcome, outcome }
+        };
+        TransportReceived.Add(1, tags);
+        TransportReceiveDuration.Record(elapsed.TotalSeconds, tags);
     }
 
     /// <summary>Records the processor's latest backlog sample, which the gauges report until the next one.</summary>

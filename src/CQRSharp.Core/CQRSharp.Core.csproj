@@ -9,6 +9,11 @@
 
         <!-- Turns on the trim, AOT and single-file analyzers, whose warnings the -warnaserror gate makes errors. -->
         <IsAotCompatible>true</IsAotCompatible>
+
+        <!-- The runtime implements the notification transport extension point (CQRSharp.Transports), which ships marked
+             [Experimental]: every use of it reports CQREXP001, which is meant for the code that builds on it, not for the
+             library that provides it. -->
+        <NoWarn>$(NoWarn);CQREXP001</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup>

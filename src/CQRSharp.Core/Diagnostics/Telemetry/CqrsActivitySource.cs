@@ -3,13 +3,16 @@ using System.Diagnostics;
 namespace CQRSharp.Core.Diagnostics;
 
 /// <summary>
-///     The <see cref="ActivitySource" /> CQRSharp emits its request dispatch, queued execution and outbox delivery spans
-///     on. Applications subscribe to it by name, <see cref="CqrsTelemetry.ActivitySourceName" />.
+///     The <see cref="ActivitySource" /> CQRSharp emits its request dispatch, queued execution, outbox delivery and
+///     transport receive spans on. Applications subscribe to it by name, <see cref="CqrsTelemetry.ActivitySourceName" />.
 /// </summary>
 internal static class CqrsActivitySource
 {
     /// <summary>The activity source name.</summary>
     public const string Name = CqrsTelemetry.ActivitySourceName;
+
+    /// <summary>The name of the span of a notification received through a transport and taken into the outbox.</summary>
+    public const string TransportReceiveOperation = "CQRS Transport Receive";
 
     /// <summary>The shared activity source instance.</summary>
     public static readonly ActivitySource Instance = new(Name, CqrsMetrics.Version);

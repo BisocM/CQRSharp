@@ -94,6 +94,21 @@ internal sealed class CompositeOutboxNotificationSerializer : INotificationSeria
         return _byName.TryGetValue(notificationName, out var entry) ? entry.Serializer.Deserialize(notificationName, payload) : null;
     }
 
+    /// <summary>The notification type stored under <paramref name="notificationName" />, when a module names one so.</summary>
+    public bool TryGetNotificationType(string notificationName, [NotNullWhen(true)] out Type? notificationType)
+    {
+        ArgumentNullException.ThrowIfNull(notificationName);
+
+        if (_byName.TryGetValue(notificationName, out var entry))
+        {
+            notificationType = entry.Type;
+            return true;
+        }
+
+        notificationType = null;
+        return false;
+    }
+
     /// <summary>A stable name several notification types are given.</summary>
     /// <param name="Name">The name.</param>
     /// <param name="Types">The types given it, ordered by name.</param>

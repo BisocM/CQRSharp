@@ -175,7 +175,9 @@ public sealed class CqrsMetricsTests
             CqrsTelemetry.Instruments.OutboxPending,
             CqrsTelemetry.Instruments.OutboxDeadLetters,
             CqrsTelemetry.Instruments.OutboxScheduled,
-            CqrsTelemetry.Instruments.OutboxLag
+            CqrsTelemetry.Instruments.OutboxLag,
+            CqrsTelemetry.Instruments.TransportReceived,
+            CqrsTelemetry.Instruments.TransportReceiveDuration
         ]);
     }
 }

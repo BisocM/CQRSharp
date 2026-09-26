@@ -23,7 +23,7 @@ public sealed class OutboxMessageFactoryTests
     public void A_batch_is_stamped_in_publication_order()
     {
         var messages = OutboxMessageFactory.Create(
-            [new OutboxEntry(new TestNotification()), new OutboxEntry(new TestNotification())], _serializer, _subscriptions, _time);
+            [new OutboxEntry(new TestNotification()), new OutboxEntry(new TestNotification())], _serializer, _subscriptions, transports: null, _time);
 
         messages.Select(m => m.CreatedAt).Should().Equal(Now, Now.AddTicks(1));
         messages.Should().OnlyContain(m => m.NextRetryAt == null);
@@ -40,7 +40,7 @@ public sealed class OutboxMessageFactoryTests
                 new OutboxEntry(new TestNotification(), dueAt),
                 new OutboxEntry(new TestNotification())
             ],
-            _serializer, _subscriptions, _time);
+            _serializer, _subscriptions, transports: null, _time);
 
         messages.Select(m => (m.CreatedAt, m.NextRetryAt)).Should().Equal(
             (Now, (DateTime?)null),
@@ -55,7 +55,7 @@ public sealed class OutboxMessageFactoryTests
     {
         var messages = OutboxMessageFactory.Create(
             [new OutboxEntry(new TestNotification()), new OutboxEntry(new TestNotification(), Now.AddMinutes(minutesFromNow))],
-            _serializer, _subscriptions, _time);
+            _serializer, _subscriptions, transports: null, _time);
 
         messages.Select(m => (m.CreatedAt, m.NextRetryAt)).Should().Equal(
             (Now, (DateTime?)null),

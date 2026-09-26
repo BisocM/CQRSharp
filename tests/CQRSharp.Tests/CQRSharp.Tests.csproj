@@ -15,6 +15,9 @@
         <!-- CQRGEN006 (a handler the generator cannot register) fires on the deliberately private nested handler and
              validator fixtures, which the tests register by hand. -->
         <NoWarn>$(NoWarn);CQRGEN006</NoWarn>
+        <!-- The tests exercise the notification transport extension point (CQRSharp.Transports), which ships marked
+             [Experimental] (CQREXP001). -->
+        <NoWarn>$(NoWarn);CQREXP001</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

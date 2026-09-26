@@ -2,6 +2,7 @@ using CQRSharp.Core.Modules;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Pipelines;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 
 namespace CQRSharp.Core.Diagnostics;
 
@@ -138,6 +139,166 @@ internal static class CqrsConfigurationRules
             "CQRCONF012",
             $"The notification handlers registered by hand for '{notificationType.FullName}' could not be resolved: " +
             $"{failure.Message} Publishing it in-process fails the same way.");
+
+    /// <summary>
+    ///     <c>CQRCONF013</c>: notification transports are registered while the outbox is off. A transport is fed through the
+    ///     outbox, and what it receives is stored in it, so it would do nothing at all.
+    /// </summary>
+    public static CqrsBindingIssue TransportsWithoutOutbox(IEnumerable<INotificationTransport> transports)
+        => new(
+            CqrsBindingIssueSeverity.Error,
+            "CQRCONF013",
+            $"The notification transport(s) {NameList(transports.Select(t => t.Name))} are registered, but the outbox mode is " +
+            "'Disabled'. A transport forwards what the outbox stores, and stores what it receives in the outbox, so nothing is " +
+            "ever forwarded through it and nothing it receives reaches a handler. Turn the outbox on with UseOutbox(...), or " +
+            "remove the transport.");
+
+    /// <summary>
+    ///     <c>CQRCONF014</c>: what a transport is configured to forward that can never be stored for it: a type the registered
+    ///     serializer does not name, or, under the generated serializer, a name no module's notification has. Empty when every
+    ///     published type and name can be.
+    /// </summary>
+    public static IEnumerable<CqrsBindingIssue> UnstorablePublications(INotificationTransport transport, INotificationSerializer serializer)
+    {
+        foreach (var type in transport.Declaration.PublishedTypes)
+            if (!serializer.TryGetNotificationName(type, out _))
+                yield return TransportRoutesUnnamedType([transport.Name], type, serializer);
+
+        // A custom serializer's names cannot be enumerated, so only the generated one's are checked.
+        if (serializer is not CompositeOutboxNotificationSerializer generated) yield break;
+        foreach (var name in transport.Declaration.PublishedNames)
+            if (!generated.TryGetNotificationType(name, out _))
+                yield return new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Error,
+                    "CQRCONF014",
+                    $"Transport '{transport.Name}' is configured to forward the notification name '{name}', but no notification " +
+                    "type of the application's modules has that [NotificationName], so nothing is ever forwarded under it. Check " +
+                    "the name, or reference the assembly that declares the notification.");
+    }
+
+    /// <summary>
+    ///     <c>CQRCONF014</c> for one type: transports are configured to forward <paramref name="notificationType" />, which the
+    ///     registered serializer does not name, so it can never be stored for them. A publish of it fails, where it
+    ///     would otherwise stay in-process without a word.
+    /// </summary>
+    public static CqrsBindingIssue TransportRoutesUnnamedType(IEnumerable<string> transportNames, Type notificationType, INotificationSerializer serializer)
+    {
+        var remedy = serializer is CompositeOutboxNotificationSerializer
+            ? notificationType.IsValueType
+                ? "[NotificationName] applies to classes only: make it a class (or a record class)."
+                : "Mark it with [NotificationName]."
+            : $"The registered serializer '{serializer.GetType().FullName}' decides what is durable: have its TryGetNotificationName name the type.";
+
+        return new CqrsBindingIssue(
+            CqrsBindingIssueSeverity.Error,
+            "CQRCONF014",
+            $"The notification transport(s) {NameList(transportNames)} are configured to forward notification " +
+            $"'{notificationType.FullName}', but the registered notification serializer gives it no name, so it cannot be stored in the outbox, which is the only way to a " +
+            $"transport: a publish of it fails rather than silently staying in-process. {remedy}");
+    }
+
+    /// <summary>
+    ///     <c>CQRCONF015</c>: a transport whose name is not a valid outbox handler name, or is also the name of another transport
+    ///     or of a notification handler, so a message addressed to it could reach the wrong recipient.
+    /// </summary>
+    public static IEnumerable<CqrsBindingIssue> TransportNameClashes(IReadOnlyList<INotificationTransport> transports, INotificationSubscriptionRegistry? subscriptions)
+    {
+        foreach (var transport in transports)
+            if (string.IsNullOrWhiteSpace(transport.Name) || transport.Name.Length > MaxTransportNameLength)
+                yield return new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Error,
+                    "CQRCONF015",
+                    $"The notification transport '{transport.GetType().FullName}' is named '{transport.Name}', which is not a valid " +
+                    $"outbox handler name: it must be non-empty and at most {MaxTransportNameLength} characters.");
+
+        foreach (var group in transports
+                     .Where(t => !string.IsNullOrWhiteSpace(t.Name))
+                     .GroupBy(t => t.Name, StringComparer.Ordinal)
+                     .Where(g => g.Count() > 1)
+                     .OrderBy(g => g.Key, StringComparer.Ordinal))
+            yield return new CqrsBindingIssue(
+                CqrsBindingIssueSeverity.Error,
+                "CQRCONF015",
+                $"{group.Count()} notification transports are named '{group.Key}', so an outbox message addressed to that name is " +
+                "ambiguous. Give each transport a unique name.");
+
+        if (subscriptions is null) yield break;
+
+        var handlers = subscriptions.Subscriptions.Select(s => s.HandlerName).ToHashSet(StringComparer.Ordinal);
+        foreach (var transport in transports.Where(t => handlers.Contains(t.Name)).GroupBy(t => t.Name, StringComparer.Ordinal))
+            yield return new CqrsBindingIssue(
+                CqrsBindingIssueSeverity.Error,
+                "CQRCONF015",
+                $"The notification transport name '{transport.Key}' is also the name of a notification handler, so an outbox " +
+                "message addressed to it is ambiguous. Rename the transport, or give the handler another [NotificationHandlerName].");
+    }
+
+    /// <summary>
+    ///     <c>CQRCONF016</c> at a publish: under <see cref="OutboxMode.Transactional" />, a notification a transport forwards
+    ///     was published with no transaction active. Such a publish is delivered in-process, where no transport can take it,
+    ///     so its declared forwarding cannot be honored.
+    /// </summary>
+    public static CqrsBindingIssue ForwardedNotificationOutsideTransaction(Type notificationType, IEnumerable<INotificationTransport> transports)
+        => new(
+            CqrsBindingIssueSeverity.Error,
+            "CQRCONF016",
+            $"Notification '{notificationType.FullName}' is forwarded through the transport(s) {NameList(transports.Select(t => t.Name))}, " +
+            "and it was published while the outbox mode is 'Transactional' with no transaction active. Such a publish is " +
+            "delivered in-process, where no transport can take it, so it would never leave the process. Publish it inside a " +
+            "transactional request, or use the Enabled mode (UseOutbox's default).");
+
+    /// <summary>
+    ///     <c>CQRCONF016</c> at startup: the outbox mode is <see cref="OutboxMode.Transactional" /> and transports forward
+    ///     notifications, so a forwarded notification published outside a transaction fails. Whether one ever is depends on
+    ///     the call sites, hence a warning.
+    /// </summary>
+    public static CqrsBindingIssue TransactionalOutboxWithForwarding(IEnumerable<INotificationTransport> transports)
+        => new(
+            CqrsBindingIssueSeverity.Warning,
+            "CQRCONF016",
+            $"The outbox mode is 'Transactional' and the transport(s) {NameList(transports.Select(t => t.Name))} forward " +
+            "notifications: a forwarded notification published with no transaction active fails, since in-process delivery " +
+            "could not forward it. Publish forwarded notifications inside transactional requests, or use the Enabled mode " +
+            "(UseOutbox's default).");
+
+    /// <summary>
+    ///     <c>CQRCONF017</c>: what a transport is configured to take in that no local handler receives, so every one received
+    ///     is acknowledged and dropped (or, for a name the generated serializer does not know, held back and then rejected).
+    ///     Names are only checked under the generated serializer, whose names can be enumerated.
+    /// </summary>
+    public static IEnumerable<CqrsBindingIssue> ConsumedWithoutSubscribers(
+        INotificationTransport transport,
+        INotificationSerializer serializer,
+        INotificationSubscriptionRegistry subscriptions)
+    {
+        foreach (var type in transport.Declaration.ConsumedTypes)
+            if (subscriptions.GetSubscriptions(type).Count == 0)
+                yield return Unsubscribed(transport.Name, $"notification '{type.FullName}'");
+
+        if (serializer is not CompositeOutboxNotificationSerializer generated) yield break;
+        foreach (var name in transport.Declaration.ConsumedNames)
+            if (!generated.TryGetNotificationType(name, out var type))
+                yield return new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Warning,
+                    "CQRCONF017",
+                    $"Transport '{transport.Name}' takes in the notification name '{name}', but no notification type of the " +
+                    "application's modules has that [NotificationName], so every one received is held back as unknown and then " +
+                    "rejected. Check the name, or reference the assembly that declares the notification.");
+            else if (subscriptions.GetSubscriptions(type).Count == 0)
+                yield return Unsubscribed(transport.Name, $"notification '{type.FullName}' ('{name}')");
+
+        static CqrsBindingIssue Unsubscribed(string transportName, string what)
+            => new(
+                CqrsBindingIssueSeverity.Warning,
+                "CQRCONF017",
+                $"Transport '{transportName}' takes in {what}, but no local handler receives it, so every one received is " +
+                "acknowledged and dropped. Add a handler for it, or remove the binding.");
+    }
+
+    /// <summary>The longest transport name: an outbox message's handler name, which the stores keep in 256 characters.</summary>
+    private const int MaxTransportNameLength = 256;
+
+    private static string NameList(IEnumerable<string> names) => string.Join(", ", names.Select(n => $"'{n}'"));
 
     /// <summary>The message of the exception a dispatch or publish fails with when an error-level rule is broken.</summary>
     public static string FailureMessage(CqrsBindingIssue issue)

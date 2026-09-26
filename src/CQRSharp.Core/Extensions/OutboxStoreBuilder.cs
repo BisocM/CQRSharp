@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -23,6 +25,7 @@ public sealed class OutboxStoreBuilder
 
     private Action<IServiceCollection>? _storeRegistration;
     private Action<OutboxProcessorOptions>? _processorConfig;
+    private Action<IServiceCollection>? _transportRegistrations;
 
     /// <summary>The outbox mode this builder applies. Defaults to <see cref="OutboxMode.Enabled" />.</summary>
     internal OutboxMode Mode { get; private set; } = OutboxMode.Enabled;
@@ -75,6 +78,23 @@ public sealed class OutboxStoreBuilder
     }
 
     /// <summary>
+    ///     Registers a notification transport with this outbox: the extension hook transport packages build their verbs on
+    ///     (<c>UseRabbitMq(...)</c>, for example). The callback registers the transport as a singleton
+    ///     <see cref="INotificationTransport" />, with whatever services, hosted services and options it needs; it runs
+    ///     after the store is registered, and, unlike <see cref="UseStore" />, replaces nothing, so several transports may
+    ///     be added, across every <c>UseOutbox</c> call that configures this builder.
+    /// </summary>
+    /// <param name="registerTransport">A callback that registers an <see cref="INotificationTransport" /> and its services.</param>
+    /// <returns>The same builder, for chaining.</returns>
+    [Experimental(TransportExperiment.DiagnosticId, UrlFormat = TransportExperiment.UrlFormat)]
+    public OutboxStoreBuilder AddTransport(Action<IServiceCollection> registerTransport)
+    {
+        ArgumentNullException.ThrowIfNull(registerTransport);
+        _transportRegistrations += registerTransport;
+        return this;
+    }
+
+    /// <summary>
     ///     Tunes the outbox processor (polling interval, batch size, attempt budget, back-off). Repeated calls compose, in
     ///     call order, across every <c>UseOutbox</c> call that configures this builder.
     /// </summary>
@@ -87,7 +107,7 @@ public sealed class OutboxStoreBuilder
         return this;
     }
 
-    // Registers the store and the processor options. The mode is applied by the builder through OutboxOptions; the
+    // Registers the store, the transports and the processor options. The mode is applied by the builder through OutboxOptions; the
     // processor itself is registered by AddCqrs unconditionally and reads the effective mode when the host starts.
     internal void Apply(IServiceCollection services)
     {
@@ -101,6 +121,8 @@ public sealed class OutboxStoreBuilder
         {
             DependencyInjectionExtensions.AddInMemoryOutboxStoreFallback(services);
         }
+
+        _transportRegistrations?.Invoke(services);
 
         if (_processorConfig is not null)
             services.Configure(_processorConfig);

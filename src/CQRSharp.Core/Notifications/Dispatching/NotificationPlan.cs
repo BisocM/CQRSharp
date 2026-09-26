@@ -32,6 +32,12 @@ internal sealed class NotificationPlan<TNotification> : ProviderPlan where TNoti
     public required bool UsesClosedBehaviors { get; init; }
 
     /// <summary>
+    ///     A notification transport forwards the type, so a publish of it may leave the process even when nothing here
+    ///     handles it.
+    /// </summary>
+    public required bool ForwardedByTransport { get; init; }
+
+    /// <summary>
     ///     What a publish under an outbox mode checks when the serializer does not name the type (<c>CQRCONF003</c> /
     ///     <c>CQRCONF010</c>); <see langword="null" /> when there is nothing to check: the outbox is off, or the type has no
     ///     subscription or no route of its own.

@@ -1,23 +1,32 @@
 using System.Diagnostics;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Transports;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 
 namespace CQRSharp.Core.Outbox;
 
 /// <summary>
-///     Builds the durable <see cref="OutboxMessage" />s for a buffered notification: one per handler subscribed to it,
-///     stamped with its name, payload, handler name, partition key, timestamp and trace context. <see cref="OutboxWriter" />
-///     stores what it builds.
+///     Builds the durable <see cref="OutboxMessage" />s for a buffered notification: one per handler subscribed to it, and
+///     one per notification transport that forwards it, stamped with its name, payload, recipient name, partition key,
+///     timestamp and trace context. <see cref="OutboxWriter" /> stores what it builds.
 /// </summary>
 internal static class OutboxMessageFactory
 {
     /// <summary>
-    ///     Creates one pending <see cref="OutboxMessage" /> per (notification, subscribed handler), stamped with the
-    ///     current trace parent. A notification nothing subscribes to produces no message.
+    ///     Creates one pending <see cref="OutboxMessage" /> per (notification, subscribed handler), then one per
+    ///     (notification, forwarding transport), all stamped with the current trace parent. The messages of one notification
+    ///     share its name, payload, <see cref="OutboxMessage.NotificationId" />, creation time, due time and partition key; a
+    ///     transport's message is addressed to the transport's name. A notification that no handler subscribes to and no
+    ///     transport forwards produces no message.
     /// </summary>
     /// <param name="entries">The notifications drained from the scoped outbox, in publication order.</param>
     /// <param name="serializer">The serializer that provides each notification's stable name and payload.</param>
     /// <param name="subscriptions">The registry that knows which handlers subscribe to each notification and its partition key.</param>
+    /// <param name="transports">
+    ///     The transports that may forward the notifications, or <see langword="null" /> for messages meant for the local
+    ///     handlers alone (a notification received through a transport is never sent back out).
+    /// </param>
     /// <param name="timeProvider">The clock used for the creation timestamp.</param>
     /// <returns>
     ///     The messages, in publication order. Within one call <see cref="OutboxMessage.CreatedAt" /> is strictly
@@ -35,6 +44,7 @@ internal static class OutboxMessageFactory
         IReadOnlyList<OutboxEntry> entries,
         INotificationSerializer serializer,
         INotificationSubscriptionRegistry subscriptions,
+        NotificationTransportRegistry? transports,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -53,7 +63,15 @@ internal static class OutboxMessageFactory
             var (notification, dueAt) = entries[i];
             var notificationType = notification.GetType();
             var subscribed = subscriptions.GetSubscriptions(notificationType);
-            if (subscribed.Count == 0) continue;
+
+            // Only a named notification can be forwarded: the name is what a transport routes and what the receiver reads
+            // it back by.
+            string? notificationName = null;
+            INotificationTransport[] forwarding = [];
+            if (transports is { IsEmpty: false } && serializer.TryGetNotificationName(notificationType, out notificationName))
+                forwarding = transports.TransportsFor(notificationType, notificationName);
+
+            if (subscribed.Count == 0 && forwarding.Length == 0) continue;
 
             var now = timeProvider.GetUtcNow().UtcDateTime;
             DateTime createdAt;
@@ -73,11 +91,15 @@ internal static class OutboxMessageFactory
 
             // The dispatcher routes only named notifications here; a direct caller may still pass one without a name, and
             // nothing could ever read its message back.
-            if (!serializer.TryGetNotificationName(notificationType, out var notificationName))
-                throw new InvalidOperationException(
-                    $"Notification type '{notificationType.FullName}' cannot be stored in the outbox: the registered " +
-                    $"{nameof(INotificationSerializer)} gives it no name. Mark it with [NotificationName], or, when a " +
-                    "custom serializer is registered with AddNotificationSerializer<T>(), have that serializer name it.");
+            if (notificationName is null)
+            {
+                if (!serializer.TryGetNotificationName(notificationType, out var named))
+                    throw new InvalidOperationException(
+                        $"Notification type '{notificationType.FullName}' cannot be stored in the outbox: the registered " +
+                        $"{nameof(INotificationSerializer)} gives it no name. Mark it with [NotificationName], or, when a " +
+                        "custom serializer is registered with AddNotificationSerializer<T>(), have that serializer name it.");
+                notificationName = named;
+            }
 
             var payload = serializer.Serialize(notification);
             var partitionKey = subscriptions.GetPartitionKey(notification);
@@ -88,6 +110,23 @@ internal static class OutboxMessageFactory
                     Guid.NewGuid(),
                     notificationName,
                     subscribed[s].HandlerName,
+                    payload,
+                    createdAt,
+                    OutboxMessageStatus.Pending,
+                    null,
+                    null,
+                    NextRetryAt: notBefore,
+                    TraceParent: traceParent,
+                    PartitionKey: partitionKey,
+                    NotificationId: notificationId));
+
+            // After the handlers' messages, with the same stamps: a scheduled notification is forwarded when it is due, and
+            // a transport's messages are ordered per partition key among themselves, like a handler's.
+            for (var t = 0; t < forwarding.Length; t++)
+                messages.Add(new OutboxMessage(
+                    Guid.NewGuid(),
+                    notificationName,
+                    forwarding[t].Name,
                     payload,
                     createdAt,
                     OutboxMessageStatus.Pending,
