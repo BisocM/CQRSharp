@@ -82,6 +82,17 @@ public sealed class TransportConfigurationTests
         issues.Should().Contain(i => i.Message.Contains("'tests.transport.nobody-has-this'"));
     }
 
+    [Fact(DisplayName = "CQRCONF014: a type taken in that the serializer does not name is an error, not a CQRCONF017 warning")]
+    public async Task An_unnamed_consumed_type_is_reported()
+    {
+        var transport = new ScriptedTransport("broker") { Declaration = new() { ConsumedTypes = [typeof(UnnamedForwardedNotification)] } };
+        await using var provider = Build(b => b.UseOutbox(o => o.UseInMemoryStore()), transport);
+
+        var issue = Describe(provider).Should().ContainSingle().Subject;
+        issue.Code.Should().Be("CQRCONF014");
+        issue.Message.Should().Contain("take in").And.Contain(typeof(UnnamedForwardedNotification).FullName!);
+    }
+
     [Fact(DisplayName = "CQRCONF014 at first use: publishing a type a transport forwards but the serializer does not name fails")]
     public async Task Publishing_an_unnamed_forwarded_type_fails()
     {

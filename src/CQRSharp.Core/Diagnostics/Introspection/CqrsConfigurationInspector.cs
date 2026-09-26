@@ -146,12 +146,13 @@ internal static class CqrsConfigurationInspector
         // CQRCONF015: a transport's messages are addressed to it by name, in the namespace of the handler names.
         issues.AddRange(CqrsConfigurationRules.TransportNameClashes(transports, subscriptions));
 
-        // CQRCONF014 / CQRCONF017: what a transport forwards must be storable, and what it takes in should reach a handler.
+        // CQRCONF014 / CQRCONF017: what a transport forwards or takes in must have a name, and what it takes in should reach a
+        // handler.
         // Without a serializer CQRCONF001 already names the cause.
         if (services.GetService<INotificationSerializer>() is { } serializer)
             foreach (var transport in transports)
             {
-                issues.AddRange(CqrsConfigurationRules.UnstorablePublications(transport, serializer));
+                issues.AddRange(CqrsConfigurationRules.UnnamedDeclarations(transport, serializer));
                 if (subscriptions is not null)
                     issues.AddRange(CqrsConfigurationRules.ConsumedWithoutSubscribers(transport, serializer, subscriptions));
             }

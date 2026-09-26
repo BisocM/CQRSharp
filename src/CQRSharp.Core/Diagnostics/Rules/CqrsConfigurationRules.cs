@@ -154,15 +154,25 @@ internal static class CqrsConfigurationRules
             "remove the transport.");
 
     /// <summary>
-    ///     <c>CQRCONF014</c>: what a transport is configured to forward that can never be stored for it: a type the registered
-    ///     serializer does not name, or, under the generated serializer, a name no module's notification has. Empty when every
-    ///     published type and name can be.
+    ///     <c>CQRCONF014</c>: what a transport is configured to forward that can never be stored for it (a type the registered
+    ///     serializer does not name, or, under the generated serializer, a name no module's notification has), and a type it
+    ///     is configured to take in that the serializer does not name, so what arrives could never be read back as it. Empty
+    ///     when every declared type and published name can be.
     /// </summary>
-    public static IEnumerable<CqrsBindingIssue> UnstorablePublications(INotificationTransport transport, INotificationSerializer serializer)
+    public static IEnumerable<CqrsBindingIssue> UnnamedDeclarations(INotificationTransport transport, INotificationSerializer serializer)
     {
         foreach (var type in transport.Declaration.PublishedTypes)
             if (!serializer.TryGetNotificationName(type, out _))
                 yield return TransportRoutesUnnamedType([transport.Name], type, serializer);
+
+        foreach (var type in transport.Declaration.ConsumedTypes)
+            if (!serializer.TryGetNotificationName(type, out _))
+                yield return new CqrsBindingIssue(
+                    CqrsBindingIssueSeverity.Error,
+                    "CQRCONF014",
+                    $"Transport '{transport.Name}' is configured to take in notification '{type.FullName}', but the registered " +
+                    "notification serializer gives it no name, so nothing that arrives can be read back as it, and it cannot be " +
+                    $"bound by name either. {UnnamedRemedy(type, serializer)}");
 
         // A custom serializer's names cannot be enumerated, so only the generated one's are checked.
         if (serializer is not CompositeOutboxNotificationSerializer generated) yield break;
@@ -183,11 +193,7 @@ internal static class CqrsConfigurationRules
     /// </summary>
     public static CqrsBindingIssue TransportRoutesUnnamedType(IEnumerable<string> transportNames, Type notificationType, INotificationSerializer serializer)
     {
-        var remedy = serializer is CompositeOutboxNotificationSerializer
-            ? notificationType.IsValueType
-                ? "[NotificationName] applies to classes only: make it a class (or a record class)."
-                : "Mark it with [NotificationName]."
-            : $"The registered serializer '{serializer.GetType().FullName}' decides what is durable: have its TryGetNotificationName name the type.";
+        var remedy = UnnamedRemedy(notificationType, serializer);
 
         return new CqrsBindingIssue(
             CqrsBindingIssueSeverity.Error,
@@ -271,8 +277,9 @@ internal static class CqrsConfigurationRules
         INotificationSerializer serializer,
         INotificationSubscriptionRegistry subscriptions)
     {
+        // A type the serializer does not name is CQRCONF014, which says more than that nothing handles it.
         foreach (var type in transport.Declaration.ConsumedTypes)
-            if (subscriptions.GetSubscriptions(type).Count == 0)
+            if (serializer.TryGetNotificationName(type, out _) && subscriptions.GetSubscriptions(type).Count == 0)
                 yield return Unsubscribed(transport.Name, $"notification '{type.FullName}'");
 
         if (serializer is not CompositeOutboxNotificationSerializer generated) yield break;
@@ -294,6 +301,13 @@ internal static class CqrsConfigurationRules
                 $"Transport '{transportName}' takes in {what}, but no local handler receives it, so every one received is " +
                 "acknowledged and dropped. Add a handler for it, or remove the binding.");
     }
+
+    private static string UnnamedRemedy(Type notificationType, INotificationSerializer serializer)
+        => serializer is CompositeOutboxNotificationSerializer
+            ? notificationType.IsValueType
+                ? "[NotificationName] applies to classes only: make it a class (or a record class)."
+                : "Mark it with [NotificationName]."
+            : $"The registered serializer '{serializer.GetType().FullName}' decides what is durable: have its TryGetNotificationName name the type.";
 
     /// <summary>The longest transport name: an outbox message's handler name, which the stores keep in 256 characters.</summary>
     private const int MaxTransportNameLength = 256;
