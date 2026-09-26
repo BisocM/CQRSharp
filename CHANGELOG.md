@@ -46,6 +46,13 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
 
 ### Changed
 
+- **A custom request context reads the clock once.** A context a factory builds with the parameterless
+  `RequestContextBase()` constructor while the dispatcher calls it now reads the application's `TimeProvider`, and when
+  the factory completes synchronously that reading is its `CreatedAt`: the constructor no longer reads the system clock
+  only for the dispatcher to stamp over it. That removes one of the two clock reads such a dispatch made, about a tenth of
+  its time (`RequestContextBenchmarks`); allocations are unchanged. `CreatedAt` keeps its meaning, the time the request
+  was sent, fixed then and not when it is read; a context a factory hydrates asynchronously is still stamped when the
+  factory completes, and one built with an explicit time keeps it.
 - Dependabot opens its NuGet and GitHub Actions pull requests monthly, and never for the Microsoft.Extensions and
   Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
   raised together at a release.

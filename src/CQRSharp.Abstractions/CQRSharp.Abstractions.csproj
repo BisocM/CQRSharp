@@ -56,8 +56,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The dispatcher (CQRSharp.Core) stamps a context built without a creation time from the application's TimeProvider
-             (RequestContextBase.IsTimestampPending / StampFromApplicationClock). -->
+        <!-- The dispatcher (CQRSharp.Core) stamps a context built without a creation time from the application's TimeProvider,
+             which it lends to the context factories it calls (RequestContextBase.IsTimestampPending / StampFromApplicationClock /
+             EnterDispatch, ApplicationClock). -->
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>CQRSharp.Core</_Parameter1>
         </AssemblyAttribute>
