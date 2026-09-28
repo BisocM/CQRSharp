@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Every log line the libraries write is a source-generated [LoggerMessage] method with an event id of its own:
       # the script fails on a direct ILogger.Log*(...) call under src/ and on an event id two messages of one assembly
@@ -85,7 +85,7 @@ jobs:
       # The .NET 10 SDK builds every target framework (global.json requires it); the 8 and 9 entries bring the
       # runtimes the net8.0 and net9.0 tests run on. validate_packages.py fails the job if a framework is missing.
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload test results and coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |
@@ -182,7 +182,7 @@ jobs:
           done
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
           path: ${{ env.PACKAGE_OUTPUT }}
@@ -202,10 +202,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
