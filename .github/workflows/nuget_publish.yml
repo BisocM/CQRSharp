@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # the release-notes check reads the commits since the last v<version> tag
 
@@ -80,16 +80,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # global.json requires the .NET 10 SDK for every dotnet command in the repository, `dotnet nuget push` included.
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
       - name: Download packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nuget-packages
           path: ${{ env.PACKAGE_OUTPUT }}
@@ -143,7 +143,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create the v${{ needs.publish.outputs.version }} tag and release
         env:
