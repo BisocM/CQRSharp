@@ -1,11 +1,14 @@
-# CQRSharp
+# CQRSharp | A CQRS Framework for C# and .NET
 
 [![NuGet version (CQRSharp)](https://img.shields.io/nuget/v/CQRSharp.svg?style=flat-square)](https://www.nuget.org/packages/CQRSharp/)
 [![Build](https://github.com/BisocM/CQRSharp/actions/workflows/nuget_publish.yml/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/nuget_publish.yml)
 [![CodeQL](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql/badge.svg?branch=Release)](https://github.com/BisocM/CQRSharp/actions/workflows/github-code-scanning/codeql)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-Commands, queries and events for .NET 8, 9 and 10, plus the plumbing you would otherwise write around them.
+CQRSharp is a fast, Native AOT-compatible CQRS framework for C# and .NET.
+It provides commands, queries, events, source-generated dispatch,
+pipeline behaviors, idempotency, resilience and transactional outbox
+support without runtime reflection.
 
 - **Wired at compile time.** A source generator finds your handlers, so there is no reflection or assembly scanning, it
   runs under Native AOT, and a request without a handler shows up in your IDE, not in production.
