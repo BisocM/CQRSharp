@@ -9,7 +9,7 @@ namespace CQRSharp.Tests.Analyzers;
 /// </summary>
 public sealed class DirectCoreRegistrationCodeFixTests
 {
-    private const string Usings = """
+    internal const string Usings = """
                                   using CQRSharp;
                                   using CQRSharp.Pipelines;
                                   using Microsoft.Extensions.DependencyInjection;

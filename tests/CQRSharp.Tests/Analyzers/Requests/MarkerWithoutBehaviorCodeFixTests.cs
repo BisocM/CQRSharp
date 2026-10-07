@@ -64,22 +64,27 @@ public sealed class MarkerWithoutBehaviorCodeFixTests
         result.CompileErrors.Should().BeEmpty();
     }
 
+    private static Task<CodeFixResult> ApplyAsync(string registration, string id) => ApplyToAsync(Input(registration, id), id);
+
     // The request of the other marker is left out, so each case has exactly the diagnostic it fixes.
-    private static Task<CodeFixResult> ApplyAsync(string registration, string id)
+    internal static string Input(string registration, string id)
     {
         var requests = id == "CQRA018"
             ? MarkerWithoutBehaviorAnalyzerTests.Requests.Replace("public sealed class Charge : CommandBase, IRetryableRequest;", "public sealed class Charge : CommandBase;")
             : MarkerWithoutBehaviorAnalyzerTests.Requests.Replace("public sealed class PlaceOrder : CommandBase, IIdempotentRequest", "public sealed class PlaceOrder : CommandBase");
 
-        return CodeFixHarness.ApplyAsync(
-            requests + MarkerWithoutBehaviorAnalyzerTests.Program(registration),
+        return requests + MarkerWithoutBehaviorAnalyzerTests.Program(registration);
+    }
+
+    internal static Task<CodeFixResult> ApplyToAsync(string source, string id)
+        => CodeFixHarness.ApplyAsync(
+            source,
             new MarkerWithoutBehaviorAnalyzer(),
             new MarkerWithoutBehaviorCodeFixProvider(),
             id,
             withGeneratedCode: true,
             outputKind: OutputKind.ConsoleApplication,
             references: ProbeReferences.SingleProjectApplication());
-    }
 
     private static string Normalized(string text) => string.Join(" ", text.Split((char[])[' ', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
 }

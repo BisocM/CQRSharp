@@ -12,7 +12,7 @@ namespace CQRSharp.Tests.Analyzers;
 /// </summary>
 public sealed class UnnamedHandledNotificationAnalyzerTests
 {
-    private const string Notifications = """
+    internal const string Notifications = """
                                          using System;
                                          using System.Threading;
                                          using System.Threading.Tasks;
@@ -122,11 +122,16 @@ public sealed class UnnamedHandledNotificationAnalyzerTests
         taken.RemainingDiagnostics.Should().BeEmpty();
     }
 
+    private static Task<CodeFixResult> ApplyFixAsync(string notifications) => ApplyFixToAsync(FixInput(notifications));
+
     // The audit notifications are named, so the order notification is the one diagnostic to fix.
-    private static Task<CodeFixResult> ApplyFixAsync(string notifications)
+    internal static string FixInput(string notifications)
+        => notifications.Replace("public sealed record LoginAudited", "[NotificationName(\"audit.login\")] public sealed record LoginAudited") +
+           Program("services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore()))");
+
+    internal static Task<CodeFixResult> ApplyFixToAsync(string source)
         => CodeFixHarness.ApplyAsync(
-            notifications.Replace("public sealed record LoginAudited", "[NotificationName(\"audit.login\")] public sealed record LoginAudited") +
-            Program("services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore()))"),
+            source,
             new UnnamedHandledNotificationAnalyzer(),
             new UnnamedHandledNotificationCodeFixProvider(),
             "CQRA020",

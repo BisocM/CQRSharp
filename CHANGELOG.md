@@ -125,6 +125,10 @@ message for a handler added in a newer version is: add the transport to every in
   caller's task first and added to `cqrsharp.queue.rejected` or `cqrsharp.queue.evicted` afterwards, so a caller that
   had already seen the rejection could read a count that did not include it yet. The count now comes first, and the
   caller is answered even if a metrics listener throws.
+- **The CQRA018/CQRA019 and CQRA020 code fixes keep the file's line endings.** They left the line they add to the
+  formatter, whose newline is the platform's: on Windows they wrote CRLF into a file with LF line endings, and elsewhere
+  LF into a CRLF file. The attribute CQRA020 adds, and the statement CQRA018/CQRA019 add to a statement lambda, now end
+  the way the file's lines do.
 
 ### Documentation
 
