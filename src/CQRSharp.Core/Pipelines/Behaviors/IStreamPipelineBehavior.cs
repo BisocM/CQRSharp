@@ -2,7 +2,8 @@ namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The continuation a stream pipeline behavior invokes to run the next behavior (or the stream handler). The
-///     cancellation token is defaulted so a behavior can simply <c>next()</c> to flow the ambient token. Named (rather
+///     cancellation token is defaulted so a behavior can simply <c>next()</c> to flow the token it received, or pass its
+///     own token to override it; a token that cannot be canceled also flows the received one. Named (rather
 ///     than a bare <see cref="Func{T, TResult}" />) so it self-documents on hover and the parameterless call compiles.
 /// </summary>
 /// <typeparam name="TItem">The streamed element type.</typeparam>

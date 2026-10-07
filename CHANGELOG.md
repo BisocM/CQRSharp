@@ -4,16 +4,17 @@ All notable changes to CQRSharp are documented here. This project adheres to [Se
 
 ## [5.1.0]
 
-A minor release: no breaking changes to the public API or to behavior, so a 5.0 application upgrades by bumping the
-package versions. Notifications can be scheduled for later delivery through the outbox, and carried between services
-through RabbitMQ with the new `CQRSharp.RabbitMQ` package, built on a notification transport extension point. Package
-validation now checks every package against 5.0.0.
+A minor release: no breaking changes to the public API, so a 5.0 application upgrades by bumping the package versions.
+Notifications can be scheduled for later delivery through the outbox, and carried between services through RabbitMQ
+with the new `CQRSharp.RabbitMQ` package, built on a notification transport extension point. A pipeline behavior's
+`next()` now passes on its cancellation token, as documented, instead of dropping it. Package validation now checks
+every package against 5.0.0.
 
 ### Upgrading from 5.0.0
 
 No step is required: the EF Core schema and the Redis key layout are unchanged, and 5.0 and 5.1 instances can share one
 outbox during a rolling deploy (a 5.0 processor holds a scheduled message until it is due, as it holds a back-off; only a
-Redis message scheduled past November 2286 needs every instance on 5.1). Three things concern code outside the packages:
+Redis message scheduled past November 2286 needs every instance on 5.1). Four things concern code outside the packages:
 
 1. **A custom `IOutboxStore`** keeps working unchanged. To accept scheduled notifications it also implements
    `ISchedulingOutboxStore` once it passes the scheduling cases of `OutboxStoreContractTests`; a decorator of a store
@@ -22,6 +23,10 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Three t
    implementations that throw `NotSupportedException`. Implement them to forward scheduled publishes.
 3. **A custom outbox gauge or health probe** built on `OutboxBacklog` sees scheduled messages that are not due in the new
    `ScheduledCount`, not in `PendingCount` or the lag (only a store that implements `ISchedulingOutboxStore` has any).
+4. **A pipeline behavior that calls `next()`** without a token now runs the rest of the pipeline, the handler included,
+   under the token the behavior received instead of `CancellationToken.None` ([Fixed](#fixed)). A behavior that already
+   writes `next(cancellationToken)` is unaffected. One that relied on `next()` (or `next(CancellationToken.None)`) to
+   shield the handler from the caller's cancellation passes a token of its own instead.
 
 A notification transport, such as the RabbitMQ one, is added only by the application that wants it; an application
 without one runs exactly as before, and its outbox messages, schema and logs are unchanged. When a transport is added to
@@ -104,6 +109,18 @@ message for a handler added in a newer version is: add the transport to every in
 - Dependabot opens its NuGet and GitHub Actions pull requests monthly, and never for the Microsoft.Extensions and
   Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
   raised together at a release.
+
+### Fixed
+
+- **A behavior's `next()` passes on its cancellation token.** In 5.0, a request, stream or notification pipeline
+  behavior that called `next()` without a token ran the rest of the pipeline, the handler included, under
+  `CancellationToken.None`, though the XML documentation said it flowed the token the behavior received. The caller's
+  cancellation (an aborted HTTP request, host shutdown) never reached the handler. A behavior of default priority runs
+  inside `UseTimeout`, whose timeout cancels the token it passes down, so it could not cancel such a request either. A
+  stream behavior that returned `next()` unenumerated was spared, because the executor enumerates the stream with the
+  caller's token. Now `next()`, like any token that cannot be canceled, passes on the token the behavior received, and a
+  cancelable token passed to `next` still overrides it. CQRSharp's own behaviors always pass their token and were not
+  affected.
 
 ### Documentation
 

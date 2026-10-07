@@ -3,7 +3,8 @@ namespace CQRSharp.Pipelines;
 /// <summary>
 ///     The continuation a notification pipeline behavior invokes to run the next behavior (or, at the end of the chain,
 ///     the delivery to the handlers). The cancellation token is defaulted, so a behavior can simply <c>await next()</c> to
-///     flow the ambient token, or pass its own token to override it, exactly as with request and stream behaviors.
+///     flow the token it received, or pass its own token to override it, exactly as with request and stream behaviors;
+///     a token that cannot be canceled also flows the received one.
 /// </summary>
 public delegate Task NotificationHandlerDelegate(CancellationToken cancellationToken = default);
 

@@ -19,6 +19,7 @@
         <PackageReleaseNotes>
             Version 5.1.0, a minor release: no breaking change. Notifications can be scheduled for later delivery through the outbox with ICqrsDispatcher.PublishAt / PublishAfter, in every built-in store; a scheduled publish never falls back to in-process delivery.
             A custom request context built with the parameterless RequestContextBase() constructor costs one clock read instead of two.
+            Fixed: a pipeline behavior's next() without a token passes on the token the behavior received, as documented, instead of running the handler under CancellationToken.None.
             See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>

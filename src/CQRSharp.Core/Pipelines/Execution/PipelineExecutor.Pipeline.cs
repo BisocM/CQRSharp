@@ -88,7 +88,7 @@ internal sealed partial class PipelineExecutor
     {
         return behavior.Handle(
             request,
-            nextToken => ExecuteFinalActionAsync(plan, request, handler, services, nextToken),
+            nextToken => ExecuteFinalActionAsync(plan, request, handler, services, PipelineTokens.Flow(nextToken, cancellationToken)),
             cancellationToken);
     }
 
@@ -113,7 +113,7 @@ internal sealed partial class PipelineExecutor
             var behavior = behaviors[index];
             return behavior.Handle(
                 request,
-                nextToken => InvokeBehavior(index + 1, nextToken),
+                nextToken => InvokeBehavior(index + 1, PipelineTokens.Flow(nextToken, ct)),
                 ct);
         }
     }

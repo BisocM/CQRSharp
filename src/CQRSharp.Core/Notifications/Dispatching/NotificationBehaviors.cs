@@ -39,7 +39,7 @@ internal static class NotificationBehaviors
         Task Invoke(int index, CancellationToken ct)
             => index >= behaviors.Length
                 ? terminal(ct)
-                : behaviors[index].Handle(notification, next => Invoke(index + 1, next), ct);
+                : behaviors[index].Handle(notification, next => Invoke(index + 1, PipelineTokens.Flow(next, ct)), ct);
     }
 
     // A handler that throws before its first await is reported through its task, as one that faults later is, so a
