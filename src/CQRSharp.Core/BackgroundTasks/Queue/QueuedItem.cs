@@ -68,6 +68,28 @@ internal abstract class QueuedItem
     }
 
     /// <summary>
+    ///     Settles a waiting item as failed, running <paramref name="settling" /> with <paramref name="state" /> first:
+    ///     what the queue records for the item (the rejection or eviction it counts) is in place before the caller can
+    ///     observe the failure. <see langword="false" />, without running <paramref name="settling" />, when the item had
+    ///     already started or settled.
+    /// </summary>
+    public bool TryReject<TState>(Exception exception, Action<TState> settling, TState state)
+    {
+        if (!TrySettle()) return false;
+        try
+        {
+            settling(state);
+        }
+        finally
+        {
+            // Whatever recording does, the caller is answered: a throwing listener must not leave it waiting forever.
+            SetException(exception);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     ///     Runs the work and completes the caller's task with its outcome. Never throws: a failing or cancelled work
     ///     item faults or cancels the caller's task instead. Only for an item <see cref="TryStart" /> claimed.
     /// </summary>

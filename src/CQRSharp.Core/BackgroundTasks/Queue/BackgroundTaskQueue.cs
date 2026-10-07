@@ -181,8 +181,9 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             ? $"The background task queue is full ({_capacity} work items) and its FullMode is DropWrite, so it refused the work item."
             : "The background task queue no longer accepts work: the host is shutting down, or the queue was disposed.";
 
-        if (item.TryReject(new BackgroundTaskRejectedException(reason, message)))
-            _metrics.Rejected(reason);
+        // Counted before the caller is answered, so a caller that sees the refusal finds it counted.
+        item.TryReject(new BackgroundTaskRejectedException(reason, message),
+            static state => state.Metrics.Rejected(state.Reason), (Metrics: _metrics, Reason: reason));
     }
 
     private void Evict(QueuedItem item)
@@ -191,8 +192,8 @@ internal sealed class BackgroundTaskQueue : IBackgroundTaskQueue, IBackgroundTas
             BackgroundTaskRejectionReason.Evicted,
             $"The background task queue was full and its FullMode is {_fullMode}, so it evicted this queued work item to make room for newer work.");
 
-        // An item its caller had already withdrawn was no longer work anyone waits for, so it is not counted as lost.
-        if (item.TryReject(rejection))
-            _metrics.Evicted(_fullMode);
+        // An item its caller had already withdrawn was no longer work anyone waits for, so it is not counted as lost; one
+        // that is counted is counted before its caller is answered, as a refusal is.
+        item.TryReject(rejection, static state => state.Metrics.Evicted(state.FullMode), (Metrics: _metrics, FullMode: _fullMode));
     }
 }

@@ -121,6 +121,10 @@ message for a handler added in a newer version is: add the transport to every in
   caller's token. Now `next()`, like any token that cannot be canceled, passes on the token the behavior received, and a
   cancelable token passed to `next` still overrides it. CQRSharp's own behaviors always pass their token and were not
   affected.
+- **A refused or evicted background work item is counted before its caller learns of it.** The queue failed the
+  caller's task first and added to `cqrsharp.queue.rejected` or `cqrsharp.queue.evicted` afterwards, so a caller that
+  had already seen the rejection could read a count that did not include it yet. The count now comes first, and the
+  caller is answered even if a metrics listener throws.
 
 ### Documentation
 

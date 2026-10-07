@@ -171,6 +171,47 @@ public sealed class BackgroundTaskQueueTests
         probe.Count(CqrsTelemetry.QueueInstruments.Rejected, "closed").Should().Be(1);
     }
 
+    [Fact(DisplayName = "Wait: a refused producer is counted before it learns of the refusal")]
+    public async Task Wait_mode_refusal_is_counted_before_the_producer_sees_it()
+    {
+        using var queue = Queue(1, BoundedChannelFullMode.Wait);
+        using var probe = new QueueMeterProbe(queue.Meter);
+        _ = queue.EnqueueAsync(_ => Task.CompletedTask, Ct);
+        var blocked = queue.EnqueueAsync(_ => Task.CompletedTask, Ct);
+        bool? answeredWhenCounted = null;
+        probe.Recorded = instrument =>
+        {
+            if (instrument == CqrsTelemetry.QueueInstruments.Rejected) answeredWhenCounted = blocked.IsCompleted;
+        };
+
+        ((IBackgroundTaskQueue)queue).CompleteAdding();
+
+        await Assert.ThrowsAsync<BackgroundTaskRejectedException>(() => blocked.WaitAsync(Ct));
+        answeredWhenCounted.Should().BeFalse("a producer that sees its refusal finds it counted");
+    }
+
+    [Theory(DisplayName = "An evicted item is counted before its caller learns of the eviction")]
+    [InlineData(BoundedChannelFullMode.DropOldest)]
+    [InlineData(BoundedChannelFullMode.DropNewest)]
+    public async Task Eviction_is_counted_before_the_caller_sees_it(BoundedChannelFullMode fullMode)
+    {
+        using var queue = Queue(2, fullMode);
+        using var probe = new QueueMeterProbe(queue.Meter);
+        var first = queue.EnqueueAsync(_ => Task.CompletedTask, Ct);
+        var second = queue.EnqueueAsync(_ => Task.CompletedTask, Ct);
+        var evicted = fullMode == BoundedChannelFullMode.DropOldest ? first : second;
+        bool? answeredWhenCounted = null;
+        probe.Recorded = instrument =>
+        {
+            if (instrument == CqrsTelemetry.QueueInstruments.Evicted) answeredWhenCounted = evicted.IsCompleted;
+        };
+
+        _ = queue.EnqueueAsync(_ => Task.CompletedTask, Ct);
+
+        await Assert.ThrowsAsync<BackgroundTaskRejectedException>(() => evicted);
+        answeredWhenCounted.Should().BeFalse("a caller that sees its eviction finds it counted");
+    }
+
     [Theory(DisplayName = "A closed queue refuses new work at once, whatever its full mode")]
     [InlineData(BoundedChannelFullMode.Wait)]
     [InlineData(BoundedChannelFullMode.DropWrite)]

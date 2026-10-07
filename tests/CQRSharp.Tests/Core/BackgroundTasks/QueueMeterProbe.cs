@@ -35,6 +35,12 @@ internal sealed class QueueMeterProbe : IDisposable
         _listener.Start();
     }
 
+    /// <summary>
+    ///     Called with each measurement's instrument on the thread that records it, while it is recorded, so a test can
+    ///     see what else had happened at that moment.
+    /// </summary>
+    public Action<string>? Recorded { get; set; }
+
     /// <summary>The names of the instruments the probe listens to.</summary>
     public IReadOnlyCollection<string> Instruments => _instruments.Keys.ToArray();
 
@@ -63,5 +69,6 @@ internal sealed class QueueMeterProbe : IDisposable
                 reason = tag.Value as string;
 
         _measurements.Enqueue((instrument.Name, value, reason));
+        Recorded?.Invoke(instrument.Name);
     }
 }
