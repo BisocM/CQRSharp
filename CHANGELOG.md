@@ -24,7 +24,7 @@ Redis message scheduled past November 2286 needs every instance on 5.1). Four th
 3. **A custom outbox gauge or health probe** built on `OutboxBacklog` sees scheduled messages that are not due in the new
    `ScheduledCount`, not in `PendingCount` or the lag (only a store that implements `ISchedulingOutboxStore` has any).
 4. **A pipeline behavior that calls `next()`** without a token now runs the rest of the pipeline, the handler included,
-   under the token the behavior received instead of `CancellationToken.None` ([Fixed](#fixed)). A behavior that already
+   under the token the behavior received instead of `CancellationToken.None` (see Fixed). A behavior that already
    writes `next(cancellationToken)` is unaffected. One that relied on `next()` (or `next(CancellationToken.None)`) to
    shield the handler from the caller's cancellation passes a token of its own instead.
 
@@ -133,7 +133,8 @@ message for a handler added in a newer version is: add the transport to every in
 ### Documentation
 
 - **Startup validation in the 5.0.0 package notes.** The CQRSharp 5.0.0 package release notes said startup validation
-  runs only when you call `ValidateOnStart()`. As the [5.0.0 entry](#500) says, with no policy set it runs as
+  runs only when you call `ValidateOnStart()`. As the
+  [5.0.0 entry](https://github.com/BisocM/CQRSharp/blob/v5.0.0/CHANGELOG.md#500) says, with no policy set it runs as
   `ThrowOnError` in the Development environment and is off elsewhere; `ValidateOnStart()` turns it on everywhere. The
   behavior is unchanged, and the 5.1.0 package notes state it correctly.
 - **[RabbitMQ](docs/rabbitmq.md)**: the transport end to end, from publishing and consuming to topology, ordering,
