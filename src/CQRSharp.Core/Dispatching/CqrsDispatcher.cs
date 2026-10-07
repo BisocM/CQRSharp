@@ -90,4 +90,26 @@ internal sealed class CqrsDispatcher : ICqrsDispatcher
         ArgumentNullException.ThrowIfNull(notification);
         return _shared.Notifications.Publish(_services, notification, cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task PublishAt<TNotification>(TNotification notification, DateTimeOffset dueAt, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+        return _shared.Notifications.Schedule(_services, notification, dueAt.UtcDateTime, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task PublishAfter<TNotification>(TNotification notification, TimeSpan delay, CancellationToken cancellationToken = default)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+        ArgumentOutOfRangeException.ThrowIfLessThan(delay, TimeSpan.Zero);
+
+        var now = _shared.TimeProvider.GetUtcNow().UtcDateTime;
+        if (delay > DateTime.MaxValue - now)
+            throw new ArgumentOutOfRangeException(nameof(delay), delay, "The due time would lie past the end of the calendar.");
+
+        return _shared.Notifications.Schedule(_services, notification, now + delay, cancellationToken);
+    }
 }

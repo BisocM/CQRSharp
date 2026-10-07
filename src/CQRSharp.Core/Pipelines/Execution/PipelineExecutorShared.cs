@@ -30,6 +30,9 @@ internal sealed class PipelineExecutorShared(
     /// <summary>The application's clock: every time read on the dispatch path goes through it.</summary>
     public TimeProvider TimeProvider { get; } = timeProvider;
 
+    /// <summary><see cref="TimeProvider" /> as the clock the executor lends to the context factories it calls.</summary>
+    public ApplicationClock ContextClock { get; } = new TimeProviderApplicationClock(timeProvider);
+
     /// <summary>Completes once the background queue's consumer runs; a queued dispatch waits for it.</summary>
     public ConsumerReadiness ConsumerReadiness { get; } = consumerReadiness;
 

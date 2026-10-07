@@ -14,8 +14,8 @@
         <Description>Project templates for CQRSharp, the source-generated, Native-AOT-safe CQRS framework. `dotnet new cqrsharp` scaffolds a working app: AddCqrsGenerated, one query and its handler, dispatched end to end.</Description>
         <PackageTags>CQRS;Mediator;dotnet-new;templates;AOT;SourceGenerator</PackageTags>
         <PackageReleaseNotes>
-            Version 5.0.0. First release of the dotnet new cqrsharp template, a console app with one query and its handler.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. The template references CQRSharp 5.1.0.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
 
         <IncludeBuildOutput>false</IncludeBuildOutput>

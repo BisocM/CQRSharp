@@ -7,10 +7,10 @@ using Microsoft.Extensions.Time.Testing;
 namespace CQRSharp.Tests.Shared;
 
 /// <summary>
-///     An outbox store over the in-memory one that says whether it joins the unit of work, records when it is written
-///     in a shared <see cref="TransactionLog" /> (so a test can see whether that was before or after the commit), fails
-///     on demand, and can set aside the messages a test inspects instead of storing them, so the processor never claims
-///     them.
+///     An outbox store over the in-memory one (so it can schedule, as that one can) that says whether it joins the unit of
+///     work, records when it is written in a shared <see cref="TransactionLog" /> (so a test can see whether that was
+///     before or after the commit), fails on demand, and can set aside the messages a test inspects instead of storing
+///     them, so the processor never claims them.
 /// </summary>
 /// <param name="joinsUnitOfWork">What <see cref="JoinsUnitOfWork" /> answers.</param>
 /// <param name="log">The log each write is recorded in.</param>
@@ -20,7 +20,7 @@ public sealed class RecordingOutboxStore(
     bool joinsUnitOfWork,
     TransactionLog log,
     TimeProvider? time = null,
-    Func<OutboxMessage, bool>? setAside = null) : IOutboxStore
+    Func<OutboxMessage, bool>? setAside = null) : ISchedulingOutboxStore
 {
     private readonly InMemoryOutboxStore _inner = new(time ?? new FakeTimeProvider(), Options.Create(new InMemoryOutboxStoreOptions()));
     private readonly List<OutboxMessage> _stored = new();

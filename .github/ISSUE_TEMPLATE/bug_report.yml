@@ -46,8 +46,8 @@ body:
   - type: dropdown
     id: store
     attributes:
-      label: Outbox / idempotency store
-      description: Which store is configured, if the problem involves the outbox or idempotency.
+      label: Outbox / idempotency store and transport
+      description: Which store (and notification transport) is configured, if the problem involves the outbox, idempotency or a broker.
       multiple: true
       options:
         - Not applicable (no outbox or idempotency involved)
@@ -55,14 +55,15 @@ body:
         - Redis (CQRSharp.Redis)
         - EF Core (CQRSharp.EntityFrameworkCore)
         - Custom store
+        - RabbitMQ transport (CQRSharp.RabbitMQ)
     validations:
       required: true
 
   - type: input
     id: provider
     attributes:
-      label: Store details
-      description: For EF Core, the database provider and its version; for Redis, the server version and topology (standalone, cluster, managed service).
+      label: Store and broker details
+      description: For EF Core, the database provider and its version; for Redis, the server version and topology (standalone, cluster, managed service); for RabbitMQ, the broker version and the queue type (quorum, classic).
       placeholder: "Npgsql.EntityFrameworkCore.PostgreSQL 8.0.10 / Redis 7.2 standalone"
     validations:
       required: false

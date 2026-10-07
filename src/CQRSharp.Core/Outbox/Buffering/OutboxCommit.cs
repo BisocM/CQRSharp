@@ -9,22 +9,25 @@ namespace CQRSharp.Core.Outbox;
 /// </summary>
 internal sealed class OutboxCommit
 {
-    private static readonly OutboxCommit Nothing = new(null, Array.Empty<INotification>(), storeAfterCommit: false, storedBeforeCommit: 0);
+    private static readonly OutboxCommit Nothing = new(null, Array.Empty<OutboxEntry>(), storeAfterCommit: false, dueBeforeCommit: false);
 
     private readonly OutboxWriter? _writer;
     private readonly bool _storeAfterCommit;
-    private readonly int _storedBeforeCommit;
+    private readonly bool _dueBeforeCommit;
 
-    private OutboxCommit(OutboxWriter? writer, IReadOnlyList<INotification> notifications, bool storeAfterCommit, int storedBeforeCommit)
+    private OutboxCommit(OutboxWriter? writer, IReadOnlyList<OutboxEntry> entries, bool storeAfterCommit, bool dueBeforeCommit)
     {
         _writer = writer;
-        Notifications = notifications;
+        Entries = entries;
         _storeAfterCommit = storeAfterCommit;
-        _storedBeforeCommit = storedBeforeCommit;
+        _dueBeforeCommit = dueBeforeCommit;
     }
 
     /// <summary>The notifications this commit settles, in publication order.</summary>
-    public IReadOnlyList<INotification> Notifications { get; }
+    public IReadOnlyList<OutboxEntry> Entries { get; }
+
+    /// <summary>The type names of <see cref="Entries" />, comma-separated, for the log line of notifications lost after a commit.</summary>
+    public string NotificationTypeNames() => string.Join(", ", Entries.Select(e => e.Notification.GetType().Name));
 
     /// <summary>
     ///     Takes what <paramref name="owner" /> settles out of <paramref name="outbox" /> and, when the store joins the
@@ -43,40 +46,40 @@ internal sealed class OutboxCommit
     {
         if (outbox is null || owner is null) return Nothing;
 
-        var notifications = outbox.DrainOwned(owner);
-        if (notifications.Count == 0) return Nothing;
+        var entries = outbox.DrainOwned(owner);
+        if (entries.Count == 0) return Nothing;
 
         var writer = OutboxWriter.Resolve(services);
         if (!writer.Store.JoinsUnitOfWork)
-            return new OutboxCommit(writer, notifications, storeAfterCommit: true, storedBeforeCommit: 0);
+            return new OutboxCommit(writer, entries, storeAfterCommit: true, dueBeforeCommit: false);
 
-        var stored = await writer.StoreAsync(notifications, cancellationToken).ConfigureAwait(false);
-        return new OutboxCommit(writer, notifications, storeAfterCommit: false, stored);
+        var due = await writer.StoreAsync(entries, cancellationToken).ConfigureAwait(false);
+        return new OutboxCommit(writer, entries, storeAfterCommit: false, due);
     }
 
     /// <summary>
     ///     The commit succeeded: stores the notifications into a store that did not join it, then wakes the processor
-    ///     when anything was stored, since only now are the messages visible to it. Called once. Never throws: the work is
-    ///     committed and stands whatever happens here, a failed store cannot be undone by a rollback, and rethrowing would
-    ///     have a retry run the committed work again. The failure is returned for the caller to report; the notifications
-    ///     it names are lost.
+    ///     when a message due now was stored, since only now are the messages visible to it. Called once. Never throws:
+    ///     the work is committed and stands whatever happens here, a failed store cannot be undone by a rollback, and
+    ///     rethrowing would have a retry run the committed work again. The failure is returned for the caller to report;
+    ///     the notifications it names are lost.
     /// </summary>
     /// <returns>The store's failure, or <see langword="null" /> when the notifications are stored.</returns>
     public async Task<Exception?> CompleteAsync()
     {
-        var stored = _storedBeforeCommit;
+        var due = _dueBeforeCommit;
         if (_storeAfterCommit)
             try
             {
                 // No caller token: the work is done, and a caller that gives up now must not lose its notifications.
-                stored = await _writer!.StoreAsync(Notifications, CancellationToken.None).ConfigureAwait(false);
+                due = await _writer!.StoreAsync(Entries, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 return ex;
             }
 
-        if (stored > 0) _writer!.Signal();
+        if (due) _writer!.Signal();
         return null;
     }
 }

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 
 namespace CQRSharp.Tests.Pipelines;
 
@@ -46,6 +47,25 @@ public sealed class UnitOfWorkBehaviorTests
 
         harness.Log.Entries.Should().Equal("begin", "commit", "store", "signal");
         harness.Store.Stored.Should().ContainSingle();
+    }
+
+    [Theory(DisplayName = "A scheduled notification is stored with the commit like any other, and does not wake the processor, since nothing is due")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_scheduled_notification_is_stored_with_the_commit(bool storeJoinsUnitOfWork)
+    {
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero));
+        await using var harness = UnitOfWorkHarness.Create(storeJoinsUnitOfWork, time: time);
+        var dueAt = time.GetUtcNow().AddHours(6);
+
+        await harness.AsRequest(() => harness.Behavior<TransactionalCommand, CommandResult>().Handle(new TransactionalCommand(), async _ =>
+        {
+            await harness.Services.GetRequiredService<ICqrsDispatcher>().PublishAt(new TestNotification(), dueAt);
+            return CommandResult.FromSuccess();
+        }, CancellationToken.None));
+
+        harness.Log.Entries.Should().Equal(storeJoinsUnitOfWork ? new[] { "begin", "store", "commit" } : new[] { "begin", "commit", "store" });
+        harness.Store.Stored.Should().ContainSingle().Which.NextRetryAt.Should().Be(dueAt.UtcDateTime);
     }
 
     [Fact(DisplayName = "A commit that fails with a non-joining store stores nothing, rolls back under no token, and the next request begins its own transaction")]

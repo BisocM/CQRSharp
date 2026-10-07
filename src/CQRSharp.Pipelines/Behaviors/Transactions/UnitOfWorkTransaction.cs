@@ -108,8 +108,7 @@ internal sealed partial class UnitOfWorkTransaction
         // log says which.
         if (await notifications.CompleteAsync().ConfigureAwait(false) is { } storeFailure)
         {
-            var lost = notifications.Notifications;
-            LogStoreAfterCommitFailed(_logger, storeFailure, _requestName, lost.Count, string.Join(", ", lost.Select(n => n.GetType().Name)));
+            LogStoreAfterCommitFailed(_logger, storeFailure, _requestName, notifications.Entries.Count, notifications.NotificationTypeNames());
             _activity?.AddEvent(new ActivityEvent("Outbox Store Failed"));
         }
     }

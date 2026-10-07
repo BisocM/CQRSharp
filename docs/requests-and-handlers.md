@@ -360,8 +360,9 @@ public sealed class TenantContextFactory(ICurrentTenant currentTenant) : IReques
   batched call rather than making the context lazy-load. A factory that needs no I/O returns `new ValueTask<TContext>(context)`.
   A factory must not return `null`: the dispatch fails with `InvalidOperationException`.
 - **Timestamps.** A context built with the parameterless `RequestContextBase()` constructor gets its `CreatedAt` from the
-  application's `TimeProvider` when the factory hands it over; one built with `RequestContextBase(DateTime)` keeps the
-  time it was given.
+  application's `TimeProvider`: read as the factory builds it, when the factory completes synchronously, or when the
+  factory hands it over after hydrating asynchronously. Either way it costs one clock read, and the value is fixed then,
+  not when a handler reads it. One built with `RequestContextBase(DateTime)` keeps the time it was given.
 
 Some behaviors read the context: rate limiting, for example, limits only requests whose context implements
 `IRateLimitedContext` ([Pipeline behaviors](pipeline-behaviors.md#rate-limiting)).

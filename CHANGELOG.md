@@ -2,6 +2,152 @@
 
 All notable changes to CQRSharp are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [5.1.0]
+
+A minor release: no breaking changes to the public API, so a 5.0 application upgrades by bumping the package versions.
+Notifications can be scheduled for later delivery through the outbox, and carried between services through RabbitMQ
+with the new `CQRSharp.RabbitMQ` package, built on a notification transport extension point. A pipeline behavior's
+`next()` now passes on its cancellation token, as documented, instead of dropping it. Package validation now checks
+every package against 5.0.0.
+
+### Upgrading from 5.0.0
+
+No step is required: the EF Core schema and the Redis key layout are unchanged, and 5.0 and 5.1 instances can share one
+outbox during a rolling deploy (a 5.0 processor holds a scheduled message until it is due, as it holds a back-off; only a
+Redis message scheduled past November 2286 needs every instance on 5.1). Four things concern code outside the packages:
+
+1. **A custom `IOutboxStore`** keeps working unchanged. To accept scheduled notifications it also implements
+   `ISchedulingOutboxStore` once it passes the scheduling cases of `OutboxStoreContractTests`; a decorator of a store
+   implements it when the store it wraps does.
+2. **A custom `ICqrsDispatcher`** (a decorator, a fake) keeps compiling: `PublishAt` and `PublishAfter` have default
+   implementations that throw `NotSupportedException`. Implement them to forward scheduled publishes.
+3. **A custom outbox gauge or health probe** built on `OutboxBacklog` sees scheduled messages that are not due in the new
+   `ScheduledCount`, not in `PendingCount` or the lag (only a store that implements `ISchedulingOutboxStore` has any).
+4. **A pipeline behavior that calls `next()`** without a token now runs the rest of the pipeline, the handler included,
+   under the token the behavior received instead of `CancellationToken.None` (see Fixed). A behavior that already
+   writes `next(cancellationToken)` is unaffected. One that relied on `next()` (or `next(CancellationToken.None)`) to
+   shield the handler from the caller's cancellation passes a token of its own instead.
+
+A notification transport, such as the RabbitMQ one, is added only by the application that wants it; an application
+without one runs exactly as before, and its outbox messages, schema and logs are unchanged. When a transport is added to
+a fleet, a message addressed to it that an instance without it claims is deferred for an instance that has it, as a
+message for a handler added in a newer version is: add the transport to every instance that processes the outbox.
+
+### Added
+
+- **Scheduled publishing.** `ICqrsDispatcher.PublishAt(notification, dueAt)` and `PublishAfter(notification, delay)`
+  publish a durable notification for delivery no earlier than its due time, measured on the application's
+  `TimeProvider` when it is published. It is buffered, stored with the unit of work's commit, or stored at once exactly as
+  a durable `Publish` is, and delivered by the outbox processor on its first poll after the due time, as if it had been
+  published then: in its partition it holds back nothing published before it is due, and what is published after waits
+  for it. Once due it is retried, deferred and dead-lettered like any message. It never falls back to in-process
+  delivery: with the outbox off, for a notification that is not durable, or into a store that cannot schedule, the
+  publish fails with an `InvalidOperationException` before anything is buffered. Under `Transactional` mode it goes to
+  the outbox outside a transaction too. See [Scheduled publishing](docs/outbox.md#scheduled-publishing).
+- **`ISchedulingOutboxStore`** (namespace `CQRSharp.Persistence`): the opt-in a store declares to hold scheduled
+  messages, which are stored with their `CreatedAt` and `NextRetryAt` at their due time. The in-memory, Redis and EF Core
+  stores implement it, with no schema change. `OutboxStoreContractTests` gains five scheduling cases, skipped for a store
+  that does not implement the interface.
+- **`OutboxBacklog.ScheduledCount`**, the `cqrsharp.outbox.scheduled` gauge (`CqrsTelemetry.Instruments.OutboxScheduled`)
+  and the outbox health check's `scheduled` datum: the scheduled messages whose due time has not come, which are not
+  late and so stay out of the pending count and the lag.
+- **RabbitMQ transport** (`CQRSharp.RabbitMQ`, a new package). `UseRabbitMq(...)` inside `UseOutbox(...)` (or
+  `AddCqrsRabbitMq(...)`), on a connection URI, an `IConnection`, or a factory of either, adds a transport that
+  **publishes** the notifications it is told to (`Publish<T>()`, `Publish("name")`) through the outbox, as mandatory,
+  persistent, broker-confirmed publishes to a durable topic exchange with the notification's name as the routing key,
+  in order per partition key, deferred without an attempt while the broker is unreachable, and rejected (retried, then
+  dead-lettered in the outbox) when no queue is bound unless the publication `AllowUnroutable()`; and **consumes** the
+  queues it is told to (`Consume("queue", q => q.Bind<T>())`), taking each message into the outbox through the intake
+  (deduplicated by message id, acknowledged only once stored, ordered per key across lanes), dead-lettering what cannot
+  be read, has no type or stays unknown, holding what cannot be taken in yet for at most `MaxHold`, and releasing what it
+  holds at shutdown. The topology (quorum queues with a delivery limit and a dead-letter queue, the exchanges, the
+  bindings) is declared idempotently unless `AssumeExistingTopology()`. Connections are opened in the background and
+  reopened when lost, never failing the host; `AddCqrsRabbitMq()` on the health checks builder reports them and every
+  consumer. With the EF Core store, inbox and unit of work, a notification is published atomically with the request's
+  data and taken in exactly once. Native-AOT compatible: a Native AOT publish of an application that publishes and
+  consumes through it reports no trim or AOT warning on net8.0 and net10.0. See [RabbitMQ](docs/rabbitmq.md).
+- **Notification transports**, an extension point in `CQRSharp.Abstractions` (namespace `CQRSharp.Transports`),
+  experimental in 5.x (`[Experimental("CQREXP001")]`): `INotificationTransport` (`Name`, `Declaration`, `Routes`,
+  `SendAsync` returning a `TransportSendResult`: Sent, Unavailable or Rejected) and `INotificationIntake`
+  (`AcceptAsync(InboundNotification)` returning an `IntakeResult`), registered with `OutboxStoreBuilder.AddTransport(...)`.
+  A notification a transport routes is stored with one extra outbox message addressed to the transport, after the local
+  handlers' messages and with their stamps (a scheduled one included); the processor hands it to the transport as stored,
+  without deserializing it, without behaviors and without the inbox. The intake stores a received notification once per
+  local handler, never for a transport, deduplicated through the inbox, in one commit with the dedupe record when the
+  store and the inbox join the unit of work. See [Transports](docs/outbox.md#transports-leaving-the-process).
+- **`NotificationTransportContractTests`** (`CQRSharp.Testing.Xunit.V3`, experimental with the extension point): the
+  conformance suite for a notification transport, which the RabbitMQ transport passes.
+- **Configuration checks** for transports: `CQRCONF013` (a transport while the outbox is off), `CQRCONF014` (a forwarded
+  or bound type the serializer does not name, or a forwarded name no module has; a publish of such a type fails),
+  `CQRCONF015` (a transport name that is invalid or clashes with a handler's or another transport's; nothing is stored
+  and the processor does not start), `CQRCONF016` (under `Transactional`, a forwarded notification published outside a
+  transaction fails; a warning at startup) and `CQRCONF017` (a bound notification no local handler receives, a warning,
+  logged as event 1207 when the transports are first used). See [Diagnostics](docs/diagnostics.md#startup-validation-cqrconf).
+- **Transport telemetry.** The `cqrsharp.transport.received` counter and `cqrsharp.transport.receive.duration` histogram
+  (`CqrsTelemetry.Instruments.TransportReceived` / `TransportReceiveDuration`), tagged with the new `cqrsharp.transport`
+  (`CqrsTelemetry.Tags.Transport`); the `CQRS Transport Receive` span, parented to the sender's trace; the outbox outcome
+  `unavailable`; and the log events 5029 to 5031 (a transport send deferred, rejected permanently, rejected), 5100 to
+  5104 (the intake) and the 8000 block (the RabbitMQ transport). See [Observability](docs/observability.md).
+- **`RecordingCqrsDispatcher`** records scheduled publishes as `DispatchKind.ScheduledPublish`, with their due time in
+  `DispatchedMessage.DueAt`, listed by `ScheduledNotifications` / `Scheduled<T>()`. The new
+  `RecordingCqrsDispatcher(TimeProvider)` constructor dates a `PublishAfter` by a fake clock.
+
+### Changed
+
+- **A custom request context reads the clock once.** A context a factory builds with the parameterless
+  `RequestContextBase()` constructor while the dispatcher calls it now reads the application's `TimeProvider`, and when
+  the factory completes synchronously that reading is its `CreatedAt`: the constructor no longer reads the system clock
+  only for the dispatcher to stamp over it. That removes one of the two clock reads such a dispatch made, about a tenth of
+  its time (`RequestContextBenchmarks`); allocations are unchanged. `CreatedAt` keeps its meaning, the time the request
+  was sent, fixed then and not when it is read; a context a factory hydrates asynchronously is still stamped when the
+  factory completes, and one built with an explicit time keeps it.
+- The analyzers treat `CQRSharp.RabbitMQ` as one of CQRSharp's own packages, so an application that references it keeps
+  its configuration [in view](docs/diagnostics.md#configuration-in-view) for `CQRA018` to `CQRA020`.
+- The Native AOT canary runs against a RabbitMQ broker: `CQRSharp.Sample` publishes an integration event through the
+  outbox from one application and takes it in from its queue in another, as native binaries for net8.0 and net10.0. The
+  validate job runs the RabbitMQ tests against a RabbitMQ service container.
+- Dependabot opens its NuGet and GitHub Actions pull requests monthly, and never for the Microsoft.Extensions and
+  Microsoft.Bcl packages the libraries reference: those versions are the floor every consumer inherits, and they are
+  raised together at a release.
+
+### Fixed
+
+- **A behavior's `next()` passes on its cancellation token.** In 5.0, a request, stream or notification pipeline
+  behavior that called `next()` without a token ran the rest of the pipeline, the handler included, under
+  `CancellationToken.None`, though the XML documentation said it flowed the token the behavior received. The caller's
+  cancellation (an aborted HTTP request, host shutdown) never reached the handler. A behavior of default priority runs
+  inside `UseTimeout`, whose timeout cancels the token it passes down, so it could not cancel such a request either. A
+  stream behavior that returned `next()` unenumerated was spared, because the executor enumerates the stream with the
+  caller's token. Now `next()`, like any token that cannot be canceled, passes on the token the behavior received, and a
+  cancelable token passed to `next` still overrides it. CQRSharp's own behaviors always pass their token and were not
+  affected.
+- **A refused or evicted background work item is counted before its caller learns of it.** The queue failed the
+  caller's task first and added to `cqrsharp.queue.rejected` or `cqrsharp.queue.evicted` afterwards, so a caller that
+  had already seen the rejection could read a count that did not include it yet. The count now comes first, and the
+  caller is answered even if a metrics listener throws.
+- **The CQRA018/CQRA019 and CQRA020 code fixes keep the file's line endings.** They left the line they add to the
+  formatter, whose newline is the platform's: on Windows they wrote CRLF into a file with LF line endings, and elsewhere
+  LF into a CRLF file. The attribute CQRA020 adds, and the statement CQRA018/CQRA019 add to a statement lambda, now end
+  the way the file's lines do.
+
+### Documentation
+
+- **Startup validation in the 5.0.0 package notes.** The CQRSharp 5.0.0 package release notes said startup validation
+  runs only when you call `ValidateOnStart()`. As the
+  [5.0.0 entry](https://github.com/BisocM/CQRSharp/blob/v5.0.0/CHANGELOG.md#500) says, with no policy set it runs as
+  `ThrowOnError` in the Development environment and is off elsewhere; `ValidateOnStart()` turns it on everywhere. The
+  behavior is unchanged, and the 5.1.0 package notes state it correctly.
+- **[RabbitMQ](docs/rabbitmq.md)**: the transport end to end, from publishing and consuming to topology, ordering,
+  delivery guarantees, the wire format for services outside CQRSharp, and the failure modes; the outbox page gains
+  [Transports](docs/outbox.md#transports-leaving-the-process), and diagnostics the
+  [experimental APIs](docs/diagnostics.md#experimental-apis-cqrexp).
+- **[Migrating from MediatR](docs/migrating-from-mediatr.md)**: a step-by-step guide for moving a MediatR 12.x
+  codebase over, including running both side by side during the migration, a concept map, and what has no equivalent.
+- **AI Use Disclosure.** The README and the documentation index state that all of CQRSharp's documentation, including
+  the XML documentation comments and certain code comments, was generated using large language models, and link a new
+  documentation issue form for reporting a discrepancy.
+- The `CQRA018`-`CQRA020` rows of the analyzer table in [Diagnostics](docs/diagnostics.md) render as part of the table.
+
 ## [5.0.0]
 
 A major release, measured here against 4.2.1. The authoring surface moves to three namespaces; the outbox delivers

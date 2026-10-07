@@ -43,13 +43,14 @@ public sealed class CqrsOutboxHealthCheckTests
     {
         var (check, store) = Create();
         store.Setup(s => s.GetBacklogAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new OutboxBacklog(3, 0, Now.AddSeconds(-30)));
+            .ReturnsAsync(new OutboxBacklog(3, 0, Now.AddSeconds(-30)) { ScheduledCount = 5 });
 
         var result = await check.CheckHealthAsync(Context(), TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(HealthStatus.Healthy);
         result.Data["pending"].Should().Be(3L);
         result.Data["deadLetters"].Should().Be(0L);
+        result.Data["scheduled"].Should().Be(5L);
         result.Data["lagSeconds"].Should().Be(30d);
     }
 

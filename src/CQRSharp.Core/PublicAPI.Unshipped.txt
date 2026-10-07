@@ -1,1 +1,8 @@
 #nullable enable
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.OutboxScheduled = "cqrsharp.outbox.scheduled" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.TransportReceived = "cqrsharp.transport.received" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Instruments.TransportReceiveDuration = "cqrsharp.transport.receive.duration" -> string!
+const CQRSharp.Core.Diagnostics.CqrsTelemetry.Tags.Transport = "cqrsharp.transport" -> string!
+CQRSharp.ICqrsDispatcher.PublishAfter<TNotification>(TNotification notification, System.TimeSpan delay, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.ICqrsDispatcher.PublishAt<TNotification>(TNotification notification, System.DateTimeOffset dueAt, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+CQRSharp.Pipelines.OutboxStoreBuilder.AddTransport(System.Action<Microsoft.Extensions.DependencyInjection.IServiceCollection!>! registerTransport) -> CQRSharp.Pipelines.OutboxStoreBuilder!

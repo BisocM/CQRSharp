@@ -13,8 +13,9 @@ support without runtime reflection.
 - **Wired at compile time.** A source generator finds your handlers, so there is no reflection or assembly scanning, it
   runs under Native AOT, and a request without a handler shows up in your IDE, not in production.
 - **Faster than MediatR** inside a scope, for requests, streams and notifications ([benchmarks](benchmarks/README.md#latest-results)).
-- **Batteries included, pay for what you use.** Validation, retries, timeouts, rate limiting, idempotency, a unit of work
-  and a transactional outbox (Redis or EF Core) are one builder call each, and cost nothing where you do not use them.
+- **Batteries included, pay for what you use.** Validation, retries, timeouts, rate limiting, idempotency, a unit of work,
+  a transactional outbox (Redis or EF Core) and a RabbitMQ transport for integration events are one builder call each,
+  and cost nothing where you do not use them.
 
 MIT licensed. [Documentation](docs/README.md) · [Changelog](CHANGELOG.md) · [Project page](https://bisocm.org/projects/cqrsharp)
 
@@ -89,10 +90,11 @@ services.AddCqrsGenerated(b => b
 | `CQRSharp.Pipelines` | The built-in behaviors and the fluent builder. Pulled in by the meta-package. |
 | `CQRSharp.Redis` | Redis outbox, inbox and idempotency stores. [Docs](docs/integrations.md) |
 | `CQRSharp.EntityFrameworkCore` | EF Core (relational) outbox, inbox and idempotency stores, and `EfCoreUnitOfWork<TContext>`. [Docs](docs/integrations.md) |
+| `CQRSharp.RabbitMQ` | A RabbitMQ transport: integration events published through the outbox with broker confirms, and consumed into it, deduplicated. Native-AOT compatible. [Docs](docs/rabbitmq.md) |
 | `CQRSharp.AspNetCore` | `CommandResult` → `IResult` (the status follows the result's error kind: 400 / 401 / 403 / 404 / 409 / 503), pipeline exceptions → ProblemDetails (400 / 409 / 422 / 429 / 503 / 504), `Idempotency-Key` header handling. [Docs](docs/aspnetcore.md) |
 | `CQRSharp.FluentValidation` | Runs your FluentValidation validators inside the validation behavior. [Docs](docs/fluentvalidation.md) |
 | `CQRSharp.Testing` | `RecordingCqrsDispatcher`, a stub-and-record dispatcher for unit tests; no test-framework dependency. [Docs](docs/testing-package.md) |
-| `CQRSharp.Testing.Xunit.V3` | The store contract-test suites (for a custom outbox, inbox or idempotency store), on xUnit v3. [Docs](docs/testing-package.md) |
+| `CQRSharp.Testing.Xunit.V3` | The contract-test suites (for a custom outbox, inbox or idempotency store, or a notification transport), on xUnit v3. [Docs](docs/testing-package.md) |
 | `CQRSharp.Templates` | `dotnet new install CQRSharp.Templates`, then `dotnet new cqrsharp`. |
 
 Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
@@ -116,8 +118,12 @@ Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
   **ordered per partition key** (`PartitionBy = nameof(OrderId)`), also across several processor instances, which claim
   messages under leases so they can share one outbox. An **inbox** records each delivery, so a redelivered message is
   recognized and skipped; with an EF Core inbox and unit of work over one `DbContext`, the handler's changes and the
-  record commit together. Dead letters can be listed, requeued and purged. See
-  [The outbox](docs/outbox.md).
+  record commit together. Dead letters can be listed, requeued and purged, and a notification can be **scheduled** for
+  later delivery (`PublishAt` / `PublishAfter`). See [The outbox](docs/outbox.md).
+- **Integration events over RabbitMQ.** `UseRabbitMq(...)` inside `UseOutbox` sends the notifications you name to
+  RabbitMQ through the outbox (atomic with your data, confirmed by the broker, in order per key, never dead-lettered by
+  an outage) and takes the queues you name in through the inbox, acknowledging a message only once it is stored, so a
+  consumer on the EF Core outbox, inbox and unit of work takes each one in exactly once. See [RabbitMQ](docs/rabbitmq.md).
 - **Idempotency that answers the retry.** A duplicate of a completed request gets the **original result** back (a plain
   `CommandResult` always; any other result through a result serializer), a duplicate of one still running gets a
   distinguishable "in progress" (409 with `Retry-After` over HTTP), and a key reused with a **different payload** is
@@ -151,12 +157,15 @@ Which packages work under Native AOT: [Native AOT](docs/native-aot.md).
 | Built-in validation, retry, timeout, rate limiting | Yes | No, bring your own behaviors |
 | Idempotency (in-memory / Redis / EF Core stores), unit of work | Yes, with result replay | No |
 | Transactional outbox | Yes, in-memory / Redis / EF Core stores; multi-instance; per-handler delivery; ordered per key | No |
+| Message broker transport | Yes, RabbitMQ, through the outbox and the inbox | No |
 | ASP.NET Core result / ProblemDetails mapping, FluentValidation adapter, test doubles | Yes (separate packages) | No |
 | Startup configuration validation | Yes | No |
 | Tracing / metrics | Built in (`ActivitySource`, `Meter`) | No |
 
 **Choose MediatR** if you want the de-facto standard and its ecosystem, and the licensing fits. **Choose CQRSharp** if
 you want AOT-safe dispatch *and* the outbox, idempotency, resilience and diagnostics from one tested, MIT-licensed place.
+Moving an existing MediatR 12.x codebase is covered step by step, one feature at a time, in
+[Migrating from MediatR](docs/migrating-from-mediatr.md).
 
 ### Dispatch overhead
 
@@ -185,7 +194,7 @@ set up; and when nothing wraps a handler `Send` returns the handler's own task.
 
 ```
 src/          the packages: CQRSharp (meta), .Abstractions, .Core, .Pipelines, .Generators, .Analyzers,
-              .Redis, .EntityFrameworkCore, .AspNetCore, .FluentValidation, .Testing, .Testing.Xunit.V3
+              .Redis, .EntityFrameworkCore, .RabbitMQ, .AspNetCore, .FluentValidation, .Testing, .Testing.Xunit.V3
 samples/      CQRSharp.Sample (end-to-end self-test, Native AOT canary), CQRSharp.Sample.AspNetCore (minimal API
               over CQRSharp.AspNetCore, Native AOT canary for the HTTP edge), CQRSharp.Sample.ExternalModule
 tests/        the test suite and a second-assembly fixture
@@ -195,9 +204,18 @@ docs/         the documentation
 ```
 
 Build and test with `dotnet build CQRSharp.sln -warnaserror` and `dotnet test --project tests/CQRSharp.Tests`. The Redis,
-PostgreSQL and SQL Server tests use the servers named by `CQRSHARP_TEST_REDIS`, `CQRSHARP_TEST_POSTGRES` and
-`CQRSHARP_TEST_SQLSERVER` when set, and otherwise start containers with Testcontainers; without Docker they skip.
+PostgreSQL, SQL Server and RabbitMQ tests use the servers named by `CQRSHARP_TEST_REDIS`, `CQRSHARP_TEST_POSTGRES`,
+`CQRSHARP_TEST_SQLSERVER` and `CQRSHARP_TEST_RABBITMQ` when set, and otherwise start containers with Testcontainers;
+without Docker they skip.
 [CONTRIBUTING.md](CONTRIBUTING.md) has the details.
+
+## AI Use Disclosure
+
+All of CQRSharp's documentation was generated using large language models (LLMs): this README, the guides in
+[docs](docs/README.md), the project pages on [bisocm.org](https://bisocm.org/projects/cqrsharp), the XML documentation
+comments (the summaries IntelliSense shows) in the source code, and certain code comments. It may contain errors,
+omissions, or statements that do not match what the library actually does. Where the documentation and the library
+disagree, the library's behavior is what counts; please [report the discrepancy](https://github.com/BisocM/CQRSharp/issues/new?template=documentation.yml) so it can be fixed.
 
 ## Contributing
 

@@ -35,11 +35,13 @@
     </ItemGroup>
 
     <!--
-        Package validation: on pack, checks that every target framework exposes a compatible surface. Once 5.0.0 is on
-        NuGet, set PackageValidationBaselineVersion to 5.0.0 here and a breaking change within 5.x fails the pack.
+        Package validation: on pack, checks that every target framework exposes a compatible surface, and that the
+        package is compatible with the baseline, the first release of this major on NuGet: a breaking change within 5.x
+        fails the pack. The baseline stays at 5.0.0 for the whole major.
     -->
     <PropertyGroup Condition="'$(HasPublicApi)' == 'true'">
         <EnablePackageValidation>true</EnablePackageValidation>
+        <PackageValidationBaselineVersion>5.0.0</PackageValidationBaselineVersion>
         <!-- XML docs ship in every package; an undocumented public member (CS1591) fails the zero-warning gate. -->
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <!-- RS0026/RS0027 police overloads with optional parameters; the CancellationToken-defaulted overloads here are deliberate. -->

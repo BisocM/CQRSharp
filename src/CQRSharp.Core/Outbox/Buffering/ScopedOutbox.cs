@@ -26,7 +26,7 @@ internal sealed class ScopedOutbox
     // buffer concurrently, while the executor and the unit of work settle entries around them, and the decision to
     // buffer must see the same set of running requests the settlement does.
     private readonly object _gate = new();
-    private readonly List<(INotification Notification, OutboxOwner Owner)> _entries = new();
+    private readonly List<(OutboxEntry Entry, OutboxOwner Owner)> _entries = new();
 
     // Owners are compared by reference (OutboxOwner has no value equality).
     private readonly HashSet<OutboxOwner> _running = new();
@@ -56,7 +56,9 @@ internal sealed class ScopedOutbox
     ///     reports whether it did. Decided under the same gate as settlement, so a request cannot settle between the
     ///     decision and the add and leave the entry behind.
     /// </summary>
-    public bool TryBuffer(INotification notification)
+    /// <param name="notification">The published notification.</param>
+    /// <param name="dueAt">For a scheduled publish, the UTC time before which it must not be delivered.</param>
+    public bool TryBuffer(INotification notification, DateTime? dueAt = null)
     {
         ArgumentNullException.ThrowIfNull(notification);
         var current = OutboxOwner.Current;
@@ -67,7 +69,7 @@ internal sealed class ScopedOutbox
             for (var owner = current; owner is not null; owner = owner.Parent)
                 if (_running.Contains(owner))
                 {
-                    _entries.Add((notification, current));
+                    _entries.Add((new OutboxEntry(notification, dueAt), current));
                     return true;
                 }
 
@@ -79,7 +81,7 @@ internal sealed class ScopedOutbox
     ///     The request of <paramref name="owner" /> succeeded. When it is nested in another running request of this
     ///     scope, its entries are left for that request to settle; otherwise they are removed and returned for storing.
     /// </summary>
-    public IReadOnlyList<INotification> CompleteRequest(OutboxOwner owner)
+    public IReadOnlyList<OutboxEntry> CompleteRequest(OutboxOwner owner)
     {
         ArgumentNullException.ThrowIfNull(owner);
         lock (_gate)
@@ -87,7 +89,7 @@ internal sealed class ScopedOutbox
             _running.Remove(owner);
             for (var ancestor = owner.Parent; ancestor is not null; ancestor = ancestor.Parent)
                 if (_running.Contains(ancestor))
-                    return Array.Empty<INotification>();
+                    return Array.Empty<OutboxEntry>();
 
             return TakeSettledBy(owner);
         }
@@ -108,7 +110,7 @@ internal sealed class ScopedOutbox
     ///     Removes and returns what <paramref name="owner" /> settles: its own entries and those of the requests nested
     ///     in it that already finished, never an enclosing request's, a sibling's, or a still-running nested request's.
     /// </summary>
-    public IReadOnlyList<INotification> DrainOwned(OutboxOwner owner)
+    public IReadOnlyList<OutboxEntry> DrainOwned(OutboxOwner owner)
     {
         ArgumentNullException.ThrowIfNull(owner);
         lock (_gate) return TakeSettledBy(owner);
@@ -121,14 +123,14 @@ internal sealed class ScopedOutbox
         lock (_gate) _entries.RemoveAll(e => IsSettledBy(e.Owner, owner));
     }
 
-    private IReadOnlyList<INotification> TakeSettledBy(OutboxOwner owner)
+    private IReadOnlyList<OutboxEntry> TakeSettledBy(OutboxOwner owner)
     {
-        List<INotification>? taken = null;
+        List<OutboxEntry>? taken = null;
         for (var i = 0; i < _entries.Count; i++)
             if (IsSettledBy(_entries[i].Owner, owner))
-                (taken ??= new List<INotification>()).Add(_entries[i].Notification);
+                (taken ??= new List<OutboxEntry>()).Add(_entries[i].Entry);
 
-        if (taken is null) return Array.Empty<INotification>();
+        if (taken is null) return Array.Empty<OutboxEntry>();
         _entries.RemoveAll(e => IsSettledBy(e.Owner, owner));
         return taken;
     }

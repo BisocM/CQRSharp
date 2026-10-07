@@ -17,10 +17,11 @@
         <PackageTags>CQRS;CQRSharp;NativeAOT;SourceGenerator</PackageTags>
         <Description>A CQRS framework for .NET 8/9/10 that is wired at compile time. A Roslyn source generator emits the command, query, stream and notification dispatch and the handler registrations as plain C#, so there is no runtime reflection and the whole thing is trimming- and Native-AOT-safe; analyzers catch wiring mistakes as you type. Pipeline behaviors (validation and exception handling on by default; logging, retries, timeouts, rate limiting, idempotency and unit of work opt-in) and a transactional outbox come behind one fluent builder. Install this meta-package for the full setup: the contracts, the runtime, the pipeline behaviors, the source generator and the analyzers.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0, a major release with breaking changes. Application code uses the CQRSharp and CQRSharp.Pipelines namespaces (global usings with ImplicitUsings); store and unit-of-work implementations add CQRSharp.Persistence.
-            Handler interfaces take no context type argument, AddCqrsGenerated is configured through its builder and registers validation and exception handling in both forms (opt out with UseValidation(false) / UseExceptionHandling(false)), and startup validation runs only when you call ValidateOnStart().
-            Rebuild every assembly that runs the source generator, and drain the outbox with 4.x processors before upgrading.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0, a minor release: no breaking change. Notifications can be scheduled for later delivery through the outbox with ICqrsDispatcher.PublishAt / PublishAfter, in every built-in store; a scheduled publish never falls back to in-process delivery.
+            A custom request context built with the parameterless RequestContextBase() constructor costs one clock read instead of two.
+            Fixed: a pipeline behavior's next() without a token passes on the token the behavior received, as documented, instead of running the handler under CancellationToken.None.
+            Startup validation is unchanged: with no policy set it runs as ThrowOnError in the Development environment and is off elsewhere, and ValidateOnStart() turns it on everywhere (the 5.0.0 notes said it ran only with ValidateOnStart()).
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 

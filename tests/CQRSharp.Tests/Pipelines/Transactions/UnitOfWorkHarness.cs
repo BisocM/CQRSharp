@@ -35,13 +35,14 @@ internal sealed class UnitOfWorkHarness : IAsyncDisposable
     public IServiceProvider Services => _scope.ServiceProvider;
     public ScopedOutbox Outbox => Services.GetRequiredService<ScopedOutbox>();
 
-    public static UnitOfWorkHarness Create(bool storeJoinsUnitOfWork = true, Action<UnitOfWorkOptions>? configure = null)
+    public static UnitOfWorkHarness Create(bool storeJoinsUnitOfWork = true, Action<UnitOfWorkOptions>? configure = null, TimeProvider? time = null)
     {
         var log = new TransactionLog();
         var unitOfWork = new RecordingUnitOfWork(log);
-        var store = new RecordingOutboxStore(storeJoinsUnitOfWork, log);
+        var store = new RecordingOutboxStore(storeJoinsUnitOfWork, log, time);
 
         var services = new ServiceCollection();
+        if (time is not null) services.AddSingleton(time);
         services.AddSingleton<IOutboxSignal>(new RecordingOutboxSignal(log));
         services.AddCqrsGenerated(b => b
             .UseOutbox(o => o.Enabled().UseStore(s => s.AddSingleton<IOutboxStore>(store)))

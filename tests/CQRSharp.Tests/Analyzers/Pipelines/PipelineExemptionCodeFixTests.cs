@@ -9,7 +9,7 @@ namespace CQRSharp.Tests.Analyzers;
 /// </summary>
 public sealed class PipelineExemptionCodeFixTests
 {
-    private const string Prelude = """
+    internal const string Prelude = """
                                    using System.Threading;
                                    using System.Threading.Tasks;
                                    using CQRSharp;

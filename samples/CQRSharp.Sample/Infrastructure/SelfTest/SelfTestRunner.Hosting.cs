@@ -2,6 +2,7 @@ using CQRSharp.Core.BackgroundTasks;
 using CQRSharp.Persistence;
 using CQRSharp.Redis;
 using CQRSharp.Sample.Application.Commands.Requests;
+using CQRSharp.Sample.Application.Notifications.Handlers;
 using CQRSharp.Sample.Application.Queries.Requests;
 using CQRSharp.Sample.Domain.Entities;
 using CQRSharp.Sample.Domain.Events;
@@ -13,8 +14,8 @@ using Microsoft.Extensions.Options;
 
 namespace CQRSharp.Sample.Infrastructure.SelfTest;
 
-// What runs beside dispatch: the background queue, the transactional outbox and its processor, and two variants of the
-// same application built next to this one (queued dispatch; the Redis stores).
+// What runs beside dispatch: the background queue, the transactional outbox and its processor (scheduled publishing
+// included), and two variants of the same application built next to this one (queued dispatch; the Redis stores).
 public sealed partial class SelfTestRunner
 {
     private static async Task RunBackgroundQueueTestAsync(Scenario scenario, CancellationToken cancellationToken)
@@ -86,6 +87,35 @@ public sealed partial class SelfTestRunner
         Require(delivered.Status == OrderStatus.Paid, $"The delivered status is {delivered.Status}.");
         Require(delivered.PlacedAt >= before && delivered.PlacedAt <= after,
             $"The delivered PlacedAt {delivered.PlacedAt:O} is not the time the order was placed.");
+    }
+
+    // Notifications published for later: the outbox holds each until it is due, and the processor delivers it once the
+    // time has come. The sample's outbox is Transactional, and these are published outside a transaction, where a plain
+    // publish would run in-process: a scheduled one cannot, so it goes to the outbox all the same. One that is not durable
+    // (a struct has no [NotificationName]) is refused rather than delivered at once.
+    private async Task RunScheduledPublishingTestAsync(Scenario scenario, CancellationToken cancellationToken)
+    {
+        var clock = scenario.Services.GetRequiredService<TimeProvider>();
+
+        var atId = Guid.NewGuid();
+        var dueAt = clock.GetUtcNow().AddMilliseconds(300);
+        await scenario.Cqrs.PublishAt(new ReminderDueNotification(atId, dueAt), dueAt, cancellationToken);
+
+        var afterId = Guid.NewGuid();
+        var dueAfter = clock.GetUtcNow().AddMilliseconds(200);
+        await scenario.Cqrs.PublishAfter(new ReminderDueNotification(afterId, dueAfter), TimeSpan.FromMilliseconds(200), cancellationToken);
+
+        var deliveredAt = await diagnostics.WaitForReminderDueAsync(atId, DeliveryTimeout, cancellationToken);
+        Require(deliveredAt >= dueAt, $"The reminder due at {dueAt:O} was delivered early, at {deliveredAt:O}.");
+        var deliveredAfter = await diagnostics.WaitForReminderDueAsync(afterId, DeliveryTimeout, cancellationToken);
+        Require(deliveredAfter >= dueAfter, $"The reminder due at {dueAfter:O} was delivered early, at {deliveredAfter:O}.");
+
+        var sensorRuns = diagnostics.GetRunCount(SensorReadingNotificationHandler.RunKey);
+        await RequireThrowsAsync<InvalidOperationException>(
+            () => scenario.Cqrs.PublishAfter(new SensorReadingNotification(4.2), TimeSpan.FromMinutes(1), cancellationToken),
+            "A notification that is not durable was accepted for later delivery.");
+        Require(diagnostics.GetRunCount(SensorReadingNotificationHandler.RunKey) == sensorRuns,
+            "A refused scheduled publish was delivered in-process.");
     }
 
     // The same application with RunMode.Queued: every command and query goes through the background queue and runs in a

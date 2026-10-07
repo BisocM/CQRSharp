@@ -6,7 +6,8 @@ Two packages support your tests:
   EF Core, and Redis stores pass. Derive from them to prove a custom `IOutboxStore`, `IInboxStore` or
   `IIdempotencyStore` has the same semantics: for the outbox, atomic claims and leases, renew, release and deferral,
   retries and dead letters, FIFO order (`CreatedAt`, then store order), one message per handler with independent state,
-  and partition ordering; for idempotency, claim tokens, stored results, payload fingerprints and expiry.
+  and partition ordering; for idempotency, claim tokens, stored results, payload fingerprints and expiry. A fourth
+  suite checks a notification transport, as the RabbitMQ transport passes it.
 - **`CQRSharp.Testing`** - `RecordingCqrsDispatcher`, a fake `ICqrsDispatcher` for unit-testing code that *calls* the
   dispatcher (controllers, endpoints, application services) without a container or a pipeline. It depends on no test
   framework.
@@ -26,6 +27,7 @@ Both put their types in the `CQRSharp.Testing` namespace.
 - [Contract-testing an outbox store](#contract-testing-an-outbox-store)
 - [Contract-testing an idempotency store](#contract-testing-an-idempotency-store)
 - [Contract-testing an inbox store](#contract-testing-an-inbox-store)
+- [Contract-testing a notification transport](#contract-testing-a-notification-transport)
 - [Skipping when a backing service is absent](#skipping-when-a-backing-service-is-absent)
 - [Unit-testing a consumer of ICqrsDispatcher](#unit-testing-a-consumer-of-icqrsdispatcher)
 - [RecordingCqrsDispatcher reference](#recordingcqrsdispatcher-reference)
@@ -93,7 +95,12 @@ The suite covers:
 - dead letters: `GetDeadLettersAsync` lists them oldest first by failure time with their error; `RequeueAsync` gives a
   fresh budget, keeps the last error and waits for an in-flight successor; `PurgeDeadLettersAsync` deletes only what
   failed before the cut-off;
-- the backlog: `GetBacklogAsync` counts undelivered and dead-lettered messages and reports the oldest pending one.
+- the backlog: `GetBacklogAsync` counts undelivered and dead-lettered messages and reports the oldest pending one;
+- scheduling, for a store that implements `ISchedulingOutboxStore` (skipped, with the reason, for one that does not): a
+  message stored with its `CreatedAt` and `NextRetryAt` at a future due time is not claimed before it, takes its place
+  in its partition at that time, is claimed in due-time order however far ahead it is due, and is counted in the
+  backlog's `ScheduledCount`, not its `PendingCount`, until it is due. See
+  [Custom stores](outbox.md#custom-stores).
 
 The single-instance suite cannot observe a double-claim between two *processes*. A store backed by a shared database
 should add its own race test over two independent connections.
@@ -151,6 +158,52 @@ public sealed class MyInboxStoreTests : InboxStoreContractTests
 The suite covers: a delivery is unknown until recorded; a delivery is recorded exactly once; deliveries are
 independent per message and per handler; of many concurrent records of one delivery exactly one wins; a record is
 forgotten once the retention has elapsed; and `JoinsUnitOfWork` is `false` outside a transaction.
+
+## Contract-testing a notification transport
+
+`NotificationTransportContractTests` checks an `INotificationTransport` (see [Other transports](rabbitmq.md#other-transports))
+against what the outbox processor relies on. It is experimental with the extension point it tests (`CQREXP001`): add
+`<NoWarn>$(NoWarn);CQREXP001</NoWarn>` to the test project. Supply the transport under test, configured to forward the
+name each test gives it, and a way to receive what arrives at the destination:
+
+```csharp
+using CQRSharp.Testing;
+using CQRSharp.Transports;
+
+public sealed class MyTransportTests : NotificationTransportContractTests
+{
+    protected override async Task<INotificationTransport> CreateTransportAsync(string notificationName)
+    {
+        // Configure the transport to forward notificationName, and subscribe a receiver to it at the destination.
+        return await MyBroker.CreateTransportAsync(forward: notificationName);
+    }
+
+    // Waits for the next message; the suite never waits for a fixed time.
+    protected override async Task<ReceivedTransportMessage> ReceiveAsync(CancellationToken cancellationToken)
+    {
+        var message = await MyBroker.ReceiveAsync(cancellationToken);
+        return new ReceivedTransportMessage(message.Id, message.Name, message.Body, message.PartitionKey, message.TraceParent);
+    }
+
+    // Optional: make the destination unreachable, and back, for the availability test (skipped otherwise). The first
+    // returns once the transport has noticed; the second once it can reach the destination again.
+    protected override async Task<bool> MakeUnavailableAsync()
+    {
+        await MyBroker.StopAsync();
+        return true;
+    }
+
+    protected override Task RestoreAvailabilityAsync() => MyBroker.StartAndWaitUntilTheTransportReconnectsAsync();
+}
+```
+
+Every test uses a notification name of its own (`contract.<guid>`), so a shared destination serves the whole suite. It
+covers: the transport has a valid name and a declaration; it routes the name it was configured for and no other; a send
+reported as sent arrives with its message id, name, payload (byte for byte), partition key and `traceparent`; sends made
+one after another arrive in order; a repeated send carries the same message id; a send whose token is cancelled throws
+`OperationCanceledException`; and, when the destination can be made unreachable, a send is `Unavailable` (never
+`Rejected`) and a send succeeds again once it is back. A message that never arrives is left to the test runner's
+cancellation or hang detection: the suite has no timeouts of its own.
 
 ## Skipping when a backing service is absent
 
@@ -292,7 +345,8 @@ fixtures as private nested classes (the generator skips them), or add `CQRGEN003
 | `SentRequests` / `Sent<T>()` | Requests passed to either `Send` overload. |
 | `StartedStreams` / `Streamed<T>()` | Requests passed to either `Stream` overload, recorded when the stream is requested. |
 | `PublishedNotifications` / `Published<T>()` | Notifications passed to `Publish`. |
-| `Dispatched` | One interleaved log of `DispatchedMessage(DispatchKind Kind, object Message)` across all three. |
+| `ScheduledNotifications` / `Scheduled<T>()` | Notifications passed to `PublishAt` or `PublishAfter`, for later delivery. |
+| `Dispatched` | One interleaved log of `DispatchedMessage(DispatchKind Kind, object Message)` across all of them. A scheduled publish's entry (`DispatchKind.ScheduledPublish`) carries its `DueAt`. |
 | `ClearRecorded()` | Empties the log; stubs are kept. |
 
 **Behaviour worth knowing:**
@@ -303,6 +357,9 @@ fixtures as private nested classes (the generator skips them), or add `CQRGEN003
   with `Throws`, or thrown by a stub delegate, surfaces where a real handler failure would: as a faulted `Send` /
   `Publish` task, or on the first `MoveNextAsync` of a stream.
 - A message is recorded even when dispatching it then fails, so a test can assert on what was attempted.
+- `PublishAfter` dates its entry by the dispatcher's clock: `new RecordingCqrsDispatcher(fakeTimeProvider)` makes the
+  `DueAt` exact (the parameterless constructor uses the system clock). A negative delay throws, as it does on the real
+  dispatcher.
 - The untyped `Send(object)` / `Stream(object)` overloads share the typed overloads' stubs and reject the same
   arguments as the real dispatcher: a non-`IRequest`, a stream request passed to `Send`, a non-stream passed to
   `Stream`. Rejected arguments are not recorded.

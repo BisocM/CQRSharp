@@ -24,6 +24,7 @@ public sealed partial class SelfTestRunner(IServiceProvider services, SampleDiag
             ("scope semantics", RunScopeSemanticsTestAsync),
             ("transactional outbox", RunTransactionalOutboxTestAsync),
             ("outbox serialization", RunOutboxSerializationTestAsync),
+            ("scheduled publishing", RunScheduledPublishingTestAsync),
             ("value-returning command", RunResultCommandTestAsync),
             ("value-type results", RunValueTypeResultTestAsync),
             ("idempotency and replay", RunIdempotencyTestAsync),
@@ -40,7 +41,8 @@ public sealed partial class SelfTestRunner(IServiceProvider services, SampleDiag
             ("exception handling", RunExceptionHandlingTestAsync),
             ("diagnostics API", RunDiagnosticsApiTestAsync),
             ("queued dispatch", RunQueuedDispatchTestAsync),
-            ("Redis store registration", RunRedisRegistrationTestAsync)
+            ("Redis store registration", RunRedisRegistrationTestAsync),
+            ("RabbitMQ transport", RunRabbitMqTransportTestAsync)
         ];
 
         SampleLog.SelfTestStarting(logger);

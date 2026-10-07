@@ -7,7 +7,6 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Formatting;
 
 namespace CQRSharp.Analyzers;
 
@@ -81,9 +80,8 @@ public sealed class MarkerWithoutBehaviorCodeFixProvider : CodeFixProvider
         LambdaExpressionSyntax updated;
         if (lambda.Block is { } block)
         {
-            var statement = SyntaxFactory.ExpressionStatement(Link(SyntaxFactory.IdentifierName(parameterName), verb, model, block.OpenBraceToken.Span.End))
-                .WithAdditionalAnnotations(Formatter.Annotation);
-            updated = lambda.WithBlock(block.AddStatements(statement));
+            var statement = SyntaxFactory.ExpressionStatement(Link(SyntaxFactory.IdentifierName(parameterName), verb, model, block.OpenBraceToken.Span.End));
+            updated = lambda.WithBlock(WithStatement(block, statement, LineEndings.Of(registration.SyntaxTree.GetRoot())));
         }
         else if (lambda.ExpressionBody is { } body)
         {
@@ -95,6 +93,33 @@ public sealed class MarkerWithoutBehaviorCodeFixProvider : CodeFixProvider
         }
 
         return registration.ReplaceNode(lambda, updated);
+    }
+
+    // The statement laid out like the block: after the last statement (or the opening brace), on a line of its own at the
+    // statements' indentation when that ends its line, ending the way the file's lines end; on the same line otherwise.
+    // Normalized, it carries no elastic trivia, so the formatter that runs after a fix leaves the line break as written.
+    private static BlockSyntax WithStatement(BlockSyntax block, StatementSyntax statement, SyntaxTrivia endOfLine)
+    {
+        var statements = block.Statements;
+        var previous = statements.Count > 0 ? statements[statements.Count - 1].GetLastToken() : block.OpenBraceToken;
+        statement = statement.NormalizeWhitespace();
+
+        if (!previous.TrailingTrivia.Any(SyntaxKind.EndOfLineTrivia))
+            return block.AddStatements(statement
+                .WithLeadingTrivia(previous.TrailingTrivia.Any(SyntaxKind.WhitespaceTrivia) ? SyntaxFactory.TriviaList() : SyntaxFactory.TriviaList(SyntaxFactory.Space))
+                .WithTrailingTrivia(SyntaxFactory.Space));
+
+        var indentation = statements.Count > 0
+            ? LineEndings.Indentation(statements[statements.Count - 1].GetLeadingTrivia())
+            : OneLevelIn(LineEndings.Indentation(block.CloseBraceToken.LeadingTrivia));
+        return block.AddStatements(statement.WithLeadingTrivia(indentation).WithTrailingTrivia(endOfLine));
+    }
+
+    // The indentation of a statement in an empty block: one level in from its closing brace, in the brace's own kind.
+    private static SyntaxTriviaList OneLevelIn(SyntaxTriviaList braceIndentation)
+    {
+        var text = braceIndentation.ToFullString();
+        return SyntaxFactory.TriviaList(SyntaxFactory.Whitespace(text + (text.Contains("\t") ? "\t" : "    ")));
     }
 
     // chain.Verb(...), laid out like the chain: on a line of its own when the chain's last link is.

@@ -30,6 +30,10 @@
              connecting (SelfTestRunner.RunRedisRegistrationTestAsync), so their registration and option validation are
              part of the Native AOT publish and run in it. -->
         <ProjectReference Include="..\..\src\CQRSharp.Redis\CQRSharp.Redis.csproj"/>
+        <!-- The RabbitMQ transport: its registration is validated on every run, and, given a broker (CQRSHARP_TEST_RABBITMQ),
+             one application publishes an integration event through it and another takes it in
+             (SelfTestRunner.RunRabbitMqTransportTestAsync), so the Native AOT publish covers publishing and consuming. -->
+        <ProjectReference Include="..\..\src\CQRSharp.RabbitMQ\CQRSharp.RabbitMQ.csproj"/>
     </ItemGroup>
 
 </Project>

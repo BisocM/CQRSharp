@@ -59,7 +59,10 @@ public interface IStreamPipelineBehavior<in TRequest, TItem> where TRequest : IR
 ```
 
 `next`'s token is optional: `await next()` passes on the token the behavior received, and `await next(token)` passes
-another one. Notifications have their own behavior contract,
+another one. A token that cannot be canceled, `CancellationToken.None` included, also passes on the received one; to run
+the rest of the pipeline without the caller's cancellation, pass a token of your own. (5.0.x ran the rest of the
+pipeline under `CancellationToken.None` after `next()`; on 5.0, write `next(cancellationToken)`.) Notifications have
+their own behavior contract,
 [`INotificationPipelineBehavior<TNotification>`](notifications.md#notification-pipeline-behaviors).
 
 Every built-in behavior has a request variant and a stream variant, so each concern applies to streaming requests too.

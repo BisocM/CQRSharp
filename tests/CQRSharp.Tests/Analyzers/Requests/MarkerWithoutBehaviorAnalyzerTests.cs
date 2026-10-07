@@ -231,6 +231,23 @@ public sealed class MarkerWithoutBehaviorAnalyzerTests
         diagnostics.Should().ContainSingle(d => d.Id == "CQRA018").Which.GetMessage().Should().Contain("'Contracts.Ship'").And.Contain("'PlaceOrder'");
     }
 
+    [Fact(DisplayName = "CQRA018 / CQRA019: a RabbitMQ transport inside UseOutbox keeps the configuration in view, unless it runs the application's own code")]
+    public async Task A_RabbitMq_transport_keeps_the_configuration_in_view()
+    {
+        var reported = await AnalyzeAsync(Application(
+            "services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore().UseRabbitMq(\"amqp://localhost/\", r => r" +
+            ".Publish(\"orders.placed\", p => p.AllowUnroutable()).Consume(\"billing\", q => q.Bind(\"orders.#\").Prefetch(8)))))"));
+
+        reported.Where(d => d.Id is "CQRA018" or "CQRA019").Select(d => d.Id).Should().BeEquivalentTo(
+            ["CQRA018", "CQRA019"], "the transport registers no behavior, so the missing verbs are still provably missing");
+
+        var own = await AnalyzeAsync(Requests +
+                                     "public static class AppRabbit { public static void Configure(CQRSharp.RabbitMQ.RabbitMqTransportBuilder r) => r.Publish(\"x\"); }\n" +
+                                     Program("services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseRabbitMq(\"amqp://localhost/\", r => AppRabbit.Configure(r))))"));
+
+        own.Should().NotContain(d => d.Id == "CQRA018" || d.Id == "CQRA019", "the application's own code runs while the builder is configured");
+    }
+
     internal static string Program(string registration)
         => "public static partial class Program { public static void Main() { var services = new ServiceCollection(); " + registration + "; } }\n";
 

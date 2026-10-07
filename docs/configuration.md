@@ -70,12 +70,15 @@ built. So:
 | `UseTimeout(Action<TimeoutOptions> configure)` | The timeout behavior ([Idempotency and resilience](idempotency-and-resilience.md#timeouts)). |
 | `UseUnitOfWork<TUnitOfWork>(Func<IServiceProvider, TUnitOfWork> factory, Action<UnitOfWorkOptions>? configure = null)` | The unit-of-work behavior for `ITransactionalCommand` / `ITransactionalQuery`, with your `IUnitOfWork` ([Unit of work](unit-of-work.md)). |
 | `UseIdempotency(Action<IdempotencyStoreBuilder>? configure = null)` | The idempotency behavior for `IIdempotentRequest`, and its store ([Idempotency and resilience](idempotency-and-resilience.md)). |
-| `UseOutbox(Action<OutboxStoreBuilder> configure)` | The outbox: its mode (`Enabled` unless you call `Transactional()`), its store, and processor tuning ([The outbox](outbox.md)). |
+| `UseOutbox(Action<OutboxStoreBuilder> configure)` | The outbox: its mode (`Enabled` unless you call `Transactional()`), its store, its transports, and processor tuning ([The outbox](outbox.md)). |
 
 The integration packages add verbs of their own: `UseEntityFrameworkCoreUnitOfWork<TContext>(...)` from
 `CQRSharp.EntityFrameworkCore` ([Integrations](integrations.md)), `UseFluentValidation()` from `CQRSharp.FluentValidation`
-([FluentValidation](fluentvalidation.md)), and the store verbs `UseRedis(...)` and `UseEntityFrameworkCore<TContext>(...)`
-on the outbox and idempotency store builders.
+([FluentValidation](fluentvalidation.md)), the store verbs `UseRedis(...)` and `UseEntityFrameworkCore<TContext>(...)`
+on the outbox and idempotency store builders, and the transport verb `UseRabbitMq(...)` from `CQRSharp.RabbitMQ` on the
+outbox builder ([RabbitMQ](rabbitmq.md#configuration-reference), which lists its options). A transport package builds its
+verb on `OutboxStoreBuilder.AddTransport(...)`, which, unlike `UseStore`, replaces nothing: several transports may be
+added.
 
 Both forms of `AddCqrsGenerated` register exception handling and validation unless they are turned off; every other
 behavior is registered only by its verb. Where each behavior sits in the pipeline and which requests it acts on is described in

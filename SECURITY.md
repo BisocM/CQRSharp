@@ -23,7 +23,7 @@ Please include:
 
 - the affected package(s) and version(s) (`CQRSharp.Core`, `CQRSharp.Pipelines`, `CQRSharp.Redis`,
   `CQRSharp.EntityFrameworkCore`, …);
-- the .NET version, and the store and database/Redis version if one is involved;
+- the .NET version, and the store and database/Redis/RabbitMQ version if one is involved;
 - what an attacker can do, and what they need in order to do it (network position, ability to publish a notification,
   write access to the store, …);
 - a minimal reproduction or proof of concept, and any configuration it depends on;
@@ -64,6 +64,11 @@ Some properties of the design are worth knowing when you assess an issue:
   Anyone who can write to the outbox store can cause notifications to be delivered to your handlers, so the store must
   be protected like any other application database. Payloads are not encrypted by the library; do not put secrets in
   notifications unless the store itself is appropriately secured.
+- **A notification transport takes in what its broker delivers.** `CQRSharp.RabbitMQ` reads a received message back
+  through the same serializer, by its `type` property, from the same closed set of names, so a message cannot name an
+  arbitrary type either; but anyone who may publish to an exchange a consumer's queue is bound to can have notifications
+  delivered to your handlers, as anyone who can write to the outbox store can. Protect the broker's permissions (a
+  virtual host and users per trust boundary) like the store's, and use `amqps://` when the network is not trusted.
 - **The Redis stores execute fixed Lua scripts.** The script text is constant and compiled into the package; keys and
   values are passed as script parameters (`KEYS` / `ARGV`), never concatenated into script text, and no user-supplied
   script is ever executed. A way to get caller-controlled data interpreted as script would be a vulnerability.

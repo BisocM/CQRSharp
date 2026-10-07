@@ -42,6 +42,7 @@ internal sealed partial class PipelineExecutor
     private readonly RequestPlanCache _plans;
     private readonly NotificationPublisher _notifications;
     private readonly TimeProvider _timeProvider;
+    private readonly ApplicationClock _contextClock;
     private readonly ILogger _logger;
     private readonly CqrsMetrics _metrics;
     private readonly ConsumerReadiness _consumerReadiness;
@@ -62,6 +63,7 @@ internal sealed partial class PipelineExecutor
         _notifications = shared.Notifications;
         _outboxEnabled = shared.OutboxEnabled;
         _timeProvider = shared.TimeProvider;
+        _contextClock = shared.ContextClock;
         _logger = shared.Logger;
         _metrics = shared.Metrics;
         _consumerReadiness = shared.ConsumerReadiness;
@@ -362,32 +364,48 @@ internal sealed partial class PipelineExecutor
             return default;
         }
 
-        if (plan.ContextSource is not { } source || !source.TryCreate(_services, request, cancellationToken, out var pending))
-            throw new InvalidOperationException(
-                $"No IRequestContextFactory<{plan.ContextType.Name}> is registered for context type '{plan.ContextType.FullName}'. " +
-                "Declare one (the source generator registers it) or register one in DI, or use the default context " +
-                "(CommandBase/QueryBase without a custom context type).");
+        if (plan.ContextSource is not { } source)
+            throw NoContextFactory(plan);
+
+        // While the factory runs, a context it builds with the parameterless constructor reads the application's clock
+        // rather than the system clock, so a factory that completes synchronously costs one clock read, not two.
+        bool created;
+        ValueTask<IRequestContext> pending;
+        var outer = RequestContextBase.EnterDispatch(_contextClock);
+        try
+        {
+            created = source.TryCreate(_services, request, cancellationToken, out pending);
+        }
+        finally
+        {
+            RequestContextBase.ExitDispatch(outer);
+        }
+
+        if (!created) throw NoContextFactory(plan);
 
         if (pending.IsCompletedSuccessfully)
         {
-            request.Context = Stamped(pending.Result);
+            var context = pending.Result;
+            if (context is RequestContextBase { IsTimestampPending: true } unstamped && !unstamped.TryStampWithDispatchReading())
+                unstamped.StampFromApplicationClock(_timeProvider.GetUtcNow().UtcDateTime);
+            request.Context = context;
             return default;
         }
 
         return new ValueTask(AssignWhenCreated(pending, request));
 
+        // Hydrated asynchronously: whenever it was built, the context is stamped once it is ready.
         async Task AssignWhenCreated(ValueTask<IRequestContext> creating, TRequest target)
         {
-            target.Context = Stamped(await creating.ConfigureAwait(false));
+            var context = await creating.ConfigureAwait(false);
+            if (context is RequestContextBase { IsTimestampPending: true } unstamped)
+                unstamped.StampFromApplicationClock(_timeProvider.GetUtcNow().UtcDateTime);
+            target.Context = context;
         }
     }
 
-    // A custom context built with the parameterless RequestContextBase() constructor carries no timestamp of its own:
-    // it takes the application's clock here, as the built-in factory's contexts do. One that passed a time keeps it.
-    private IRequestContext Stamped(IRequestContext context)
-    {
-        if (context is RequestContextBase { IsTimestampPending: true } pending)
-            pending.StampFromApplicationClock(_timeProvider.GetUtcNow().UtcDateTime);
-        return context;
-    }
+    private static InvalidOperationException NoContextFactory(RequestPlanBase plan)
+        => new($"No IRequestContextFactory<{plan.ContextType.Name}> is registered for context type '{plan.ContextType.FullName}'. " +
+               "Declare one (the source generator registers it) or register one in DI, or use the default context " +
+               "(CommandBase/QueryBase without a custom context type).");
 }

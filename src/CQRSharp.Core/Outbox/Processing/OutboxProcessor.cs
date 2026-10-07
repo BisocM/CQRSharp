@@ -5,7 +5,9 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Notifications;
+using CQRSharp.Core.Transports;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -18,9 +20,10 @@ namespace CQRSharp.Core.Outbox;
 ///     the single handler it is addressed to — up to <see cref="OutboxProcessorOptions.MaxDegreeOfParallelism" /> at a
 ///     time, each in its own DI scope, deduplicated through the <see cref="IInboxStore" /> when one is registered. What a
 ///     handler publishes during its delivery is settled with the delivery, as a request's notifications are with the
-///     request: stored once it succeeded, discarded when it fails. It claims batch after batch while messages are due, and
-///     only then waits for the polling interval, which the <see cref="IOutboxSignal" /> cuts short whenever this process
-///     stores a message.
+///     request: stored once it succeeded, discarded when it fails. A message addressed to a notification transport is
+///     handed to the transport as stored, without reading it back and without the inbox. It claims batch after batch
+///     while messages are due, and only then waits for the polling interval, which the <see cref="IOutboxSignal" /> cuts
+///     short whenever this process stores a message.
 /// </summary>
 internal sealed partial class OutboxProcessor : BackgroundService
 {
@@ -32,6 +35,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
     private readonly OutboxSignal? _signal;
     private readonly IOptions<OutboxOptions>? _outboxOptions;
     private readonly CqrsMetrics? _metrics;
+    private readonly NotificationTransportRegistry _transports;
     private readonly Random _jitter = new();
     private DateTime _nextBacklogSampleAt = DateTime.MinValue;
 
@@ -46,7 +50,8 @@ internal sealed partial class OutboxProcessor : BackgroundService
         TimeProvider? timeProvider = null,
         OutboxSignal? signal = null,
         IOptions<OutboxOptions>? outboxOptions = null,
-        CqrsMetrics? metrics = null)
+        CqrsMetrics? metrics = null,
+        NotificationTransportRegistry? transports = null)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
@@ -56,6 +61,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
         _signal = signal;
         _outboxOptions = outboxOptions;
         _metrics = metrics;
+        _transports = transports ?? NotificationTransportRegistry.Empty;
     }
 
     /// <inheritdoc />
@@ -68,6 +74,11 @@ internal sealed partial class OutboxProcessor : BackgroundService
             LogIdle(_logger);
             return;
         }
+
+        // A transport whose name clashes (CQRCONF015) makes every message addressed to that name ambiguous: the processor
+        // does not deliver anything rather than deliver something to the wrong recipient, and fails where it is seen.
+        if (_transports.Failure is { } failure)
+            throw new InvalidOperationException(failure);
 
         LogStarting(_logger);
 
@@ -248,6 +259,14 @@ internal sealed partial class OutboxProcessor : BackgroundService
 
             claim = held.Value = current;
 
+            // A transport's message is forwarded as stored: no deserialization, no behaviors, no inbox (a destination that
+            // could see a message twice recognises it by its id, which every send of it carries).
+            if (_transports.TryGet(message.HandlerName, out var transport))
+            {
+                await SendThroughTransportAsync(transport).ConfigureAwait(false);
+                return;
+            }
+
             INotification? notification;
             try
             {
@@ -273,7 +292,8 @@ internal sealed partial class OutboxProcessor : BackgroundService
                 {
                     LogUnknownNotificationDeferred(_logger, message.NotificationType, message.Id, notBefore);
                     await DeferAsync(notBefore,
-                        $"The notification '{message.NotificationType}' is not known to the instance that claimed it; deferred for an instance that knows it.").ConfigureAwait(false);
+                        $"The notification '{message.NotificationType}' is not known to the instance that claimed it; deferred for an instance that knows it.",
+                        "deferred").ConfigureAwait(false);
                     return;
                 }
 
@@ -293,7 +313,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
                     LogUnknownHandlerDeferred(_logger, message.HandlerName, message.NotificationType, message.Id, notBefore);
                     await DeferAsync(notBefore,
                         $"No notification handler named '{message.HandlerName}' subscribes to '{message.NotificationType}' on the instance that claimed it; " +
-                        "deferred for an instance that has it.").ConfigureAwait(false);
+                        "deferred for an instance that has it.", "deferred").ConfigureAwait(false);
                     return;
                 }
 
@@ -317,30 +337,7 @@ internal sealed partial class OutboxProcessor : BackgroundService
                 return;
             }
 
-            // The handler's work is done, so its outcome is recorded even while the host is stopping: a mark cancelled
-            // here would mean a redelivery after the restart. Bounded by its own timeout, not by the stopping token.
-            var marked = await TryMarkProcessedAsync(outboxStore, message, claim).ConfigureAwait(false);
-            if (marked is null)
-            {
-                // Delivered, but the outcome could not be recorded: the handler's work stands, so this is not a failed
-                // attempt. The lease runs out and the message is delivered again (an inbox recognises it).
-                RecordOutcome(message, "unrecorded", startedAt);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            else if (marked == true)
-            {
-                LogDelivered(_logger, message.NotificationType, message.Id, message.HandlerName);
-                RecordOutcome(message, "processed", startedAt);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-            }
-            else
-            {
-                // Delivered, but the lease ran out during dispatch and someone else holds the message now: this is
-                // the at-least-once case. The other processor's outcome stands; ours must not overwrite it. With an
-                // inbox the redelivery is recognised and skipped.
-                LogClaimLostAfterDispatch(_logger, message.NotificationType, message.Id, message.HandlerName);
-                RecordOutcome(message, "claim_lost", startedAt);
-            }
+            await CompleteDeliveredAsync().ConfigureAwait(false);
         }
         catch (DeliveryNotStartedException notStarted)
         {
@@ -354,27 +351,32 @@ internal sealed partial class OutboxProcessor : BackgroundService
         }
         catch (Exception ex) when (!IsShutdown(ex, stoppingToken))
         {
-            var attempt = message.AttemptCount + 1;
-            LogHandlerFailed(_logger, ex, message.HandlerName, message.NotificationType, message.Id, attempt, _options.MaxAttempts);
+            // A handler that threw, or a transport that did: either way an attempt of the recipient's.
+            LogHandlerFailed(_logger, ex, message.HandlerName, message.NotificationType, message.Id, message.AttemptCount + 1, _options.MaxAttempts);
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            await RecordFailedAttemptAsync(ex.ToString()).ConfigureAwait(false);
+        }
 
-            // Record the failed attempt durably so retry limits survive restarts, or dead-letter the message when this
-            // was its last allowed attempt. One claim-checked call either way: recording the attempt returns the
-            // message to pending and ends the claim, so a follow-up call under it would be rejected. Guard the store
-            // call: if the store itself is the failing dependency we must not abort the rest of the batch.
+        // Record the failed attempt durably so retry limits survive restarts, or dead-letter the message when this was its
+        // last allowed attempt. One claim-checked call either way: recording the attempt returns the message to pending and
+        // ends the claim, so a follow-up call under it would be rejected. Guard the store call: if the store itself is the
+        // failing dependency we must not abort the rest of the batch.
+        async Task RecordFailedAttemptAsync(string error)
+        {
+            var attempt = message.AttemptCount + 1;
             try
             {
                 // The outcome is recorded once the store accepted it: a lost claim means another processor owns the
                 // message now and reports what becomes of it.
                 if (attempt >= _options.MaxAttempts)
                 {
-                    if (await outboxStore.MarkAsFailedAsync(claim, ex.ToString(), stoppingToken).ConfigureAwait(false))
+                    if (await outboxStore.MarkAsFailedAsync(claim, error, stoppingToken).ConfigureAwait(false))
                     {
                         RecordOutcome(message, "dead_letter", startedAt);
                         LogDeadLettered(_logger, message.NotificationType, message.Id, attempt, message.HandlerName);
                     }
                 }
-                else if (await outboxStore.IncrementAttemptAsync(claim, ex.ToString(), ComputeNextRetryAt(attempt), stoppingToken).ConfigureAwait(false) > 0)
+                else if (await outboxStore.IncrementAttemptAsync(claim, error, ComputeNextRetryAt(attempt), stoppingToken).ConfigureAwait(false) > 0)
                 {
                     RecordOutcome(message, "retry", startedAt);
                 }
@@ -385,14 +387,97 @@ internal sealed partial class OutboxProcessor : BackgroundService
             }
         }
 
-        // Handed back undelivered, without an attempt: another instance may deliver it. Guarded like the dead letter
-        // below; a deferral the store could not record is simply claimable again once the lease runs out.
-        async Task DeferAsync(DateTime notBefore, string reason)
+        // The recipient took the message, so its outcome is recorded even while the host is stopping: a mark cancelled
+        // here would mean a redelivery after the restart. Bounded by its own timeout, not by the stopping token.
+        async Task CompleteDeliveredAsync()
+        {
+            var marked = await TryMarkProcessedAsync(outboxStore, message, claim).ConfigureAwait(false);
+            if (marked is null)
+            {
+                // Delivered, but the outcome could not be recorded: the recipient has it, so this is not a failed attempt.
+                // The lease runs out and the message is delivered again (an inbox, or the receiver's dedupe, recognises it).
+                RecordOutcome(message, "unrecorded", startedAt);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+            }
+            else if (marked == true)
+            {
+                LogDelivered(_logger, message.NotificationType, message.Id, message.HandlerName);
+                RecordOutcome(message, "processed", startedAt);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+            }
+            else
+            {
+                // Delivered, but the lease ran out during dispatch and someone else holds the message now: this is the
+                // at-least-once case. The other processor's outcome stands; ours must not overwrite it. With an inbox the
+                // redelivery is recognised and skipped.
+                LogClaimLostAfterDispatch(_logger, message.NotificationType, message.Id, message.HandlerName);
+                RecordOutcome(message, "claim_lost", startedAt);
+            }
+        }
+
+        // Hands the stored notification to its transport and settles the message by the result. A send that throws is a
+        // rejection, which the catch above charges; a send the shutdown cancels is handed back with the batch.
+        async Task SendThroughTransportAsync(INotificationTransport transport)
+        {
+            var outbound = new OutboundNotification(
+                message.Id,
+                message.NotificationId,
+                message.NotificationType,
+                message.Payload,
+                message.CreatedAt,
+                message.PartitionKey,
+                // The dispatch span, a child of the publishing one, when it is recorded; the publishing span otherwise, so the
+                // trace stays connected with tracing off in the processor.
+                activity?.Id ?? message.TraceParent,
+                activity?.TraceStateString,
+                message.AttemptCount);
+
+            var result = await transport.SendAsync(outbound, stoppingToken).ConfigureAwait(false);
+            switch (result.Status)
+            {
+                case TransportSendStatus.Sent:
+                    await CompleteDeliveredAsync().ConfigureAwait(false);
+                    return;
+
+                case TransportSendStatus.Unavailable:
+                {
+                    // Not the message's fault: sent again once the destination is back, and never dead-lettered for an
+                    // outage. The back-off follows the attempt count, which a deferral leaves as it is.
+                    var notBefore = _timeProvider.GetUtcNow().UtcDateTime + (result.RetryAfter ?? NextRetryDelay(message.AttemptCount + 1));
+                    LogTransportUnavailable(_logger, message.HandlerName, message.NotificationType, message.Id, result.Reason, notBefore);
+                    activity?.SetStatus(ActivityStatusCode.Error, result.Reason);
+                    await DeferAsync(notBefore, result.Reason!, "unavailable").ConfigureAwait(false);
+                    return;
+                }
+
+                case TransportSendStatus.Rejected when result.Permanent:
+                    LogTransportRejectedPermanently(_logger, message.HandlerName, message.NotificationType, message.Id, result.Reason);
+                    await DeadLetterNowAsync(result.Reason!).ConfigureAwait(false);
+                    return;
+
+                default:
+                {
+                    // Rejected, or a result the transport never set (the default value), which is no success either.
+                    var reason = result.Status == TransportSendStatus.Rejected
+                        ? result.Reason!
+                        : $"The notification transport '{transport.Name}' returned no result ({nameof(TransportSendResult)} was not set).";
+                    LogTransportRejected(_logger, message.HandlerName, message.NotificationType, message.Id, message.AttemptCount + 1, _options.MaxAttempts, reason);
+                    activity?.SetStatus(ActivityStatusCode.Error, reason);
+                    await RecordFailedAttemptAsync(reason).ConfigureAwait(false);
+                    return;
+                }
+            }
+        }
+
+        // Handed back undelivered, without an attempt: another instance may deliver it, or the destination may be back.
+        // Guarded like the dead letter below; a deferral the store could not record is simply claimable again once the
+        // lease runs out.
+        async Task DeferAsync(DateTime notBefore, string reason, string outcome)
         {
             try
             {
                 if (await outboxStore.DeferAsync(claim, notBefore, reason, stoppingToken).ConfigureAwait(false))
-                    RecordOutcome(message, "deferred", startedAt);
+                    RecordOutcome(message, outcome, startedAt);
             }
             catch (Exception storeEx) when (!IsShutdown(storeEx, stoppingToken))
             {
@@ -534,8 +619,8 @@ internal sealed partial class OutboxProcessor : BackgroundService
             // The handler's work is committed and stands: notifications that could not be stored after the commit are
             // lost, not retried, since a retry would run the committed work again.
             if (committed is not null && await committed.CompleteAsync().ConfigureAwait(false) is { } storeFailure)
-                LogPublishesLostAfterCommit(_logger, storeFailure, message.Id, message.HandlerName, committed.Notifications.Count,
-                    string.Join(", ", committed.Notifications.Select(n => n.GetType().Name)));
+                LogPublishesLostAfterCommit(_logger, storeFailure, message.Id, message.HandlerName, committed.Entries.Count,
+                    committed.NotificationTypeNames());
 
             await SettleAsync(publishes).ConfigureAwait(false);
             return joined ? DeliveryOutcome.Delivered : await RecordDeliveredAsync(inbox, message).ConfigureAwait(false);
@@ -685,39 +770,19 @@ internal sealed partial class OutboxProcessor : BackgroundService
         => ex is OperationCanceledException && stoppingToken.IsCancellationRequested;
 
     // Whether a message addressed to a notification or handler this instance does not know is still within the grace
-    // period other instances get for it, and if so until when to defer it. The delay grows with the message's age,
-    // between one polling interval and the longest retry back-off: a message a newer instance is about to deliver waits
-    // one poll, while one no instance knows is revisited a handful of times (its age about doubling each time), and
-    // never deferred past the end of the grace period, so it is dead-lettered on time.
+    // period other instances get for it, and if so until when to defer it (see UnknownRecipientDeferral).
     private bool TryDeferUnknownRecipient(OutboxMessage message, out DateTime notBefore)
-    {
-        var now = _timeProvider.GetUtcNow().UtcDateTime;
-        var age = now - message.CreatedAt;
-        var grace = _options.UnknownRecipientGracePeriod;
-        if (age >= grace)
-        {
-            notBefore = default;
-            return false;
-        }
-
-        var shortest = _options.PollingInterval;
-        var longest = _options.Retry.MaxDelay > shortest ? _options.Retry.MaxDelay : shortest;
-        var delay = age < shortest ? shortest : age > longest ? longest : age;
-        var remaining = grace - age;
-        notBefore = now + (delay < remaining ? delay : remaining);
-        return true;
-    }
+        => UnknownRecipientDeferral.TryDefer(_options, _timeProvider.GetUtcNow().UtcDateTime, message.CreatedAt, out notBefore);
 
     /// <summary>Computes the next eligibility time for a failed message from the configured back-off.</summary>
-    private DateTime ComputeNextRetryAt(int failedAttempts)
+    private DateTime ComputeNextRetryAt(int failedAttempts) => _timeProvider.GetUtcNow().UtcDateTime + NextRetryDelay(failedAttempts);
+
+    private TimeSpan NextRetryDelay(int failedAttempts)
     {
-        TimeSpan delay;
         lock (_jitter)
         {
-            delay = RetryDelay(_options.Retry, failedAttempts, _jitter);
+            return RetryDelay(_options.Retry, failedAttempts, _jitter);
         }
-
-        return _timeProvider.GetUtcNow().UtcDateTime + delay;
     }
 
     /// <summary>
@@ -847,6 +912,17 @@ internal sealed partial class OutboxProcessor : BackgroundService
     // An Error with the exception: the delivery counts as done, so nothing else reports that its notifications are gone.
     [LoggerMessage(5027, LogLevel.Error, "Outbox message {MessageId} was delivered to {HandlerName} and its transaction committed, but storing the {Count} notification(s) it published failed; they are lost: {NotificationNames}.")]
     private static partial void LogPublishesLostAfterCommit(ILogger logger, Exception exception, Guid messageId, string handlerName, int count, string notificationNames);
+
+    // Information, like the deferrals above: nothing is lost and no attempt is charged, and the backlog gauges and the
+    // health check are what report an outage that lasts.
+    [LoggerMessage(5029, LogLevel.Information, "Notification {NotificationType} (ID: {MessageId}) could not be sent through transport {HandlerName}: {Reason}. Deferred until {NotBefore}; no attempt is charged.")]
+    private static partial void LogTransportUnavailable(ILogger logger, string handlerName, string notificationType, Guid messageId, string? reason, DateTime notBefore);
+
+    [LoggerMessage(5030, LogLevel.Error, "Transport {HandlerName} rejected notification {NotificationType} (ID: {MessageId}) permanently: {Reason}. Dead-lettered.")]
+    private static partial void LogTransportRejectedPermanently(ILogger logger, string handlerName, string notificationType, Guid messageId, string? reason);
+
+    [LoggerMessage(5031, LogLevel.Warning, "Transport {HandlerName} rejected notification {NotificationType} (ID: {MessageId}) on attempt {Attempt} of {MaxAttempts}: {Reason}")]
+    private static partial void LogTransportRejected(ILogger logger, string handlerName, string notificationType, Guid messageId, int attempt, int maxAttempts, string reason);
 
     // A Warning: nothing is lost and no attempt is charged, but a step that keeps failing keeps the message from its
     // handler indefinitely, which only this line reports.

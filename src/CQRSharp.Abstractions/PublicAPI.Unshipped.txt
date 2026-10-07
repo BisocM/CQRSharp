@@ -1,1 +1,90 @@
 #nullable enable
+CQRSharp.Persistence.ISchedulingOutboxStore
+CQRSharp.Persistence.OutboxBacklog.ScheduledCount.get -> long
+CQRSharp.Persistence.OutboxBacklog.ScheduledCount.init -> void
+CQRSharp.Transports.InboundNotification
+CQRSharp.Transports.InboundNotification.InboundNotification(string! Transport, string! Source, string? MessageId, string! NotificationName, byte[]! Payload, System.DateTime? SentAt, string? TraceParent, string? TraceState) -> void
+CQRSharp.Transports.InboundNotification.MessageId.get -> string?
+CQRSharp.Transports.InboundNotification.MessageId.init -> void
+CQRSharp.Transports.InboundNotification.NotificationName.get -> string!
+CQRSharp.Transports.InboundNotification.NotificationName.init -> void
+CQRSharp.Transports.InboundNotification.Payload.get -> byte[]!
+CQRSharp.Transports.InboundNotification.Payload.init -> void
+CQRSharp.Transports.InboundNotification.SentAt.get -> System.DateTime?
+CQRSharp.Transports.InboundNotification.SentAt.init -> void
+CQRSharp.Transports.InboundNotification.Source.get -> string!
+CQRSharp.Transports.InboundNotification.Source.init -> void
+CQRSharp.Transports.InboundNotification.TraceParent.get -> string?
+CQRSharp.Transports.InboundNotification.TraceParent.init -> void
+CQRSharp.Transports.InboundNotification.TraceState.get -> string?
+CQRSharp.Transports.InboundNotification.TraceState.init -> void
+CQRSharp.Transports.InboundNotification.Transport.get -> string!
+CQRSharp.Transports.InboundNotification.Transport.init -> void
+CQRSharp.Transports.INotificationIntake
+CQRSharp.Transports.INotificationIntake.AcceptAsync(CQRSharp.Transports.InboundNotification! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Transports.IntakeResult>!
+CQRSharp.Transports.INotificationTransport
+CQRSharp.Transports.INotificationTransport.Declaration.get -> CQRSharp.Transports.NotificationTransportDeclaration!
+CQRSharp.Transports.INotificationTransport.Name.get -> string!
+CQRSharp.Transports.INotificationTransport.Routes(string! notificationName, System.Type! notificationType) -> bool
+CQRSharp.Transports.INotificationTransport.SendAsync(CQRSharp.Transports.OutboundNotification! message, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<CQRSharp.Transports.TransportSendResult>!
+CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeOutcome.Duplicate = 1 -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeOutcome.NoSubscribers = 2 -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeOutcome.Stored = 0 -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeOutcome.UnknownNotification = 3 -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeOutcome.UnreadablePayload = 4 -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeResult
+CQRSharp.Transports.IntakeResult.Detail.get -> string?
+CQRSharp.Transports.IntakeResult.Detail.init -> void
+CQRSharp.Transports.IntakeResult.IntakeResult() -> void
+CQRSharp.Transports.IntakeResult.IntakeResult(CQRSharp.Transports.IntakeOutcome Outcome, int StoredCount, string? Detail, System.TimeSpan? RetryAfter) -> void
+CQRSharp.Transports.IntakeResult.Outcome.get -> CQRSharp.Transports.IntakeOutcome
+CQRSharp.Transports.IntakeResult.Outcome.init -> void
+CQRSharp.Transports.IntakeResult.RetryAfter.get -> System.TimeSpan?
+CQRSharp.Transports.IntakeResult.RetryAfter.init -> void
+CQRSharp.Transports.IntakeResult.StoredCount.get -> int
+CQRSharp.Transports.IntakeResult.StoredCount.init -> void
+CQRSharp.Transports.NotificationTransportDeclaration
+CQRSharp.Transports.NotificationTransportDeclaration.ConsumedNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+CQRSharp.Transports.NotificationTransportDeclaration.ConsumedNames.init -> void
+CQRSharp.Transports.NotificationTransportDeclaration.ConsumedTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+CQRSharp.Transports.NotificationTransportDeclaration.ConsumedTypes.init -> void
+CQRSharp.Transports.NotificationTransportDeclaration.NotificationTransportDeclaration() -> void
+CQRSharp.Transports.NotificationTransportDeclaration.PublishedNames.get -> System.Collections.Generic.IReadOnlyList<string!>!
+CQRSharp.Transports.NotificationTransportDeclaration.PublishedNames.init -> void
+CQRSharp.Transports.NotificationTransportDeclaration.PublishedTypes.get -> System.Collections.Generic.IReadOnlyList<System.Type!>!
+CQRSharp.Transports.NotificationTransportDeclaration.PublishedTypes.init -> void
+CQRSharp.Transports.OutboundNotification
+CQRSharp.Transports.OutboundNotification.AttemptCount.get -> int
+CQRSharp.Transports.OutboundNotification.AttemptCount.init -> void
+CQRSharp.Transports.OutboundNotification.CreatedAt.get -> System.DateTime
+CQRSharp.Transports.OutboundNotification.CreatedAt.init -> void
+CQRSharp.Transports.OutboundNotification.MessageId.get -> System.Guid
+CQRSharp.Transports.OutboundNotification.MessageId.init -> void
+CQRSharp.Transports.OutboundNotification.NotificationId.get -> System.Guid?
+CQRSharp.Transports.OutboundNotification.NotificationId.init -> void
+CQRSharp.Transports.OutboundNotification.NotificationName.get -> string!
+CQRSharp.Transports.OutboundNotification.NotificationName.init -> void
+CQRSharp.Transports.OutboundNotification.OutboundNotification(System.Guid MessageId, System.Guid? NotificationId, string! NotificationName, byte[]! Payload, System.DateTime CreatedAt, string? PartitionKey, string? TraceParent, string? TraceState, int AttemptCount) -> void
+CQRSharp.Transports.OutboundNotification.PartitionKey.get -> string?
+CQRSharp.Transports.OutboundNotification.PartitionKey.init -> void
+CQRSharp.Transports.OutboundNotification.Payload.get -> byte[]!
+CQRSharp.Transports.OutboundNotification.Payload.init -> void
+CQRSharp.Transports.OutboundNotification.TraceParent.get -> string?
+CQRSharp.Transports.OutboundNotification.TraceParent.init -> void
+CQRSharp.Transports.OutboundNotification.TraceState.get -> string?
+CQRSharp.Transports.OutboundNotification.TraceState.init -> void
+CQRSharp.Transports.TransportSendResult
+CQRSharp.Transports.TransportSendResult.Permanent.get -> bool
+CQRSharp.Transports.TransportSendResult.Reason.get -> string?
+CQRSharp.Transports.TransportSendResult.RetryAfter.get -> System.TimeSpan?
+CQRSharp.Transports.TransportSendResult.Status.get -> CQRSharp.Transports.TransportSendStatus
+CQRSharp.Transports.TransportSendResult.TransportSendResult() -> void
+CQRSharp.Transports.TransportSendStatus
+CQRSharp.Transports.TransportSendStatus.Rejected = 3 -> CQRSharp.Transports.TransportSendStatus
+CQRSharp.Transports.TransportSendStatus.Sent = 1 -> CQRSharp.Transports.TransportSendStatus
+CQRSharp.Transports.TransportSendStatus.Unavailable = 2 -> CQRSharp.Transports.TransportSendStatus
+static CQRSharp.Transports.NotificationTransportDeclaration.None.get -> CQRSharp.Transports.NotificationTransportDeclaration!
+static CQRSharp.Transports.TransportSendResult.Rejected(string! reason, bool permanent = false) -> CQRSharp.Transports.TransportSendResult
+static CQRSharp.Transports.TransportSendResult.Sent.get -> CQRSharp.Transports.TransportSendResult
+static CQRSharp.Transports.TransportSendResult.Unavailable(string! reason, System.TimeSpan? retryAfter = null) -> CQRSharp.Transports.TransportSendResult

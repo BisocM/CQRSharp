@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>$(CQRSharpTargetFrameworks)</TargetFrameworks>
+        <LangVersion>default</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+
+        <!-- Turns on the trim, AOT and single-file analyzers, whose warnings the -warnaserror gate makes errors. -->
+        <IsAotCompatible>true</IsAotCompatible>
+
+        <!-- The package implements the notification transport extension point (CQRSharp.Transports), which ships marked
+             [Experimental]: every use of it reports CQREXP001, which is meant for the code that builds on it. The verbs this
+             package offers (UseRabbitMq, AddCqrsRabbitMq) are stable and report nothing. -->
+        <NoWarn>$(NoWarn);CQREXP001</NoWarn>
+
+        <!-- First shipped in 5.1.0: there is no earlier package to validate against. From the next minor on, its baseline
+             is the version it first shipped in. -->
+        <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageTags>CQRS;CQRSharp;RabbitMQ;AMQP;Outbox;Messaging;NativeAOT</PackageTags>
+        <Title>RabbitMQ transport for CQRSharp: integration events through the outbox.</Title>
+        <Description>A Native-AOT-compatible RabbitMQ transport for CQRSharp. Durable notifications routed to RabbitMQ are forwarded through the outbox (atomic with the request's data, at least once, ordered per partition key) with mandatory, persistent, publisher-confirmed publishes; received notifications are taken into the outbox through the inbox, deduplicated by message id, and acknowledged only once stored, then delivered to the local handlers with their own retries and dead letters. Declares its topology (topic exchange, quorum queues, dead-letter queues) unless told the topology exists, with per-key consumer lanes, single active consumer, graceful shutdown, a health check, and CQRSharp's metrics and tracing.</Description>
+        <PackageReleaseNotes>
+            Version 5.1.0. First release: UseRabbitMq(...) inside UseOutbox(...), or AddCqrsRabbitMq(...), forwards the notifications it is told to publish to RabbitMQ through the outbox and takes the ones its consumers receive into it; AddCqrsRabbitMq() on the health checks builder reports the connections and consumers.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes.
+        </PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CQRSharp.Abstractions\CQRSharp.Abstractions.csproj"/>
+        <!-- The OutboxStoreBuilder the UseRabbitMq(...) verb extends, and the telemetry names the transport reports under. -->
+        <ProjectReference Include="..\CQRSharp.Core\CQRSharp.Core.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="RabbitMQ.Client"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions"/>
+        <PackageReference Include="Microsoft.Extensions.Options"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>CQRSharp.Tests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+
+</Project>

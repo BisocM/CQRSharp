@@ -12,7 +12,7 @@ public issues** — see [SECURITY.md](SECURITY.md).
 - The **.NET 10 SDK**. `global.json` asks for 10.0.100 and rolls forward to the newest stable SDK you have installed
   (preview SDKs are not picked up). The 10 SDK builds every target framework, `net8.0`, `net9.0` and `net10.0`.
 - The **.NET 8 and 9 runtimes** as well, to run the tests of those targets. `dotnet test` runs all three.
-- Optional: **Docker**, for the Redis, PostgreSQL and SQL Server tests (see [Test](#test)), and the
+- Optional: **Docker**, for the Redis, PostgreSQL, SQL Server and RabbitMQ tests (see [Test](#test)), and the
   [Native AOT prerequisites](https://learn.microsoft.com/dotnet/core/deploying/native-aot/#prerequisites) to publish
   the AOT canary locally.
 
@@ -51,17 +51,18 @@ dotnet test --project tests/CQRSharp.Tests/CQRSharp.Tests.csproj -c Release --no
 
 ### Tests that need a server
 
-The Redis store tests and the EF Core store tests on PostgreSQL 16 and SQL Server 2022 each take their server from an
-environment variable, or start one with [Testcontainers](https://dotnet.testcontainers.org/):
+The Redis store tests, the EF Core store tests on PostgreSQL 16 and SQL Server 2022, and the RabbitMQ transport tests each
+take their server from an environment variable, or start one with [Testcontainers](https://dotnet.testcontainers.org/):
 
 | Tests | Environment variable | Testcontainers image |
 | --- | --- | --- |
 | Redis stores | `CQRSHARP_TEST_REDIS` (a StackExchange.Redis connection string) | `redis:7-alpine` |
 | EF Core stores on PostgreSQL | `CQRSHARP_TEST_POSTGRES` (an Npgsql connection string) | `postgres:16-alpine` |
 | EF Core stores on SQL Server | `CQRSHARP_TEST_SQLSERVER` (a SqlClient connection string) | `mcr.microsoft.com/mssql/server:2022-latest` |
+| RabbitMQ transport | `CQRSHARP_TEST_RABBITMQ` (an AMQP URI, such as `amqp://guest:guest@localhost:5672/`) | `rabbitmq:4.1-alpine` |
 
-- **Variable set:** the tests use that server. A Redis server that cannot be reached fails the Redis tests rather
-  than skipping them. On a PostgreSQL or SQL Server named this way, each test process creates and owns the database
+- **Variable set:** the tests use that server. A Redis server or RabbitMQ broker that cannot be reached fails its tests
+  rather than skipping them. On a PostgreSQL or SQL Server named this way, each test process creates and owns the database
   `<database>_net<major>` (for example `cqrsharp_net8`), dropping an earlier run's copy first, so the account needs
   the right to create databases.
 - **Variable unset, Docker available:** the fixture starts a container, private to the test process. The first run
@@ -87,6 +88,11 @@ jobs have no service containers.
 - **Roslyn test compilations** take their references from `ProbeReferences.Create()`.
 - **Redis tests** isolate themselves by key prefix (`RedisFixture.NewKeyPrefix(...)`), because the three target
   frameworks' test processes can share one server.
+- **RabbitMQ tests** name everything they declare with a prefix of their own (`RabbitMqFixture.NewPrefix()`) and delete it
+  afterwards, for the same reason; each reaches the broker through a `TcpProxy` it can cut to stand for an outage, which
+  works against CI's service container too. They talk to a real broker, so the system under test runs on the real
+  clock, but the tests still wait only on signals: `RabbitReceived.WaitForAsync`, the log capture's `WaitForAsync(eventId)`,
+  and the fixture's consumer-based `ReceiveAsync`. The collection runs on its own, after the others.
 
 ### Samples and the Native AOT canary
 
@@ -99,8 +105,9 @@ dotnet run --project samples/CQRSharp.Sample.AspNetCore -c Release -f net8.0 -- 
 ```
 
 `CQRSharp.Sample` covers the runtime end to end (dispatch, every pipeline behavior, the outbox, idempotency replay,
-queued dispatch, streams, exception hooks, a second handler assembly, diagnostics); `CQRSharp.Sample.AspNetCore` covers
-the HTTP edge. Both are also the **Native AOT canary**: the `aot-canary` job publishes them as native binaries for
+queued dispatch, streams, exception hooks, a second handler assembly, diagnostics, and the RabbitMQ transport, whose round
+trip runs when `CQRSHARP_TEST_RABBITMQ` names a broker and is skipped with a log line otherwise);
+`CQRSharp.Sample.AspNetCore` covers the HTTP edge. Both are also the **Native AOT canary**: the `aot-canary` job publishes them as native binaries for
 `net8.0` and `net10.0`, fails on any trim/AOT (`IL####`) warning in the publish, dependencies included, and runs them.
 To reproduce locally (substitute your runtime identifier):
 
@@ -132,10 +139,11 @@ src/
   CQRSharp.Analyzers             the CQRA analyzers and code fixes (netstandard2.0)
   CQRSharp.Redis                 Redis outbox, inbox and idempotency stores (AOT-compatible)
   CQRSharp.EntityFrameworkCore   EF Core stores and unit of work (not AOT-compatible, by design)
+  CQRSharp.RabbitMQ              the RabbitMQ notification transport (AOT-compatible)
   CQRSharp.FluentValidation      FluentValidation integration (not AOT-compatible, by design)
   CQRSharp.AspNetCore            ASP.NET Core result, ProblemDetails and Idempotency-Key mapping
   CQRSharp.Testing               RecordingCqrsDispatcher, for consumers' tests (no test framework)
-  CQRSharp.Testing.Xunit.V3      the store contract suites, for consumers' tests (xUnit v3)
+  CQRSharp.Testing.Xunit.V3      the store and transport contract suites, for consumers' tests (xUnit v3)
   Shared                         source linked into the generator, the analyzers and the tests
 samples/      CQRSharp.Sample (self-test + AOT canary), .Sample.AspNetCore (HTTP self-test + AOT canary),
               .Sample.ExternalModule (a second handler assembly)
@@ -159,7 +167,7 @@ docs/         the documentation (start at docs/README.md)
   `Task.Yield` is banned (`src/BannedSymbols.txt`, RS0030): use
   `await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding)`.
 - **No runtime reflection in the AOT-compatible packages** (`CQRSharp.Abstractions`, `.Core`, `.Pipelines`, `.Redis`,
-  `.AspNetCore`). No `MakeGenericType`, no assembly scanning, no reflection-based `JsonSerializer`. If something needs
+  `.RabbitMQ`, `.AspNetCore`). No `MakeGenericType`, no assembly scanning, no reflection-based `JsonSerializer`. If something needs
   type information at runtime, the generator should emit it. The trim/AOT analyzers enforce this at build time and the
   AOT canary checks what the two samples exercise.
 - **Generator changes** must keep `IncrementalGeneratorCachingTests` green — the pipeline flows value-equatable models
@@ -214,10 +222,11 @@ Each component owns a block of 100 ids; a new message takes the next free id of 
 | 4600 | Exception-handling behaviors | CQRSharp.Pipelines |
 | 4700 | Validation behaviors (reserved) | CQRSharp.Pipelines |
 | 5000 | Outbox processor | CQRSharp.Core |
-| 5100 | Outbox buffering and the in-memory stores (reserved) | CQRSharp.Core |
+| 5100 | The notification intake (what transports take in) | CQRSharp.Core |
 | 6000 | EF Core stores | CQRSharp.EntityFrameworkCore |
 | 6100 | Redis stores (reserved) | CQRSharp.Redis |
 | 7000 | ASP.NET Core integration | CQRSharp.AspNetCore |
+| 8000 | RabbitMQ transport | CQRSharp.RabbitMQ |
 
 The ids in use are listed in [docs/observability.md](docs/observability.md); a new one goes there too. Use one property
 name per datum: `{RequestName}` (`typeof(TRequest).Name`), `{NotificationName}`, `{NotificationType}` (the stable

@@ -4,6 +4,7 @@ using CQRSharp.Core.Diagnostics;
 using CQRSharp.Core.Modules;
 using CQRSharp.Core.Outbox;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Transports;
 using CQRSharp.Persistence;
 using CQRSharp.Pipelines;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +45,8 @@ internal sealed class NotificationPublisher : IDisposable
     private readonly OutboxMode _outboxMode;
     private readonly CqrsMetrics? _metrics;
     private readonly ILogger _configurationLogger;
+    private readonly NotificationTransportRegistry _transports;
+    private readonly IServiceScopeFactory? _scopes;
 
     /// <param name="rootProvider">The provider's root, which the plans ask about its registrations.</param>
     /// <param name="modules">The composed modules, whose notification routes are merged into one table.</param>
@@ -52,6 +55,7 @@ internal sealed class NotificationPublisher : IDisposable
     /// <param name="outboxOptions">Whether, and when, a publish goes to the outbox.</param>
     /// <param name="metrics">The provider's instruments, which count every in-process publish.</param>
     /// <param name="configurationLogger">Where a configuration warning met at a publish is logged.</param>
+    /// <param name="transports">The notification transports, which the outbox forwards notifications through.</param>
     public NotificationPublisher(
         IServiceProvider rootProvider,
         IEnumerable<ICqrsModule> modules,
@@ -59,7 +63,8 @@ internal sealed class NotificationPublisher : IDisposable
         NotificationOptions options,
         OutboxOptions outboxOptions,
         CqrsMetrics? metrics,
-        ILogger configurationLogger)
+        ILogger configurationLogger,
+        NotificationTransportRegistry? transports = null)
     {
         // Every module's route for a type is the same Core object, so which one is kept does not matter.
         var routes = new Dictionary<Type, NotificationRoute>();
@@ -74,6 +79,10 @@ internal sealed class NotificationPublisher : IDisposable
         _outboxMode = outboxOptions.Mode;
         _metrics = metrics;
         _configurationLogger = configurationLogger;
+        _transports = transports ?? NotificationTransportRegistry.Empty;
+        // Only asked, per type, whether a transport forwards it: a notification nothing subscribes to may still leave the
+        // process.
+        _scopes = _transports.IsEmpty ? null : rootProvider.GetService<IServiceScopeFactory>();
     }
 
     /// <summary>The concrete notification types some module has a route for.</summary>
@@ -88,7 +97,8 @@ internal sealed class NotificationPublisher : IDisposable
             rootProvider.GetService<IOptions<NotificationOptions>>()?.Value ?? new NotificationOptions(),
             rootProvider.GetService<IOptions<OutboxOptions>>()?.Value ?? new OutboxOptions(),
             rootProvider.GetService<CqrsMetrics>(),
-            rootProvider.GetService<ILoggerFactory>()?.CreateLogger(CqrsConfigurationLog.Category) ?? NullLogger.Instance);
+            rootProvider.GetService<ILoggerFactory>()?.CreateLogger(CqrsConfigurationLog.Category) ?? NullLogger.Instance,
+            rootProvider.GetService<NotificationTransportRegistry>());
 
     /// <summary>
     ///     Publishes a notification from <paramref name="services" />. While the configured <see cref="OutboxMode" />
@@ -111,6 +121,77 @@ internal sealed class NotificationPublisher : IDisposable
         => _outboxMode == OutboxMode.Disabled
             ? PublishInProcess(services, notification, cancellationToken)
             : PublishUnderOutboxMode(services, notification, cancellationToken);
+
+    /// <summary>
+    ///     Publishes a notification from <paramref name="services" /> for delivery no earlier than <paramref name="dueAt" />:
+    ///     into the outbox, buffered or stored exactly as <see cref="Publish{TNotification}" /> would store it, whatever the
+    ///     outbox mode (under <see cref="OutboxMode.Transactional" />, outside a transaction too). Only the outbox can hold a
+    ///     notification until it is due, so what it cannot hold fails here, before anything is buffered: a publish while
+    ///     the outbox is off, of a notification the serializer does not name, or into a store that cannot schedule.
+    /// </summary>
+    /// <param name="services">The publishing scope.</param>
+    /// <param name="notification">The notification; not null.</param>
+    /// <param name="dueAt">The UTC time before which it must not be delivered.</param>
+    /// <param name="cancellationToken">A token to cancel the store.</param>
+    /// <returns>A task that completes when the notification has been buffered or stored.</returns>
+    public Task Schedule<TNotification>(IServiceProvider services, TNotification notification, DateTime dueAt, CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        // A value type's runtime type is its static type; asking the instance would box it.
+        var runtimeType = typeof(TNotification).IsValueType ? typeof(TNotification) : notification.GetType();
+
+        if (_outboxMode == OutboxMode.Disabled)
+            return Task.FromException(new InvalidOperationException(
+                $"Notification '{runtimeType.FullName}' cannot be published for later delivery: the outbox is off " +
+                $"({nameof(OutboxMode)}.{nameof(OutboxMode.Disabled)}), and only the outbox can hold a notification until it is " +
+                "due. Turn it on with UseOutbox(...)."));
+
+        // Transactional mode with no unit of work registered is misconfigured for every durable publish (CQRCONF007). With
+        // one registered, a scheduled publish outside a transaction still goes to the outbox: it cannot run in-process.
+        if (_outboxMode == OutboxMode.Transactional && services.GetService<IUnitOfWork>() is null)
+            return Task.FromException(new InvalidOperationException(
+                CqrsConfigurationRules.FailureMessage(CqrsConfigurationRules.TransactionalOutboxWithoutUnitOfWork)));
+
+        if (services.GetService<INotificationSerializer>() is not { } serializer || services.GetService<IOutboxStore>() is not { } store)
+            return Task.FromException(OutboxWriter.ServicesMissing());
+
+        if (!serializer.TryGetNotificationName(runtimeType, out var name))
+            return Task.FromException(new InvalidOperationException(NotDurableForScheduling(runtimeType, serializer)));
+
+        // Checked before the notification is buffered: a store failure after the request's commit is only logged, and the
+        // notification would be lost with it.
+        if (store is not ISchedulingOutboxStore)
+            return Task.FromException(new InvalidOperationException(
+                $"Notification '{runtimeType.FullName}' cannot be published for later delivery: the outbox store " +
+                $"'{store.GetType().FullName}' cannot hold a message until it is due (it does not implement " +
+                $"{nameof(ISchedulingOutboxStore)}). The built-in in-memory, Redis and EF Core stores can; a custom store opts " +
+                "in by implementing the interface once it passes the scheduling cases of the outbox store contract suite."));
+
+        CheckDurableHandlers(services, notification, name);
+
+        if (services.GetService<ScopedOutbox>() is { } outbox && outbox.TryBuffer(notification, dueAt))
+            return Task.CompletedTask;
+
+        return RequestOutboxScope.StoreAsync(services, [new OutboxEntry(notification, dueAt)], cancellationToken);
+    }
+
+    // Why a notification the serializer does not name cannot be scheduled: it lost its name to another module's type
+    // (CQRCONF010), or it simply has none, which the remedy for the registered serializer fixes.
+    private string NotDurableForScheduling(Type notificationType, INotificationSerializer serializer)
+    {
+        if (CqrsConfigurationRules.UnnamedHandledNotification(notificationType, serializer, _outboxMode) is { Severity: CqrsBindingIssueSeverity.Error } error)
+            return CqrsConfigurationRules.FailureMessage(error);
+
+        var remedy = serializer is not CompositeOutboxNotificationSerializer
+            ? $"The registered serializer '{serializer.GetType().FullName}' decides what is durable: have its TryGetNotificationName name the type."
+            : notificationType.IsValueType
+                ? "[NotificationName] applies to classes only: make it a class (or a record class) to make it durable."
+                : "Mark it with [NotificationName] to make it durable.";
+
+        return $"Notification '{notificationType.FullName}' cannot be published for later delivery: the registered " +
+               $"{nameof(INotificationSerializer)} gives it no name, so it cannot be stored in the outbox, and only the outbox " +
+               $"can hold a notification until it is due. {remedy}";
+    }
 
     /// <summary>Publishes a notification in-process, bypassing the outbox, resolving its handlers and behaviors from <paramref name="services" />.</summary>
     /// <param name="services">The publishing scope.</param>
@@ -149,13 +230,13 @@ internal sealed class NotificationPublisher : IDisposable
 
     /// <summary>
     ///     Whether a publish of <typeparamref name="TNotification" /> may reach anything: a subscription, a handler
-    ///     registered by hand, or a behavior. <c>false</c> only when the provider proves none exists, so publishing it can
-    ///     be skipped.
+    ///     registered by hand, a behavior, or a notification transport that forwards it. <c>false</c> only when the provider
+    ///     proves none exists, so publishing it can be skipped.
     /// </summary>
     public bool MayReachAnyone<TNotification>() where TNotification : INotification
     {
         var plan = Plan<TNotification>();
-        return plan.Subscriptions.Count > 0 || plan.MayHaveHandRegisteredHandlers || plan.MayHaveBehaviors;
+        return plan.Subscriptions.Count > 0 || plan.MayHaveHandRegisteredHandlers || plan.MayHaveBehaviors || plan.ForwardedByTransport;
     }
 
     /// <summary>
@@ -211,7 +292,9 @@ internal sealed class NotificationPublisher : IDisposable
             if (services.GetService<IUnitOfWork>() is not { } unitOfWork)
                 return PublishWithoutUnitOfWork(services, notification, cancellationToken);
             if (!unitOfWork.HasActiveTransaction)
-                return PublishInProcess(services, notification, cancellationToken);
+                return _transports.IsEmpty
+                    ? PublishInProcess(services, notification, cancellationToken)
+                    : PublishOutsideTransaction(services, notification, cancellationToken);
         }
 
         // The serializer that will store the notification is the one that decides whether it can be stored: a name from
@@ -230,7 +313,23 @@ internal sealed class NotificationPublisher : IDisposable
         if (services.GetService<ScopedOutbox>() is { } outbox && outbox.TryBuffer(notification))
             return Task.CompletedTask;
 
-        return RequestOutboxScope.StoreAsync(services, [notification], cancellationToken);
+        return RequestOutboxScope.StoreAsync(services, [new OutboxEntry(notification)], cancellationToken);
+    }
+
+    // Transactional mode with a unit of work but no transaction active, while transports are registered: a notification a
+    // transport forwards would be delivered in-process, where it can never reach the transport, so the publish fails with
+    // CQRCONF016 instead; any other is delivered in-process, as always outside a transaction.
+    private Task PublishOutsideTransaction<TNotification>(IServiceProvider services, TNotification notification, CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        var runtimeType = typeof(TNotification).IsValueType ? typeof(TNotification) : notification.GetType();
+        if (services.GetService<INotificationSerializer>() is { } serializer &&
+            serializer.TryGetNotificationName(runtimeType, out var name) &&
+            _transports.TransportsFor(runtimeType, name) is { Length: > 0 } forwarding)
+            return Task.FromException(new InvalidOperationException(
+                CqrsConfigurationRules.FailureMessage(CqrsConfigurationRules.ForwardedNotificationOutsideTransaction(runtimeType, forwarding))));
+
+        return PublishInProcess(services, notification, cancellationToken);
     }
 
     // Transactional mode with no unit of work registered: there is never a transaction to store a notification in. A
@@ -260,6 +359,16 @@ internal sealed class NotificationPublisher : IDisposable
     {
         // A value type's runtime type is its static type; asking the instance would box it.
         var runtimeType = typeof(TNotification).IsValueType ? typeof(TNotification) : notification.GetType();
+
+        // A transport is configured to forward the type, and only a stored notification can be forwarded: delivering it
+        // in-process would drop it silently (CQRCONF014).
+        if (_transports.DeclaresPublished(runtimeType))
+            return Task.FromException(new InvalidOperationException(CqrsConfigurationRules.FailureMessage(
+                CqrsConfigurationRules.TransportRoutesUnnamedType(
+                    _transports.Transports.Where(t => t.Declaration.PublishedTypes.Contains(runtimeType)).Select(t => t.Name),
+                    runtimeType,
+                    serializer))));
+
         var failure = runtimeType == typeof(TNotification)
             ? OutboxNamingFailure<TNotification>(serializer)
             : _routes.TryGetValue(runtimeType, out var route) ? route.OutboxNamingFailure(this, serializer) : null;
@@ -307,6 +416,7 @@ internal sealed class NotificationPublisher : IDisposable
         var mayHaveHandRegisteredHandlers = _registrations.MayBeRegistered(typeof(INotificationHandler<TNotification>));
         // The configuration checks are asked of the routed types only, as the startup validator asks them.
         var routedUnderOutbox = _outboxMode != OutboxMode.Disabled && _routes.ContainsKey(typeof(TNotification));
+        var forwarded = _outboxMode != OutboxMode.Disabled && _scopes is not null && IsForwarded(typeof(TNotification));
         return new NotificationPlan<TNotification>
         {
             Owner = owner,
@@ -315,9 +425,20 @@ internal sealed class NotificationPublisher : IDisposable
             MayHaveBehaviors = behaviors.MayHaveAny,
             MergesDiscoveredBehaviors = behaviors.MergesDiscovered,
             UsesClosedBehaviors = behaviors.UsesClosedSet,
+            ForwardedByTransport = forwarded,
             OutboxNaming = routedUnderOutbox && subscriptions.Count > 0 ? new OutboxNamingCheck(typeof(TNotification)) : null,
             DurableHandlers = routedUnderOutbox && mayHaveHandRegisteredHandlers ? new DurableHandlersCheck<TNotification>() : null
         };
+    }
+
+    // Whether a transport forwards the type, by the name the serializer gives it, asked of a scope as every writer asks it
+    // (an application may register its serializer scoped); once per type, as the plan is built.
+    private bool IsForwarded(Type notificationType)
+    {
+        using var scope = _scopes!.CreateScope();
+        return scope.ServiceProvider.GetService<INotificationSerializer>() is { } serializer &&
+               serializer.TryGetNotificationName(notificationType, out var name) &&
+               _transports.TransportsFor(notificationType, name).Length > 0;
     }
 
     private IReadOnlyList<NotificationSubscription> SubscriptionsOf(Type runtimeType)

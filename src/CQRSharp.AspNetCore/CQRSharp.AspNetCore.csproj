@@ -17,8 +17,8 @@
         <Title>ASP.NET Core integration for CQRSharp: result mapping, ProblemDetails exception mapping, and Idempotency-Key.</Title>
         <Description>A Native-AOT-compatible ASP.NET Core integration for CQRSharp with no MVC dependency. Maps CommandResult and CommandResult&lt;T&gt; to minimal-API IResult responses (200/201/204, or an RFC 7807 ProblemDetails whose status follows the result's error kind), registers an IExceptionHandler that turns the exceptions a dispatch throws (validation, duplicate request, idempotency key mismatch, rate limit, timeout, queue refusal) into ProblemDetails responses through the host's IProblemDetailsService, and reads and validates the Idempotency-Key request header.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0. First release: AddCqrsProblemDetails(), ToHttpResult() / ToCreatedHttpResult(...) and GetIdempotencyKey() / TryGetIdempotencyKey().
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. No change of its own; released with the other CQRSharp 5.1.0 packages.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 

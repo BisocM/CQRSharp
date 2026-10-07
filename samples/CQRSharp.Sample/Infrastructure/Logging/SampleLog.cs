@@ -30,6 +30,9 @@ internal static partial class SampleLog
     [LoggerMessage(9102, LogLevel.Information, "Self-test passed: {Count} scenarios")]
     public static partial void SelfTestPassed(ILogger logger, int count);
 
+    [LoggerMessage(9104, LogLevel.Information, "RabbitMQ round trip skipped: set {Variable} to a broker's AMQP URI to run it")]
+    public static partial void RabbitMqRoundTripSkipped(ILogger logger, string variable);
+
     [LoggerMessage(9103, LogLevel.Critical, "Self-test failed in scenario {Scenario}")]
     public static partial void SelfTestFailed(ILogger logger, Exception exception, string scenario);
 }

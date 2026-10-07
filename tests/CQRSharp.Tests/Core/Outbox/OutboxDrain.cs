@@ -30,7 +30,7 @@ internal sealed class OutboxDrain
         services.AddSingleton<OutboxDrain>();
         services.Add(ServiceDescriptor.Describe(
             typeof(IOutboxStore),
-            provider => new ObservedStore(
+            provider => ObservedStore.Over(
                 Resolve(provider, registered),
                 provider.GetRequiredService<OutboxDrain>(),
                 ownsInner: registered.ImplementationInstance is null),
@@ -92,9 +92,15 @@ internal sealed class OutboxDrain
            ?? (IOutboxStore)ActivatorUtilities.CreateInstance(provider, registered.ImplementationType!);
 
     // Disposes the store underneath when the container created it, as the container would have without the observer.
-    private sealed class ObservedStore(IOutboxStore inner, OutboxDrain drain, bool ownsInner) : IOutboxStore, IDisposable, IAsyncDisposable
+    private class ObservedStore(IOutboxStore inner, OutboxDrain drain, bool ownsInner) : IOutboxStore, IDisposable, IAsyncDisposable
     {
         public IOutboxStore Inner => inner;
+
+        // A decorator declares what the store beneath it can do: a scheduling store stays one when observed.
+        public static ObservedStore Over(IOutboxStore inner, OutboxDrain drain, bool ownsInner)
+            => inner is ISchedulingOutboxStore
+                ? new ObservedSchedulingStore(inner, drain, ownsInner)
+                : new ObservedStore(inner, drain, ownsInner);
 
         public void Dispose()
         {
@@ -131,4 +137,7 @@ internal sealed class OutboxDrain
         public Task<bool> RequeueAsync(Guid messageId, CancellationToken cancellationToken) => inner.RequeueAsync(messageId, cancellationToken);
         public Task<int> PurgeDeadLettersAsync(DateTime failedBefore, CancellationToken cancellationToken) => inner.PurgeDeadLettersAsync(failedBefore, cancellationToken);
     }
+
+    private sealed class ObservedSchedulingStore(IOutboxStore inner, OutboxDrain drain, bool ownsInner)
+        : ObservedStore(inner, drain, ownsInner), ISchedulingOutboxStore;
 }

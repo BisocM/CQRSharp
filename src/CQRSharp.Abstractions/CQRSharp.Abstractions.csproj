@@ -20,10 +20,11 @@
         <Title>The contracts of CQRSharp, the source-generated, Native-AOT-safe CQRS framework for .NET.</Title>
         <Description>Shared contracts for CQRSharp: the command, query, stream and notification markers and base types, handler interfaces, CommandResult, the pipeline and validation attribute contracts, exception hooks, and the store and unit-of-work contracts (CQRSharp.Persistence). Reference it directly from a project that only shares contracts or implements a store; a project that declares handlers references the CQRSharp meta-package, whose source generator registers them. Carries the CQRSharp analyzers, which reach every project that references a CQRSharp package.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0 (breaking). The contracts move to two namespaces: CQRSharp (requests, handlers, results, notifications, contexts) and CQRSharp.Persistence (store and unit-of-work contracts).
-            CommandResult gains a typed ErrorKind, kind factories and validation failures as data; CommandResult&lt;T&gt; gains a public constructor. Handler interfaces take no context type argument.
-            IUnitOfWork is the one unit-of-work contract. IOutboxStore is claim-based and gains dead-letter and backlog operations, IInboxStore is new, and IIdempotencyStore claims carry a token and a payload fingerprint and store the result for replay.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. ISchedulingOutboxStore is the opt-in an outbox store declares to hold notifications scheduled for later delivery (CreatedAt and NextRetryAt at the due time); a store without it keeps working for everything else. OutboxBacklog.ScheduledCount counts the scheduled messages not yet due, which PendingCount and the lag leave out.
+            A context built with the parameterless RequestContextBase() constructor inside a context factory the dispatcher calls reads the application's TimeProvider, so the dispatch reads the clock once.
+            CQRSharp.Transports, experimental (CQREXP001): INotificationTransport and INotificationIntake, the extension point a message-broker transport such as CQRSharp.RabbitMQ builds on. The analyzers treat CQRSharp.RabbitMQ as CQRSharp's own package.
+            Fixed: the CQRA018/CQRA019 (statement lambda) and CQRA020 code fixes write the file's own line endings, not the platform's: on Windows they wrote CRLF into a file with LF line endings.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 
@@ -56,8 +57,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- The dispatcher (CQRSharp.Core) stamps a context built without a creation time from the application's TimeProvider
-             (RequestContextBase.IsTimestampPending / StampFromApplicationClock). -->
+        <!-- The dispatcher (CQRSharp.Core) stamps a context built without a creation time from the application's TimeProvider,
+             which it lends to the context factories it calls (RequestContextBase.IsTimestampPending / StampFromApplicationClock /
+             EnterDispatch, ApplicationClock). -->
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>CQRSharp.Core</_Parameter1>
         </AssemblyAttribute>

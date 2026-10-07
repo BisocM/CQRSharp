@@ -2,9 +2,9 @@ name: Validate
 
 # The full gate, shared by CI (every pull request) and the release pipeline (every push to Release, which publishes
 # exactly the packages this produces). The logging contract check, a zero-warning build of every target framework, the
-# whole test suite against a real Redis, PostgreSQL and SQL Server, coverage, the samples' self-tests as a framework
-# build, then pack + package validation + a template smoke test; alongside, the samples published and run as Native AOT
-# binaries for net8.0 and net10.0.
+# whole test suite against a real Redis, PostgreSQL, SQL Server and RabbitMQ, coverage, the samples' self-tests as a
+# framework build, then pack + package validation + a template smoke test; alongside, the samples published and run as
+# Native AOT binaries for net8.0 and net10.0, publishing and consuming through a real RabbitMQ.
 on:
   workflow_call:
 
@@ -27,10 +27,12 @@ jobs:
 
     # Real backing services, so the store contract tests run against what they ship to rather than skip: Redis for the
     # CQRSharp.Redis stores, PostgreSQL and SQL Server for the EF Core stores (SQLite covers them on every OS; these
-    # prove the SQL each provider actually generates). The test fixtures take the connection strings from the
-    # environment below, and fall back to Testcontainers when they are absent (a developer machine with Docker). The
-    # three target frameworks' test processes run at the same time, so each creates and owns its own database on these
-    # servers (<database>_net<major>); the accounts below may create databases.
+    # prove the SQL each provider actually generates), and RabbitMQ for the CQRSharp.RabbitMQ transport. The test
+    # fixtures take the connection strings from the environment below, and fall back to Testcontainers when they are
+    # absent (a developer machine with Docker). The three target frameworks' test processes run at the same time, so
+    # each creates and owns its own database on these servers (<database>_net<major>); the accounts below may create
+    # databases. The RabbitMQ tests name what they declare with a prefix of their own instead, and the default guest
+    # user may connect because the port mapping makes the connection local.
     services:
       redis:
         image: redis:7-alpine
@@ -67,10 +69,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Every log line the libraries write is a source-generated [LoggerMessage] method with an event id of its own:
       # the script fails on a direct ILogger.Log*(...) call under src/ and on an event id two messages of one assembly
@@ -85,7 +96,7 @@ jobs:
       # The .NET 10 SDK builds every target framework (global.json requires it); the 8 and 9 entries bring the
       # runtimes the net8.0 and net9.0 tests run on. validate_packages.py fails the job if a framework is missing.
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -109,6 +120,7 @@ jobs:
           CQRSHARP_TEST_REDIS: localhost:6379
           CQRSHARP_TEST_POSTGRES: "Host=localhost;Port=5432;Username=cqrsharp;Password=cqrsharp;Database=cqrsharp"
           CQRSHARP_TEST_SQLSERVER: "Server=localhost,1433;User Id=sa;Password=Cqrsharp!Ci2026;TrustServerCertificate=true;Database=cqrsharp_tests"
+          CQRSHARP_TEST_RABBITMQ: amqp://guest:guest@localhost:5672/
         # Microsoft.Testing.Platform (global.json opts dotnet test into it): TRX results, Cobertura coverage, and a hang
         # dump that fails a test stuck for 5 minutes instead of letting the job run into its own timeout.
         run: >-
@@ -130,16 +142,19 @@ jobs:
 
       - name: Upload test results and coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |
             ${{ env.TEST_RESULTS }}
             artifacts/coverage
 
-      # Each sample exits non-zero when a scenario fails. CQRSharp.Sample drives the runtime from inside the process;
-      # CQRSharp.Sample.AspNetCore serves on a free loopback port and calls its own endpoints over HTTP.
+      # Each sample exits non-zero when a scenario fails. CQRSharp.Sample drives the runtime from inside the process
+      # (its RabbitMQ scenario publishes and consumes through the service container); CQRSharp.Sample.AspNetCore serves
+      # on a free loopback port and calls its own endpoints over HTTP.
       - name: Run the samples' self-tests (framework build)
+        env:
+          CQRSHARP_TEST_RABBITMQ: amqp://guest:guest@localhost:5672/
         run: |
           set -eo pipefail
           dotnet run --project samples/CQRSharp.Sample/CQRSharp.Sample.csproj -c ${{ env.CONFIGURATION }} -f net8.0 --no-build
@@ -182,15 +197,16 @@ jobs:
           done
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
           path: ${{ env.PACKAGE_OUTPUT }}
           if-no-files-found: error
 
   # The Native AOT canary: both samples published as native binaries and run, on the oldest and the newest target
-  # framework (each has its own ILC and runtime). It needs none of the service containers and none of the validate job's
-  # build, so it runs beside it.
+  # framework (each has its own ILC and runtime). It needs none of the validate job's build, so it runs beside it, and
+  # one service container: the RabbitMQ broker the sample's RabbitMQ scenario publishes to and consumes from, so the
+  # native binary exercises the transport end to end rather than only compiling it.
   aot-canary:
     name: Native AOT canary (${{ matrix.framework }})
     runs-on: ubuntu-latest
@@ -200,12 +216,23 @@ jobs:
       matrix:
         framework: [ net8.0, net10.0 ]
 
+    services:
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
@@ -231,6 +258,7 @@ jobs:
       - name: Publish the samples as Native AOT binaries and run them
         env:
           FRAMEWORK: ${{ matrix.framework }}
+          CQRSHARP_TEST_RABBITMQ: amqp://guest:guest@localhost:5672/
         run: |
           set -eo pipefail
           case "$(uname -m)" in

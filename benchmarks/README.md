@@ -51,6 +51,16 @@ This is dispatch overhead, not a feature comparison. A CQRSharp request also cre
 notifications (`Initiated` / `Completed` / `Failed`), tracing and metrics are pay-for-use and nothing subscribes to them
 in these benchmarks.
 
+A third class, **`RequestContextBenchmarks`**, measures CQRSharp alone: what a request's context costs a dispatch (scope
+reused, as above). It dispatches the same query with the built-in context, with a custom context its factory builds with
+the parameterless `RequestContextBase()` constructor, and with one its factory builds with an explicit time. A context's
+creation time is read from the clock when the request is sent, and a clock read is most of what building a context costs,
+so these show whether a dispatch reads the clock more than once:
+
+```bash
+dotnet run -c Release --project benchmarks/CQRSharp.Benchmarks -- --filter '*RequestContext*' --launchCount 3
+```
+
 ## Latest results
 
 BenchmarkDotNet v0.15.8, Linux Ubuntu 26.04.1 LTS; 13th Gen Intel Core i9-13900K; .NET 8.0.31 (SDK 10.0.400); three

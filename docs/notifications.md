@@ -217,4 +217,15 @@ attempts and dead letter. Handlers registered by hand get no subscription, so a 
 does not reach them (**CQRCONF011** warns, at the first publish that goes to the outbox and in the startup validator). Add `PartitionBy = nameof(OrderId)` to the
 attribute, or implement `IPartitionedNotification`, to deliver a key's notifications to each handler in order.
 
-[The outbox](outbox.md) covers the modes, the stores, custom serializers, ordering, the inbox and dead letters.
+A durable notification can also be published for later: `PublishAt(notification, dueAt)` and
+`PublishAfter(notification, delay)` store it in the outbox, and the processor delivers it once it is due. Only the outbox
+can hold it until then, so these fail rather than deliver in process (see
+[Scheduled publishing](outbox.md#scheduled-publishing)).
+
+A durable notification can also leave the process: a notification **transport** such as [RabbitMQ](rabbitmq.md)
+forwards the ones it is configured to publish through the outbox, and brings in what other services publish, which the
+outbox then delivers to the local handlers. A forwarded notification still reaches its local handlers; one that has none
+is stored for the transport alone.
+
+[The outbox](outbox.md) covers the modes, the stores, custom serializers, ordering, scheduling, transports, the inbox and
+dead letters.

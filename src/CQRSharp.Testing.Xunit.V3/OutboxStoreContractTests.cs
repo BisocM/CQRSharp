@@ -10,7 +10,8 @@ namespace CQRSharp.Testing;
 ///     <see cref="FakeTimeProvider" /> the store reads time from; every store therefore proves the exact same
 ///     claim, visibility-timeout, retry, deferral, dead-letter, FIFO, partition-ordering, dead-letter operation and
 ///     backlog semantics with no duplicated assertions. All timing is driven by advancing the fake clock, so the suite is
-///     deterministic and never sleeps.
+///     deterministic and never sleeps. The scheduling cases run for a store that implements
+///     <see cref="ISchedulingOutboxStore" />, and are skipped, with the reason, for one that does not.
 /// </summary>
 public abstract class OutboxStoreContractTests : IAsyncLifetime
 {
@@ -57,6 +58,16 @@ public abstract class OutboxStoreContractTests : IAsyncLifetime
             NextRetryAt: nextRetryAt,
             PartitionKey: partitionKey,
             NotificationId: notificationId);
+
+    // A message scheduled for later delivery, as the dispatcher builds it: its due time is both its creation time (its
+    // place in the order) and its not-before time.
+    private OutboxMessage NewScheduled(DateTime dueAt, string handler = DefaultHandler, string? partitionKey = null)
+        => NewPending(createdAt: dueAt, nextRetryAt: dueAt, handler: handler, partitionKey: partitionKey);
+
+    // The scheduling cases apply only to a store that declares it can schedule.
+    private static void RequireScheduling(IOutboxStore store)
+        => Assert.SkipUnless(store is ISchedulingOutboxStore,
+            $"{store.GetType().Name} does not implement {nameof(ISchedulingOutboxStore)}, so it holds no messages scheduled for later delivery.");
 
     // Claims due messages and returns just the messages, for the checks that do not need the claims.
     private static async Task<IReadOnlyList<OutboxMessage>> ClaimMessagesAsync(IOutboxStore store, int batchSize)
@@ -1016,5 +1027,153 @@ public abstract class OutboxStoreContractTests : IAsyncLifetime
         var after = await store.GetBacklogAsync(CancellationToken.None);
         ContractAssert.Equal(2L, after.PendingCount, "PendingCount after the oldest message was processed");
         ContractAssert.CloseTo(backingOff.CreatedAt, after.OldestPendingCreatedAt!.Value, TimeSpan.FromMilliseconds(1), "OldestPendingCreatedAt after the oldest message was processed");
+    }
+
+    // ---- Scheduling ----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    ///     Contract (<see cref="ISchedulingOutboxStore" />): a message scheduled for later is not claimable before its due
+    ///     time, is claimable once the clock passes it, and comes back with its due time as its creation time.
+    /// </summary>
+    [Fact]
+    public async Task A_scheduled_message_is_not_claimed_before_it_is_due()
+    {
+        var store = await CreateStoreAsync();
+        RequireScheduling(store);
+        var dueAt = Now.AddMinutes(10);
+        var scheduled = NewScheduled(dueAt);
+        await store.StoreAsync([scheduled], CancellationToken.None);
+
+        ContractAssert.Empty(await ClaimMessagesAsync(store, 10), "a scheduled message is not claimable before it is due");
+        Time.Advance(TimeSpan.FromMinutes(9));
+        ContractAssert.Empty(await ClaimMessagesAsync(store, 10), "a scheduled message is not claimable a minute before it is due");
+
+        Time.Advance(TimeSpan.FromMinutes(2));
+        var claimed = ContractAssert.Single(await ClaimMessagesAsync(store, 10), "a scheduled message is claimable once it is due");
+        ContractAssert.Equal(scheduled.Id, claimed.Id, "Id of the claimed scheduled message");
+        ContractAssert.CloseTo(dueAt, claimed.CreatedAt, TimeSpan.FromMilliseconds(1), "CreatedAt of a scheduled message (its due time)");
+    }
+
+    /// <summary>
+    ///     Contract (<see cref="ISchedulingOutboxStore" />): a scheduled message takes its place in its partition at its due
+    ///     time, so a message of the partition published before that time is not held back by it.
+    /// </summary>
+    [Fact]
+    public async Task A_scheduled_message_does_not_hold_back_its_partition_before_it_is_due()
+    {
+        var store = await CreateStoreAsync();
+        RequireScheduling(store);
+        var scheduled = NewScheduled(Now.AddHours(1), partitionKey: "order-1");
+        await store.StoreAsync([scheduled], CancellationToken.None);
+        var published = NewPending(partitionKey: "order-1");
+        await store.StoreAsync([published], CancellationToken.None);
+
+        var claim = await ClaimSingleAsync(store, published, "a message published before the scheduled one is due is ahead of it");
+        Assert.True(await store.MarkAsProcessedAsync(claim, CancellationToken.None), "MarkAsProcessedAsync must accept the claim.");
+        ContractAssert.Empty(await ClaimMessagesAsync(store, 10), "the scheduled message is still not due");
+
+        Time.Advance(TimeSpan.FromHours(1));
+        await ClaimSingleAsync(store, scheduled, "the scheduled message is claimed once it is due");
+    }
+
+    /// <summary>
+    ///     Contract (<see cref="ISchedulingOutboxStore" />): once due, a scheduled message is ordered by its due time like
+    ///     any other message: it waits behind an unfinished message of its partition created before that time, and holds
+    ///     back one created after it.
+    /// </summary>
+    [Fact]
+    public async Task A_due_scheduled_message_keeps_its_place_in_its_partition()
+    {
+        var store = await CreateStoreAsync();
+        RequireScheduling(store);
+        var scheduled = NewScheduled(Now.AddMinutes(10), partitionKey: "order-1");
+        await store.StoreAsync([scheduled], CancellationToken.None);
+
+        Time.Advance(TimeSpan.FromMinutes(5));
+        var earlier = NewPending(partitionKey: "order-1");
+        await store.StoreAsync([earlier], CancellationToken.None);
+        var claim = await ClaimSingleAsync(store, earlier, "only the message created before the due time is claimable");
+        ContractAssert.Equal(1, await store.IncrementAttemptAsync(claim, "boom", Now.AddMinutes(10), CancellationToken.None),
+            "Attempt count of the earlier message after its failure");
+
+        Time.Advance(TimeSpan.FromMinutes(6));
+        ContractAssert.Empty(await ClaimMessagesAsync(store, 10),
+            "the scheduled message is due, but an earlier message of its partition is backing off and holds it back");
+
+        Time.Advance(TimeSpan.FromMinutes(5));
+        var retried = await ClaimSingleAsync(store, earlier, "the earlier message is retried before the scheduled one");
+        Assert.True(await store.MarkAsProcessedAsync(retried, CancellationToken.None), "MarkAsProcessedAsync must accept the retried claim.");
+
+        var later = NewPending(partitionKey: "order-1");
+        await store.StoreAsync([later], CancellationToken.None);
+        var scheduledClaim = await ClaimSingleAsync(store, scheduled, "the scheduled message is next, ahead of one created after its due time");
+        Assert.True(await store.MarkAsProcessedAsync(scheduledClaim, CancellationToken.None), "MarkAsProcessedAsync must accept the scheduled message's claim.");
+        await ClaimSingleAsync(store, later, "the message created after the due time follows");
+    }
+
+    /// <summary>
+    ///     Contract (<see cref="ISchedulingOutboxStore" />): messages scheduled for the same instant are claimed in the order
+    ///     the store received them, and messages scheduled however far ahead are claimed in the order of their due times.
+    /// </summary>
+    [Fact]
+    public async Task Scheduled_messages_are_claimed_in_the_order_of_their_due_times()
+    {
+        var store = await CreateStoreAsync();
+        RequireScheduling(store);
+        var dueAt = Now.AddMinutes(1);
+        var first = NewScheduled(dueAt);
+        var second = NewScheduled(dueAt);
+        var inTwoCenturies = NewScheduled(Now.AddYears(200));
+        var inFourCenturies = NewScheduled(Now.AddYears(400));
+        var inThreeCenturies = NewScheduled(Now.AddYears(300));
+        await store.StoreAsync([first, inFourCenturies], CancellationToken.None);
+        await store.StoreAsync([second, inTwoCenturies, inThreeCenturies], CancellationToken.None);
+
+        Time.Advance(TimeSpan.FromMinutes(2));
+        var sameInstant = await store.ClaimPendingAsync(10, CancellationToken.None);
+        ContractAssert.SequenceEqual(
+            [first.Id, second.Id],
+            sameInstant.Select(c => c.Message.Id).ToList(),
+            "Messages scheduled for one instant must be claimed in the order they were stored");
+        foreach (var claimed in sameInstant)
+            Assert.True(await store.MarkAsProcessedAsync(claimed.Claim, CancellationToken.None), "MarkAsProcessedAsync must accept the claim.");
+
+        Time.Advance(TimeSpan.FromDays(365.25 * 401));
+        ContractAssert.SequenceEqual(
+            [inTwoCenturies.Id, inThreeCenturies.Id, inFourCenturies.Id],
+            (await ClaimMessagesAsync(store, 10)).Select(m => m.Id).ToList(),
+            "Messages scheduled centuries ahead must be claimed in the order of their due times");
+    }
+
+    /// <summary>
+    ///     Contract (<see cref="ISchedulingOutboxStore" />): a scheduled message whose due time has not come is not backlog:
+    ///     it is counted in <c>ScheduledCount</c>, not in <c>PendingCount</c> or the lag, until it is due, and from then on
+    ///     it is pending, aging from its due time.
+    /// </summary>
+    [Fact]
+    public async Task Backlog_counts_a_scheduled_message_as_pending_only_once_it_is_due()
+    {
+        var store = await CreateStoreAsync();
+        RequireScheduling(store);
+        var dueAt = Now.AddMinutes(10);
+        await store.StoreAsync([NewScheduled(dueAt)], CancellationToken.None);
+
+        var before = await store.GetBacklogAsync(CancellationToken.None);
+        ContractAssert.Equal(0L, before.PendingCount, "PendingCount while the only message is scheduled for later");
+        ContractAssert.Equal(1L, before.ScheduledCount, "ScheduledCount while the message is not due");
+        ContractAssert.Equal<DateTime?>(null, before.OldestPendingCreatedAt, "OldestPendingCreatedAt while nothing is due");
+
+        var waiting = NewPending(createdAt: Now.AddMinutes(-1));
+        await store.StoreAsync([waiting], CancellationToken.None);
+        var withWaiting = await store.GetBacklogAsync(CancellationToken.None);
+        ContractAssert.Equal(1L, withWaiting.PendingCount, "PendingCount with one due message beside the scheduled one");
+        ContractAssert.Equal(1L, withWaiting.ScheduledCount, "ScheduledCount with one due message beside the scheduled one");
+        ContractAssert.CloseTo(waiting.CreatedAt, withWaiting.OldestPendingCreatedAt!.Value, TimeSpan.FromMilliseconds(1),
+            "OldestPendingCreatedAt (the scheduled message does not count)");
+
+        Time.Advance(TimeSpan.FromMinutes(15));
+        var after = await store.GetBacklogAsync(CancellationToken.None);
+        ContractAssert.Equal(2L, after.PendingCount, "PendingCount once the scheduled message is due");
+        ContractAssert.Equal(0L, after.ScheduledCount, "ScheduledCount once the scheduled message is due");
     }
 }

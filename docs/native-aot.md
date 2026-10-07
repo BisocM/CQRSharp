@@ -19,9 +19,9 @@ there is no runtime reflection, no `MakeGenericType`, no reflection-based handle
   directly on `Utf8JsonReader` and `Utf8JsonWriter`, not by reflection-based `JsonSerializer` (which raises `IL2026` and
   `IL3050`). [The source generator](source-generator.md#the-outbox-serializer-and-the-fingerprinter) explains why
   System.Text.Json's own generator cannot be used for it.
-- **Analyzer-enforced.** `CQRSharp.Abstractions`, `CQRSharp.Core`, `CQRSharp.Pipelines`, `CQRSharp.Redis` and
-  `CQRSharp.AspNetCore` set `IsAotCompatible`, which turns on the trim and AOT analyzers, and the repository builds with
-  warnings as errors, so AOT-hostile code in them fails the build.
+- **Analyzer-enforced.** `CQRSharp.Abstractions`, `CQRSharp.Core`, `CQRSharp.Pipelines`, `CQRSharp.Redis`,
+  `CQRSharp.RabbitMQ` and `CQRSharp.AspNetCore` set `IsAotCompatible`, which turns on the trim and AOT analyzers, and the
+  repository builds with warnings as errors, so AOT-hostile code in them fails the build.
 
 ## What is and isn't AOT-safe
 
@@ -31,6 +31,7 @@ there is no runtime reflection, no `MakeGenericType`, no reflection-based handle
 | The generated code | ✅ |
 | The built-in behaviors (`CQRSharp.Pipelines`) | ✅ |
 | `CQRSharp.Redis` stores | ✅ |
+| `CQRSharp.RabbitMQ` transport | ✅ publishing and consuming, RabbitMQ.Client 7.2 included: a Native AOT publish reports no trim or AOT warning on net8.0 and net10.0 |
 | `CQRSharp.AspNetCore` | ✅, see [ASP.NET Core](aspnetcore.md#native-aot) |
 | Idempotency result replay (`ReplayResultsWith`) | ✅ with a source-generated `JsonSerializerContext` that lists your result types |
 | `CQRSharp.EntityFrameworkCore` | ❌ EF Core compiles queries at runtime (`[RequiresDynamicCode]`) |
@@ -109,6 +110,7 @@ The repository publishes two samples as Native AOT binaries for net8.0 and net10
 of `.github/workflows/validate.yml`; any `IL` warning in either publish, dependencies included, fails the job.
 `CQRSharp.Sample` runs an end-to-end self-test of dispatch, every built-in behavior, the transactional outbox,
 notification serialization, idempotency replay, queued dispatch, streams, exception hooks, a second assembly's module,
-and the diagnostics API. `CQRSharp.Sample.AspNetCore` runs HTTP round trips through the `CQRSharp.AspNetCore` result and
+the diagnostics API, and the RabbitMQ transport: the job runs a RabbitMQ broker beside it, and one application publishes
+an integration event through the outbox while another takes it in from its queue. `CQRSharp.Sample.AspNetCore` runs HTTP round trips through the `CQRSharp.AspNetCore` result and
 exception mapping and the `Idempotency-Key` header. To verify your own app, publish it with `PublishAot=true` and check
 for a warning-free publish and a working run.

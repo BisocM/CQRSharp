@@ -8,8 +8,8 @@ using CQRSharp.Shared;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Editing;
 
 namespace CQRSharp.Analyzers;
 
@@ -59,13 +59,27 @@ public sealed class UnnamedHandledNotificationCodeFixProvider : CodeFixProvider
                 $"Add [NotificationName(\"{name}\")]",
                 _ =>
                 {
-                    var generator = SyntaxGenerator.GetGenerator(context.Document);
-                    var nameAttribute = generator.Attribute(attributeName, generator.LiteralExpression(name));
+                    var nameAttribute = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Attribute(
+                            SyntaxFactory.ParseName(attributeName),
+                            SyntaxFactory.AttributeArgumentList(SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.AttributeArgument(
+                                    SyntaxFactory.LiteralExpression(SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(name))))))));
                     return Task.FromResult(context.Document.WithSyntaxRoot(
-                        root.ReplaceNode(declaration, generator.AddAttributes(declaration, nameAttribute))));
+                        root.ReplaceNode(declaration, WithAttributeLine(declaration, nameAttribute, LineEndings.Of(root)))));
                 },
                 nameof(UnnamedHandledNotificationCodeFixProvider)),
             context.Diagnostics);
+    }
+
+    // The attribute on a line of its own above the declaration (below its comments), at its indentation, ending the way the
+    // file's lines end. Normalized, it carries no elastic trivia, so the formatter that runs after a fix leaves it as laid out.
+    private static TypeDeclarationSyntax WithAttributeLine(TypeDeclarationSyntax declaration, AttributeListSyntax attribute, SyntaxTrivia endOfLine)
+    {
+        var leading = declaration.GetLeadingTrivia();
+        var indented = declaration.WithLeadingTrivia(LineEndings.Indentation(leading));
+        return indented.WithAttributeLists(indented.AttributeLists.Insert(0,
+            attribute.NormalizeWhitespace().WithLeadingTrivia(leading).WithTrailingTrivia(endOfLine)));
     }
 
     // The type's words (order.placed), then the same behind its namespace (shop.orders.order.placed).

@@ -1,5 +1,7 @@
-# Dependabot: weekly NuGet and GitHub Actions updates, opened against Release (the default branch) so CI validates
-# each one. The `ignore` rules protect pins that are deliberate — read the comment before removing one.
+# Dependabot: monthly NuGet and GitHub Actions updates, opened against Release (the default branch) so CI validates
+# each one. The `ignore` rules protect versions that are deliberate: the Roslyn pin, the MediatR license pin, the
+# per-framework majors, and the Microsoft.Extensions / Microsoft.Bcl floor that every consumer of the packages inherits,
+# which only moves at a release. Read the comment before removing one.
 version: 2
 
 updates:
@@ -9,13 +11,13 @@ updates:
       - "/"
       - "/benchmarks/CQRSharp.Benchmarks"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     target-branch: Release
     open-pull-requests-limit: 5
     groups:
-      # Listed first: a dependency joins the first group it matches, and the testing helpers below would otherwise
-      # fall into the Microsoft.Extensions / EF Core groups.
+      # Listed first: a dependency joins the first group it matches, and the EF Core testing providers below would
+      # otherwise fall into the EF Core group. The Microsoft.Extensions and Microsoft.Bcl packages the libraries
+      # reference have no group: they are never updated here (see the ignore rules).
       test-dependencies:
         patterns:
           - "xunit*"
@@ -33,10 +35,6 @@ updates:
       roslyn:
         patterns:
           - "Microsoft.CodeAnalysis.*"
-      microsoft-extensions:
-        patterns:
-          - "Microsoft.Extensions.*"
-          - "Microsoft.Bcl.*"
       # The Npgsql provider requires the EF Core patch it was built against, so the two always move in one pull request.
       entity-framework-core:
         patterns:
@@ -55,14 +53,19 @@ updates:
           - "version-update:semver-minor"
       # Pinned to 12.5.0, the last Apache-2.0 release; 13.0 and later are commercially licensed. Benchmarks only.
       - dependency-name: "MediatR"
-      # A library's package references are the floor its consumers inherit, and net8.0 is a supported target: moving
-      # to a new major is a release decision, not a routine update.
-      - dependency-name: "Microsoft.Extensions.*"
-        update-types:
-          - "version-update:semver-major"
+      # The Microsoft.Extensions and Microsoft.Bcl packages the libraries reference are the floor every consumer
+      # inherits, so they are raised together, by hand, at a release: no update of any kind. An update of part of the
+      # family breaks the build (NU1605: a package downgrade, because the rest of the family still references the old
+      # version). An ignore rule applies to a dependency whatever group it is in, and a name pattern takes only `*`, so
+      # the rules list the families the projects reference rather than "Microsoft.Extensions.*", which would also
+      # freeze the test-only Microsoft.Extensions.TimeProvider.Testing (updated with the test-dependencies group).
+      # A Microsoft.Extensions package that a project starts referencing must be matched here, unless it is test-only.
+      - dependency-name: "Microsoft.Extensions.DependencyInjection*"
+      - dependency-name: "Microsoft.Extensions.Diagnostics*"
+      - dependency-name: "Microsoft.Extensions.Hosting*"
+      - dependency-name: "Microsoft.Extensions.Logging*"
+      - dependency-name: "Microsoft.Extensions.Options*"
       - dependency-name: "Microsoft.Bcl.*"
-        update-types:
-          - "version-update:semver-major"
       # Pinned once per target framework in Directory.Packages.props, each to that framework's major (EF Core, its
       # providers, and TestHost, which must match the shared framework); a major update would cross frameworks.
       - dependency-name: "Microsoft.EntityFrameworkCore*"
@@ -74,12 +77,17 @@ updates:
       - dependency-name: "Microsoft.AspNetCore.TestHost"
         update-types:
           - "version-update:semver-major"
+      # CQRSharp.RabbitMQ is built on the 7.x client's async API (tracked publisher confirms, AsyncEventingBasicConsumer),
+      # and its Native AOT publish is verified against it by the canary: a new major is adopted with a CQRSharp release, by
+      # hand. Minor and patch updates are fine, and the canary checks each one.
+      - dependency-name: "RabbitMQ.Client"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
     target-branch: Release
     open-pull-requests-limit: 5
     groups:

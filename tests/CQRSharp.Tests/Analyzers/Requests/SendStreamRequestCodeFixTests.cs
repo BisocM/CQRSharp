@@ -9,7 +9,7 @@ namespace CQRSharp.Tests.Analyzers;
 /// </summary>
 public sealed class SendStreamRequestCodeFixTests
 {
-    private const string Usings = """
+    internal const string Usings = """
                                   using System.Collections.Generic;
                                   using System.Threading.Tasks;
                                   using CQRSharp;

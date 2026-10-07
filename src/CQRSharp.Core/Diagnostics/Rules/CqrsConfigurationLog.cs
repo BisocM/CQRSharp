@@ -4,7 +4,8 @@ namespace CQRSharp.Core.Diagnostics;
 
 /// <summary>
 ///     What a <c>CQRCONF</c> rule logs where it is first met at runtime (the first dispatch of a request, the
-///     first publish of a notification), once per service provider and type, under one category of their own.
+///     first publish of a notification, the first use of the notification transports), once per service provider and type
+///     or transport, under one category of their own.
 /// </summary>
 internal static partial class CqrsConfigurationLog
 {
@@ -19,4 +20,7 @@ internal static partial class CqrsConfigurationLog
 
     [LoggerMessage(1206, LogLevel.Error, "CQRSharp configuration error {Code} for {NotificationName}: {Message}")]
     public static partial void NotificationError(ILogger logger, string code, string notificationName, string message);
+
+    [LoggerMessage(1207, LogLevel.Warning, "CQRSharp configuration warning {Code} for transport {TransportName}: {Message}")]
+    public static partial void TransportWarning(ILogger logger, string code, string transportName, string message);
 }

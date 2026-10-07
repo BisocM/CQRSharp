@@ -212,7 +212,7 @@ internal sealed partial class PipelineExecutor
                 return ExecuteFinalStreamAction(plan, request, handler, services, ct);
 
             var behavior = behaviors[index];
-            return behavior.Handle(request, nextToken => InvokeBehavior(index + 1, nextToken), ct);
+            return behavior.Handle(request, nextToken => InvokeBehavior(index + 1, PipelineTokens.Flow(nextToken, ct)), ct);
         }
     }
 

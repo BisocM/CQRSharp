@@ -39,6 +39,11 @@ namespace CQRSharp.Persistence;
 ///         message no longer holds anything back. Messages without a key, with different keys, or for different handlers
 ///         are independent of each other.
 ///     </para>
+///     <para>
+///         <b>Scheduling.</b> A store that also implements <see cref="ISchedulingOutboxStore" /> holds messages published
+///         for later delivery: each is stored with its <see cref="OutboxMessage.CreatedAt" /> and
+///         <see cref="OutboxMessage.NextRetryAt" /> at its due time, and takes its place in the order above then.
+///     </para>
 /// </remarks>
 public interface IOutboxStore
 {
@@ -217,7 +222,9 @@ public interface IOutboxStore
 
     /// <summary>
     ///     Measures the backlog: how many messages are still to be delivered (pending or in progress), how many are
-    ///     dead-lettered, and how old the oldest undelivered one is. What the outbox gauges and health check report.
+    ///     dead-lettered, and how old the oldest undelivered one is. What the outbox gauges and health check report. A store
+    ///     that can schedule (<see cref="ISchedulingOutboxStore" />) counts a scheduled message whose due time has not come
+    ///     in <see cref="OutboxBacklog.ScheduledCount" /> instead.
     /// </summary>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The backlog at this instant.</returns>

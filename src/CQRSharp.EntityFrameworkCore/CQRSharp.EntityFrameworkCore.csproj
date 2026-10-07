@@ -19,9 +19,8 @@
         <Title>EF Core integration for CQRSharp, providing durable outbox and idempotency stores.</Title>
         <Description>An Entity Framework Core integration for CQRSharp: a durable IOutboxStore (leased claims, ordered partitions, retries, dead letters, retention), an IInboxStore, an IIdempotencyStore with claim tokens, payload fingerprints and result replay, and a unit of work over the DbContext (UseEntityFrameworkCoreUnitOfWork&lt;TContext&gt;()) that commits a request's changes with its outbox messages. Each target framework is built against its own EF Core major: net8.0 against EF Core 8, net9.0 against EF Core 9, net10.0 against EF Core 10. EF Core uses runtime query compilation, so this package is not Native-AOT or full-trim compatible.</Description>
         <PackageReleaseNotes>
-            Version 5.0.0 (breaking; add a migration). Outbox rows carry a handler name, partition key and failure time, and ApplyCqrsOutbox() maps the CqrsInboxRecords table; the idempotency table stores the result and a payload fingerprint. On SQL Server, map the idempotency key with IdempotencyEntityConfiguration.SqlServerBinaryCollation.
-            New: EfCoreUnitOfWork&lt;TContext&gt; and hosted retention services. Each target framework builds against its own EF Core major (8, 9, 10). The store classes are internal; register them through the store verbs.
-            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes and the upgrade steps from 4.2.1.
+            Version 5.1.0. The EF Core outbox store holds notifications scheduled for later delivery (ISchedulingOutboxStore) in its existing columns: no migration from 5.0, and 5.0 and 5.1 instances can share the table.
+            See https://github.com/BisocM/CQRSharp/blob/v$(Version)/CHANGELOG.md for the full notes; upgrading from 5.0 needs no code or schema change.
         </PackageReleaseNotes>
     </PropertyGroup>
 

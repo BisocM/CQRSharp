@@ -9,7 +9,9 @@ using CQRSharp.Core.Modules;
 using CQRSharp.Core.Notifications;
 using CQRSharp.Core.Outbox;
 using CQRSharp.Core.Pipelines;
+using CQRSharp.Core.Transports;
 using CQRSharp.Persistence;
+using CQRSharp.Transports;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -50,6 +52,11 @@ public static class DependencyInjectionExtensions
         // The wake-up between whoever stores outbox messages in this process and the processor: cheap, so always there.
         services.TryAddSingleton<OutboxSignal>();
         services.TryAddSingleton<IOutboxSignal>(sp => sp.GetRequiredService<OutboxSignal>());
+
+        // The notification transports (none unless a transport package registers one), and the intake their consumers take
+        // received notifications in through, one per scope.
+        services.TryAddSingleton(NotificationTransportRegistry.Create);
+        services.TryAddScoped<INotificationIntake>(sp => new NotificationIntake(sp));
 
         // Per-scope objects are built from factories over pre-resolved singletons: creating a DI scope and dispatching
         // once (every web request) should cost a few allocations, not a series of container lookups.

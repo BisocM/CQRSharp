@@ -2,9 +2,10 @@ namespace CQRSharp.Pipelines;
 
 /// <summary>
 ///     The continuation a pipeline behavior invokes to run the next behavior (or, at the end of the chain, the handler).
-///     The cancellation token is defaulted, so a behavior can simply <c>await next()</c> to flow the ambient token, or
-///     pass its own token to override it. Named (rather than a bare <see cref="Func{T, TResult}" />) so it self-documents
-///     on hover and the parameterless call compiles.
+///     The cancellation token is defaulted, so a behavior can simply <c>await next()</c> to flow the token it received,
+///     or pass its own token to override it. A token that cannot be canceled (<c>default</c>,
+///     <see cref="CancellationToken.None" />) also flows the received one. Named (rather than a bare
+///     <see cref="Func{T, TResult}" />) so it self-documents on hover and the parameterless call compiles.
 /// </summary>
 /// <typeparam name="TResult">The type of the result returned by the request.</typeparam>
 public delegate Task<TResult> RequestHandlerDelegate<TResult>(CancellationToken cancellationToken = default);

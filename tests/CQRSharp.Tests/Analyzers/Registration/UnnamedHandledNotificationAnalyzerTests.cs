@@ -12,7 +12,7 @@ namespace CQRSharp.Tests.Analyzers;
 /// </summary>
 public sealed class UnnamedHandledNotificationAnalyzerTests
 {
-    private const string Notifications = """
+    internal const string Notifications = """
                                          using System;
                                          using System.Threading;
                                          using System.Threading.Tasks;
@@ -76,6 +76,16 @@ public sealed class UnnamedHandledNotificationAnalyzerTests
         static string Message(string name) => $"'{name}' has handlers but no [NotificationName], so while the outbox is on (UseOutbox) it is never stored in the outbox and every publish of it is delivered in-process. Add [NotificationName(\"...\")] to make it durable, or leave it as it is if it is meant to stay in-process.";
     }
 
+    [Fact(DisplayName = "CQRA020: a RabbitMQ transport inside a visible UseOutbox keeps the configuration in view")]
+    public async Task A_RabbitMq_transport_keeps_the_outbox_in_view()
+    {
+        var diagnostics = await AnalyzeAsync(
+            "services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore().UseRabbitMq(\"amqp://localhost/\", r => r" +
+            ".Publish<Shop.Orders.OrderShipped>().Consume(\"shipping\", q => q.Bind<Shop.Orders.OrderShipped>()))))");
+
+        diagnostics.Where(d => d.Id == "CQRA020").Should().HaveCount(2, "OrderPlacedNotification and LoginAudited are handled but unnamed, as before");
+    }
+
     [Theory(DisplayName = "CQRA020: nothing is reported without a visible outbox under the generated serializer")]
     [InlineData("services.AddCqrsGenerated(b => b.UseLogging())", false)]
     [InlineData("services.AddCqrsGenerated()", false)]
@@ -112,11 +122,16 @@ public sealed class UnnamedHandledNotificationAnalyzerTests
         taken.RemainingDiagnostics.Should().BeEmpty();
     }
 
+    private static Task<CodeFixResult> ApplyFixAsync(string notifications) => ApplyFixToAsync(FixInput(notifications));
+
     // The audit notifications are named, so the order notification is the one diagnostic to fix.
-    private static Task<CodeFixResult> ApplyFixAsync(string notifications)
+    internal static string FixInput(string notifications)
+        => notifications.Replace("public sealed record LoginAudited", "[NotificationName(\"audit.login\")] public sealed record LoginAudited") +
+           Program("services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore()))");
+
+    internal static Task<CodeFixResult> ApplyFixToAsync(string source)
         => CodeFixHarness.ApplyAsync(
-            notifications.Replace("public sealed record LoginAudited", "[NotificationName(\"audit.login\")] public sealed record LoginAudited") +
-            Program("services.AddCqrsGenerated(b => b.UseOutbox(o => o.UseInMemoryStore()))"),
+            source,
             new UnnamedHandledNotificationAnalyzer(),
             new UnnamedHandledNotificationCodeFixProvider(),
             "CQRA020",

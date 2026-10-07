@@ -31,7 +31,7 @@ public sealed class UnitOfWorkNestingTests
             return harness.Outbox.DrainOwned(outer);
         });
 
-        remaining.Should().ContainSingle().Which.Should().BeOfType<OuterEvent>();
+        remaining.Should().ContainSingle().Which.Notification.Should().BeOfType<OuterEvent>();
         harness.UnitOfWork.Rollbacks.Should().Be(1);
     }
 
@@ -55,7 +55,7 @@ public sealed class UnitOfWorkNestingTests
             return harness.Outbox.DrainOwned(outer);
         });
 
-        remaining.Should().ContainSingle().Which.Should().BeOfType<OuterEvent>();
+        remaining.Should().ContainSingle().Which.Notification.Should().BeOfType<OuterEvent>();
         harness.UnitOfWork.Rollbacks.Should().Be(1);
     }
 
