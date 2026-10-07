@@ -124,6 +124,10 @@ message for a handler added in a newer version is: add the transport to every in
 
 ### Documentation
 
+- **Startup validation in the 5.0.0 package notes.** The CQRSharp 5.0.0 package release notes said startup validation
+  runs only when you call `ValidateOnStart()`. As the [5.0.0 entry](#500) says, with no policy set it runs as
+  `ThrowOnError` in the Development environment and is off elsewhere; `ValidateOnStart()` turns it on everywhere. The
+  behavior is unchanged, and the 5.1.0 package notes state it correctly.
 - **[RabbitMQ](docs/rabbitmq.md)**: the transport end to end, from publishing and consuming to topology, ordering,
   delivery guarantees, the wire format for services outside CQRSharp, and the failure modes; the outbox page gains
   [Transports](docs/outbox.md#transports-leaving-the-process), and diagnostics the
